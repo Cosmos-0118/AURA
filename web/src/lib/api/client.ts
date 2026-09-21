@@ -126,6 +126,20 @@ export function listLeads(brandId?: string): Promise<Lead[]> {
   return request<Lead[]>(`/api/leads${query}`);
 }
 
+export function searchLeads(body: import("./types").LeadSearchRequest): Promise<Lead[]> {
+  return request<Lead[]>("/api/leads/search", jsonBody(body));
+}
+
+export function generateLeadOutreach(
+  leadId: string,
+  body: import("./types").LeadOutreachRequest
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>(
+    `/api/leads/${encodeURIComponent(leadId)}/outreach`,
+    jsonBody(body)
+  );
+}
+
 export function getMetrics(): Promise<Metrics> {
   return request<Metrics>("/api/metrics");
 }

@@ -129,10 +129,33 @@ export type Lead = {
   id: string;
   brand_id: BrandId;
   name: string;
+  category: string;
+  location: string;
   url: string | null;
-  country: string | null;
+  phone: string | null;
+  public_email: string | null;
+  social_links: string[];
+  description: string | null;
+  services: string[];
+  source: string;
+  source_url: string;
+  status: string;
   fit_score: number;
   why: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LeadSearchRequest = {
+  brand_id: BrandId;
+  category: string;
+  location: string;
+  keywords?: string | null;
+};
+
+export type LeadOutreachRequest = {
+  brand_id: BrandId;
+  lead_id: string;
 };
 
 export type Metrics = {

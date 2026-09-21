@@ -35,6 +35,12 @@ export const navGroups: NavGroup[] = [
         url: '/dashboard/insights',
         icon: 'trendingUp',
         items: []
+      },
+      {
+        title: 'Lead Generation',
+        url: '/dashboard/leads',
+        icon: 'user',
+        items: []
       }
     ]
   }

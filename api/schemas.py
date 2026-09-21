@@ -161,10 +161,33 @@ class Lead(BaseModel):
     id: str
     brand_id: BrandId
     name: str
+    category: str
+    location: str
     url: str | None = None
-    country: str | None = None
+    phone: str | None = None
+    public_email: str | None = None
+    social_links: list[str] = Field(default_factory=list)
+    description: str | None = None
+    services: list[str] = Field(default_factory=list)
+    source: str
+    source_url: str
+    status: str = "new"
     fit_score: int
     why: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class LeadSearchRequest(BaseModel):
+    brand_id: BrandId
+    category: str
+    location: str
+    keywords: str | None = None
+
+
+class LeadOutreachRequest(BaseModel):
+    brand_id: BrandId
+    lead_id: str
 
 
 class Metrics(BaseModel):

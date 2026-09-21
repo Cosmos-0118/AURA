@@ -101,14 +101,24 @@ create table if not exists lessons (
 );
 
 create table if not exists leads (
-  id         uuid primary key default gen_random_uuid(),
-  brand_id   text not null references brands(id),
-  name       text not null,
-  url        text,
-  country    text,
-  fit_score  int not null default 0,
-  why        text,
-  created_at timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  brand_id     text not null references brands(id),
+  name         text not null,
+  category     text not null,
+  location     text not null,
+  url          text,
+  phone        text,
+  public_email text,
+  social_links jsonb not null default '[]',
+  description  text,
+  services     jsonb not null default '[]',
+  source       text not null,
+  source_url   text not null,
+  status       text not null default 'new',
+  fit_score    int not null default 0,
+  why          text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
 );
 
 create index if not exists idx_assets_status on content_assets(status);
