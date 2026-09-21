@@ -20,7 +20,9 @@ app.add_middleware(
 # Ensure storage directory exists and mount as static files
 storage_path = Path(__file__).resolve().parent.parent / "storage"
 storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(storage_path)), name="media")
 app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+
 
 
 @app.get("/api/health", tags=["health"])

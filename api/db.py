@@ -239,6 +239,15 @@ def init_sqlite_db(conn: sqlite3.Connection):
           url TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS campaign_events (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          actor TEXT NOT NULL DEFAULT 'system',
+          metadata TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     conn.commit()
@@ -312,6 +321,7 @@ def get_db() -> Generator[Any, None, None]:
 
     # Try MySQL first if host is configured
     if mysql_host and get_db_mode() != "sqlite":
+        raw_conn = None
         try:
             import pymysql
             import pymysql.cursors
@@ -325,6 +335,10 @@ def get_db() -> Generator[Any, None, None]:
                 cursorclass=pymysql.cursors.DictCursor,
                 autocommit=False,
             )
+        except Exception:
+            raw_conn = None
+
+        if raw_conn is not None:
             wrapper = MySQLConnectionWrapper(raw_conn)
             try:
                 yield wrapper
@@ -335,9 +349,6 @@ def get_db() -> Generator[Any, None, None]:
             finally:
                 wrapper.close()
             return
-        except Exception:
-            # If MySQL connection fails, cleanly fall back to local SQLite
-            pass
 
     # SQLite fallback
     conn = sqlite3.connect(str(SQLITE_DB_PATH))
@@ -354,4 +365,6 @@ def get_db() -> Generator[Any, None, None]:
 
 
 get_connection = get_db
+transaction = get_db
+
 

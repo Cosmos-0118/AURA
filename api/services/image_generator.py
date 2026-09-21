@@ -1,5 +1,5 @@
 """AURA Image Generator Service.
-Generates images and saves them locally to storage/campaigns/{campaign_id}/image.png.
+Generates images and saves them locally to storage/campaigns/{campaign_id}/image/{filename}.
 """
 
 import os
@@ -8,18 +8,15 @@ from typing import Any
 
 import httpx
 
-STORAGE_BASE = Path(__file__).resolve().parent.parent.parent / "storage"
+try:
+    from ..repositories.media import determine_next_media_path
+except ImportError:
+    from repositories.media import determine_next_media_path
 
 
-def ensure_campaign_dir(campaign_id: str) -> Path:
-    target_dir = STORAGE_BASE / "campaigns" / campaign_id
-    target_dir.mkdir(parents=True, exist_ok=True)
-    return target_dir
-
-
-def create_demo_image(target_path: Path, prompt: str) -> None:
-    """Create a clean, high-resolution SVG/PNG placeholder for demo mode."""
-    # Create an elegant SVG with corporate gradient and prompt snippet
+def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
+    """Create a clean, high-resolution SVG placeholder for demo mode."""
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     svg_content = f"""<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -48,10 +45,9 @@ def create_demo_image(target_path: Path, prompt: str) -> None:
     </p>
   </foreignObject>
   
-  <text x="100" y="660" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14">Stored locally at: storage/campaigns/{target_path.parent.name}/image.png</text>
+  <text x="100" y="660" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14">Stored locally at: {rel_path}</text>
   <text x="100" y="690" fill="#10b981" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="600">✓ Local Verification Checksum Passed</text>
 </svg>"""
-    # Write SVG
     with open(target_path, "w", encoding="utf-8") as f:
         f.write(svg_content)
 
@@ -62,16 +58,19 @@ def generate_image(
     model: str | None = None,
     demo_mode: bool = False,
 ) -> dict[str, Any]:
-    """Generate image and persist locally."""
-    target_dir = ensure_campaign_dir(campaign_id)
-    target_path = target_dir / "image.png"
-
+    """Generate image and persist locally to storage/campaigns/{campaign_id}/image/{filename}."""
+    target_path, filename, rel_path = determine_next_media_path(campaign_id, "image")
     chosen_model = model or os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")
 
     if demo_mode:
-        create_demo_image(target_path, prompt)
+        create_demo_image(target_path, prompt, rel_path)
+        file_size = target_path.stat().st_size if target_path.exists() else 1024
         return {
-            "local_path": f"/storage/campaigns/{campaign_id}/image.png",
+            "local_path": rel_path,
+            "url": f"/{rel_path}",
+            "filename": filename,
+            "mime_type": "image/png",
+            "file_size": file_size,
             "provider": "demo_local",
             "model": chosen_model,
             "status": "completed",
@@ -94,11 +93,17 @@ def generate_image(
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.get(image_url)
                     resp.raise_for_status()
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(target_path, "wb") as f:
                         f.write(resp.content)
 
+                file_size = target_path.stat().st_size
                 return {
-                    "local_path": f"/storage/campaigns/{campaign_id}/image.png",
+                    "local_path": rel_path,
+                    "url": f"/{rel_path}",
+                    "filename": filename,
+                    "mime_type": "image/png",
+                    "file_size": file_size,
                     "provider": "fal",
                     "model": chosen_model,
                     "status": "completed",
@@ -107,9 +112,14 @@ def generate_image(
             raise RuntimeError(f"FAL image generation failed: {exc}") from exc
 
     # If no FAL_KEY provided, generate high-quality demo SVG
-    create_demo_image(target_path, prompt)
+    create_demo_image(target_path, prompt, rel_path)
+    file_size = target_path.stat().st_size if target_path.exists() else 1024
     return {
-        "local_path": f"/storage/campaigns/{campaign_id}/image.png",
+        "local_path": rel_path,
+        "url": f"/{rel_path}",
+        "filename": filename,
+        "mime_type": "image/png",
+        "file_size": file_size,
         "provider": "local_fallback",
         "model": chosen_model,
         "status": "completed",

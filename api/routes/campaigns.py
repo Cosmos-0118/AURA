@@ -1,14 +1,21 @@
 import json
 import os
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 
 try:
-    from ..db import get_connection
+    from ..db import get_db, transaction
     from ..graph import run_pipeline
+    from ..repositories import (
+        campaigns as campaign_repo,
+        events as event_repo,
+        lessons as lesson_repo,
+        media as media_repo,
+        reviews as review_repo,
+    )
     from ..schemas import (
         BrandId,
         Campaign,
@@ -23,8 +30,15 @@ try:
     from ..services.image_generator import generate_image as service_generate_image
     from ..services.video_generator import generate_video as service_generate_video
 except ImportError:
-    from db import get_connection
+    from db import get_db, transaction
     from graph import run_pipeline
+    from repositories import (
+        campaigns as campaign_repo,
+        events as event_repo,
+        lessons as lesson_repo,
+        media as media_repo,
+        reviews as review_repo,
+    )
     from schemas import (
         BrandId,
         Campaign,
@@ -80,43 +94,53 @@ def get_operational_mode():
     }
 
 
+# --- Review Decision Models ---
+class ReviewApproveRequest(BaseModel):
+    reviewer_note: str | None = None
+
+
+class ReviewRejectRequest(BaseModel):
+    tag: str = "TOO_SALESY"
+    note: str
+    platform: str | None = None
+
+
+class ReviewEditRequest(BaseModel):
+    platform: str
+    new_content: str
+    new_title: str | None = None
+    tag: str | None = None
+    note: str | None = None
+
+
+# --- Standard Campaign Endpoints ---
+
+
 @router.post("", response_model=Campaign)
 def create_campaign(body: CampaignCreate, background_tasks: BackgroundTasks) -> Campaign:
     campaign_id = str(uuid4())
-    with get_connection() as connection:
-        connection.execute(
-            """
-            insert into campaigns
-              (id, brand_id, topic, country, goal, platforms, language, status)
-            values (%s, %s, %s, %s, %s, %s, %s, 'running')
-            """,
-            (
-                campaign_id,
-                body.brand_id,
-                body.topic,
-                body.country,
-                body.goal,
-                json.dumps(body.platforms),
-                body.language,
-            ),
+    with transaction() as db:
+        campaign_repo.create_campaign(
+            db=db,
+            campaign_id=campaign_id,
+            brand_id=body.brand_id,
+            objective=body.goal,
+            language=body.language,
+            thesis=body.topic,
+            status="draft",
         )
-        row = connection.execute(
-            "select * from campaigns where id = %s", (campaign_id,)
-        ).fetchone()
     background_tasks.add_task(run_pipeline, campaign_id)
-    return _campaign(row)
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+    if not detail:
+        raise HTTPException(status_code=500, detail="Failed to create campaign")
+    return _campaign(detail["campaign"])
 
 
 @router.get("", response_model=list[Campaign])
 def list_campaigns(brand_id: BrandId | None = None) -> list[Campaign]:
-    query = "select * from campaigns"
-    params: tuple[str, ...] = ()
-    if brand_id:
-        query += " where brand_id = %s"
-        params = (brand_id,)
-    query += " order by created_at desc"
-    with get_connection() as connection:
-        rows = connection.execute(query, params).fetchall()
+    with get_db() as db:
+        rows = campaign_repo.list_campaigns(db, brand_id=brand_id)
     return [_campaign(row) for row in rows]
 
 
@@ -125,24 +149,42 @@ def list_campaigns(brand_id: BrandId | None = None) -> list[Campaign]:
 
 @router.post("/studio/generate", response_model=StudioCampaignDetail)
 def generate_studio_campaign(body: StudioCampaignCreate) -> StudioCampaignDetail:
-    """Generate a complete multi-platform campaign package using Groq or Demo mode."""
-    campaign_id = f"camp_{uuid4().hex[:12]}"
+    """Generate a complete multi-platform campaign package using Groq or Demo mode, with repository persistence."""
+    campaign_id = str(uuid4())
     demo_mode = is_demo_mode()
 
-    # Retrieve learned lessons for this brand to inject as negative guidance
-    lessons = []
-    with get_connection() as connection:
-        lesson_rows = connection.execute(
-            "select * from lessons where brand_id = %s order by created_at desc limit 10",
-            (body.brand_id,),
-        ).fetchall()
+    # Step 1: Retrieve learned lessons from MySQL for negative guidance
+    lessons_used: list[dict[str, Any]] = []
+    with get_db() as db:
+        lesson_rows = lesson_repo.list_lessons(db, brand_id=body.brand_id, limit=10)
         for r in lesson_rows:
-            lessons.append({
-                "tag": r.get("reason_tag") or r.get("tag") or "RULE",
-                "note": r.get("note", ""),
-            })
+            tag = r.get("tag") or r.get("reason_tag") or "RULE"
+            note = r.get("note", "")
+            lessons_used.append({"id": str(r["id"]), "tag": tag, "note": note})
 
-    # Call content generation engine
+    # Step 2: Create initial campaign in draft / generating status
+    with transaction() as db:
+        campaign_repo.create_campaign(
+            db=db,
+            campaign_id=campaign_id,
+            brand_id=body.brand_id,
+            objective=body.objective,
+            language=body.language,
+            thesis=body.thesis,
+            target_audience=body.target_audience,
+            status="generating",
+        )
+        event_repo.log_event(
+            db,
+            campaign_id=campaign_id,
+            event_type="generation_started",
+            description=f"Initiated campaign content generation for {body.brand_id}",
+            metadata={"platforms": body.platforms, "lessons_count": len(lessons_used)},
+        )
+
+    # Step 3: Run content generation engine
+    provider = "demo_local" if demo_mode else "groq"
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     try:
         content_pkg = generate_campaign_content(
             brand_id=body.brand_id,
@@ -151,13 +193,13 @@ def generate_studio_campaign(body: StudioCampaignCreate) -> StudioCampaignDetail
             platforms=body.platforms,
             thesis=body.thesis,
             target_audience=body.target_audience,
-            lessons=lessons,
+            lessons=lessons_used,
             demo_mode=demo_mode,
         )
     except Exception as exc:
         if not demo_mode:
-            # Fall back to demo mode if live API fails
-            demo_mode = True
+            # Clean fallback to demo mode
+            provider = "demo_fallback"
             content_pkg = generate_campaign_content(
                 brand_id=body.brand_id,
                 objective=body.objective,
@@ -165,98 +207,26 @@ def generate_studio_campaign(body: StudioCampaignCreate) -> StudioCampaignDetail
                 platforms=body.platforms,
                 thesis=body.thesis,
                 target_audience=body.target_audience,
-                lessons=lessons,
+                lessons=lessons_used,
                 demo_mode=True,
             )
         else:
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Persist campaign metadata snapshot
-    with get_connection() as connection:
-        connection.execute(
-            """
-            insert into campaigns
-              (id, brand_id, objective, language, thesis, topic, goal, platforms, target_audience, status)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'generated')
-            """,
-            (
-                campaign_id,
-                body.brand_id,
-                body.objective,
-                body.language,
-                body.thesis,
-                content_pkg.get("campaign_title", body.thesis),
-                body.objective,
-                json.dumps(body.platforms),
-                body.target_audience,
-            ),
-        )
-
-        # Persist platform content items
-        for p in body.platforms:
-            p_data = content_pkg.get(p)
-            if not p_data:
-                continue
-
-            content_id = f"cpc_{uuid4().hex[:10]}"
-            title = p_data.get("title") if isinstance(p_data, dict) else None
-            content_text = ""
-            hashtags = []
-            script = None
-            visual_concept = None
-
-            if isinstance(p_data, dict):
-                content_text = p_data.get("content") or p_data.get("caption") or p_data.get("hook", "")
-                hashtags = p_data.get("hashtags", [])
-                visual_concept = p_data.get("visual_concept")
-                if p == "reel":
-                    script = p_data.get("voiceover") or p_data.get("script")
-                    if p_data.get("scenes"):
-                        visual_concept = json.dumps(p_data.get("scenes"))
-            elif isinstance(p_data, str):
-                content_text = p_data
-
-            connection.execute(
-                """
-                insert into campaign_platform_content
-                  (id, campaign_id, platform, title, content, hashtags, script, visual_concept, generation_prompt)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    content_id,
-                    campaign_id,
-                    p,
-                    title,
-                    content_text,
-                    json.dumps(hashtags),
-                    script,
-                    visual_concept,
-                    None,
-                ),
-            )
-
-        # Initialize media prompt records
-        img_prompt = content_pkg.get("image_generation_prompt") or f"Commercial editorial image for {body.brand_id} on {body.thesis}"
-        vid_prompt = content_pkg.get("video_generation_prompt") or f"Cinematic vertical video for {body.brand_id} on {body.thesis}"
-
-        img_media_id = f"med_{uuid4().hex[:10]}"
-        connection.execute(
-            """
-            insert into campaign_media
-              (id, campaign_id, media_type, prompt, local_path, provider, model, status)
-            values (%s, %s, 'image', %s, NULL, 'local', %s, 'pending')
-            """,
-            (img_media_id, campaign_id, img_prompt, os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")),
-        )
-
-        vid_media_id = f"med_{uuid4().hex[:10]}"
-        connection.execute(
-            """
-            insert into campaign_media
-              (id, campaign_id, media_type, prompt, local_path, provider, model, status)
-            values (%s, %s, 'video', %s, NULL, 'local', %s, 'pending')
-            """,
-            (vid_media_id, campaign_id, vid_prompt, os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo")),
+    # Step 4: Atomically persist generated campaign and all platform contents
+    with transaction() as db:
+        campaign_repo.save_generated_campaign_package(
+            db=db,
+            campaign_id=campaign_id,
+            brand_id=body.brand_id,
+            objective=body.objective,
+            language=body.language,
+            thesis=body.thesis,
+            target_audience=body.target_audience,
+            content_pkg=content_pkg,
+            lessons_used=lessons_used,
+            provider=provider,
+            model=model,
         )
 
     return get_studio_campaign(campaign_id)
@@ -265,31 +235,29 @@ def generate_studio_campaign(body: StudioCampaignCreate) -> StudioCampaignDetail
 @router.get("/{campaign_id}/studio", response_model=StudioCampaignDetail)
 def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
     """Fetch complete static campaign snapshot including platform content and media."""
-    with get_connection() as connection:
-        c_row = connection.execute(
-            "select * from campaigns where id = %s", (campaign_id,)
-        ).fetchone()
-        if not c_row:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
 
-        content_rows = connection.execute(
-            "select * from campaign_platform_content where campaign_id = %s order by created_at asc",
-            (campaign_id,),
-        ).fetchall()
+    if not detail:
+        raise HTTPException(status_code=404, detail="Campaign not found")
 
-        media_rows = connection.execute(
-            "select * from campaign_media where campaign_id = %s order by created_at asc",
-            (campaign_id,),
-        ).fetchall()
-
+    c_row = detail["campaign"]
     contents: list[CampaignPlatformContentItem] = []
-    for r in content_rows:
+    img_prompt = None
+    vid_prompt = None
+
+    for r in detail["contents"]:
         ht = r.get("hashtags")
         if isinstance(ht, str):
             try:
                 ht = json.loads(ht)
             except Exception:
                 ht = []
+        if r.get("image_generation_prompt") and not img_prompt:
+            img_prompt = r["image_generation_prompt"]
+        if r.get("video_generation_prompt") and not vid_prompt:
+            vid_prompt = r["video_generation_prompt"]
+
         contents.append(
             CampaignPlatformContentItem(
                 id=str(r["id"]),
@@ -300,51 +268,41 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
                 hashtags=ht or [],
                 script=r.get("script"),
                 visual_concept=r.get("visual_concept"),
-                generation_prompt=r.get("generation_prompt"),
+                generation_prompt=r.get("image_generation_prompt") or r.get("video_generation_prompt"),
             )
         )
 
     media: list[CampaignMediaItem] = []
-    img_prompt = None
-    vid_prompt = None
-
-    for m in media_rows:
-        m_type = m["media_type"]
-        if m_type == "image":
-            img_prompt = m["prompt"]
-        elif m_type == "video":
-            vid_prompt = m["prompt"]
+    for m in detail["media"]:
+        # Map relative path to frontend URL
+        local_path = m.get("local_path")
+        media_url = f"/{local_path}" if local_path and not local_path.startswith("/") else local_path
 
         media.append(
             CampaignMediaItem(
                 id=str(m["id"]),
                 campaign_id=str(m["campaign_id"]),
-                media_type=m_type,
+                media_type=m["media_type"],
                 prompt=m["prompt"],
-                local_path=m.get("local_path"),
+                local_path=media_url,
                 provider=m.get("provider") or "local",
                 model=m["model"],
                 status=m.get("status") or "pending",
             )
         )
 
-    platforms_val = c_row.get("platforms")
-    if isinstance(platforms_val, str):
-        try:
-            platforms_val = json.loads(platforms_val)
-        except Exception:
-            platforms_val = ["linkedin"]
+    platforms_val = [c.platform for c in contents] or ["linkedin"]
 
     return StudioCampaignDetail(
         id=str(c_row["id"]),
         brand_id=c_row["brand_id"],
-        objective=c_row.get("objective") or c_row.get("goal") or "Awareness",
+        objective=c_row.get("objective") or "Awareness",
         language=c_row.get("language") or "en",
-        thesis=c_row.get("thesis") or c_row.get("topic") or "",
+        thesis=c_row.get("thesis") or c_row.get("title") or "",
         target_audience=c_row.get("target_audience"),
-        platforms=platforms_val or ["linkedin"],
+        platforms=platforms_val,
         status=c_row.get("status") or "draft",
-        error=c_row.get("error"),
+        error=None,
         created_at=c_row["created_at"],
         updated_at=c_row.get("updated_at"),
         contents=contents,
@@ -356,71 +314,69 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
 
 @router.post("/{campaign_id}/generate-image", response_model=CampaignMediaItem)
 def generate_campaign_image(campaign_id: str, body: MediaGenerateRequest) -> CampaignMediaItem:
-    """Generate image and save locally to storage/campaigns/{campaign_id}/image.png."""
+    """Generate image and save locally to storage/campaigns/{campaign_id}/image/{filename}."""
     demo_mode = is_demo_mode()
+    chosen_model = body.model or os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")
     prompt = body.prompt
 
-    with get_connection() as connection:
-        media_row = connection.execute(
-            "select * from campaign_media where campaign_id = %s and media_type = 'image' limit 1",
-            (campaign_id,),
-        ).fetchone()
-
-        if not prompt and media_row:
-            prompt = media_row["prompt"]
+    # 1. Load campaign and image prompt from MySQL
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
         if not prompt:
-            c_row = connection.execute(
-                "select * from campaigns where id = %s", (campaign_id,)
-            ).fetchone()
-            if not c_row:
-                raise HTTPException(status_code=404, detail="Campaign not found")
-            prompt = f"Commercial photography for {c_row['brand_id']} marketing campaign: {c_row.get('thesis', '')}"
+            for c in detail["contents"]:
+                if c.get("image_generation_prompt"):
+                    prompt = c["image_generation_prompt"]
+                    break
+        if not prompt:
+            prompt = f"Editorial commercial photography for {detail['campaign']['brand_id']} on {detail['campaign']['thesis']}"
 
-    # Perform image generation and local storage
+    # 2. Record media generating in MySQL
+    media_id = str(uuid4())
+    with transaction() as db:
+        media_repo.record_media_generating(
+            db=db,
+            campaign_id=campaign_id,
+            media_type="image",
+            prompt=prompt,
+            model=chosen_model,
+            provider="demo_local" if demo_mode else "fal",
+            media_id=media_id,
+        )
+
+    # 3. Generate image and save to local storage
     try:
         res = service_generate_image(
             campaign_id=campaign_id,
             prompt=prompt,
-            model=body.model,
+            model=chosen_model,
             demo_mode=demo_mode,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {exc}")
 
-    # Update database
-    with get_connection() as connection:
-        if media_row:
-            media_id = str(media_row["id"])
-            connection.execute(
-                """
-                update campaign_media
-                set prompt = %s, local_path = %s, provider = %s, model = %s, status = 'completed'
-                where id = %s
-                """,
-                (prompt, res["local_path"], res["provider"], res["model"], media_id),
-            )
-        else:
-            media_id = f"med_{uuid4().hex[:10]}"
-            connection.execute(
-                """
-                insert into campaign_media
-                  (id, campaign_id, media_type, prompt, local_path, provider, model, status)
-                values (%s, %s, 'image', %s, %s, %s, %s, 'completed')
-                """,
-                (media_id, campaign_id, prompt, res["local_path"], res["provider"], res["model"]),
-            )
+    # 4. Update media row with completed file info in MySQL
+    with transaction() as db:
+        updated_media = media_repo.update_media_completed(
+            db=db,
+            media_id=media_id,
+            campaign_id=campaign_id,
+            media_type="image",
+            local_path=res["local_path"],
+            filename=res["filename"],
+            mime_type=res["mime_type"],
+            file_size=res["file_size"],
+        )
 
-        updated_media = connection.execute(
-            "select * from campaign_media where id = %s", (media_id,)
-        ).fetchone()
-
+    media_url = f"/{res['local_path']}"
     return CampaignMediaItem(
         id=str(updated_media["id"]),
         campaign_id=str(updated_media["campaign_id"]),
         media_type="image",
         prompt=updated_media["prompt"],
-        local_path=updated_media["local_path"],
+        local_path=media_url,
         provider=updated_media["provider"],
         model=updated_media["model"],
         status=updated_media["status"],
@@ -429,166 +385,139 @@ def generate_campaign_image(campaign_id: str, body: MediaGenerateRequest) -> Cam
 
 @router.post("/{campaign_id}/generate-video", response_model=CampaignMediaItem)
 def generate_campaign_video(campaign_id: str, body: MediaGenerateRequest) -> CampaignMediaItem:
-    """Generate vertical video and save locally to storage/campaigns/{campaign_id}/video.mp4."""
+    """Generate vertical Reel video and save locally to storage/campaigns/{campaign_id}/video/{filename}."""
     demo_mode = is_demo_mode()
+    chosen_model = body.model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo")
     prompt = body.prompt
 
-    with get_connection() as connection:
-        media_row = connection.execute(
-            "select * from campaign_media where campaign_id = %s and media_type = 'video' limit 1",
-            (campaign_id,),
-        ).fetchone()
-
-        if not prompt and media_row:
-            prompt = media_row["prompt"]
+    # 1. Load campaign and video prompt from MySQL
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Campaign not found")
 
         if not prompt:
-            c_row = connection.execute(
-                "select * from campaigns where id = %s", (campaign_id,)
-            ).fetchone()
-            if not c_row:
-                raise HTTPException(status_code=404, detail="Campaign not found")
-            prompt = f"Vertical 9:16 cinematic video for {c_row['brand_id']} campaign on {c_row.get('thesis', '')}"
+            for c in detail["contents"]:
+                if c.get("video_generation_prompt"):
+                    prompt = c["video_generation_prompt"]
+                    break
+        if not prompt:
+            prompt = f"Vertical 9:16 cinematic video for {detail['campaign']['brand_id']} on {detail['campaign']['thesis']}"
 
-    # Perform video generation and local storage
+    # 2. Record media generating in MySQL
+    media_id = str(uuid4())
+    with transaction() as db:
+        media_repo.record_media_generating(
+            db=db,
+            campaign_id=campaign_id,
+            media_type="video",
+            prompt=prompt,
+            model=chosen_model,
+            provider="demo_local" if demo_mode else "fal",
+            media_id=media_id,
+        )
+
+    # 3. Generate video and save to local storage
     try:
         res = service_generate_video(
             campaign_id=campaign_id,
             prompt=prompt,
-            model=body.model,
+            model=chosen_model,
             demo_mode=demo_mode,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Video generation failed: {exc}")
 
-    # Update database
-    with get_connection() as connection:
-        if media_row:
-            media_id = str(media_row["id"])
-            connection.execute(
-                """
-                update campaign_media
-                set prompt = %s, local_path = %s, provider = %s, model = %s, status = 'completed'
-                where id = %s
-                """,
-                (prompt, res["local_path"], res["provider"], res["model"], media_id),
-            )
-        else:
-            media_id = f"med_{uuid4().hex[:10]}"
-            connection.execute(
-                """
-                insert into campaign_media
-                  (id, campaign_id, media_type, prompt, local_path, provider, model, status)
-                values (%s, %s, 'video', %s, %s, %s, %s, 'completed')
-                """,
-                (media_id, campaign_id, prompt, res["local_path"], res["provider"], res["model"]),
-            )
+    # 4. Update media row with completed file info in MySQL
+    with transaction() as db:
+        updated_media = media_repo.update_media_completed(
+            db=db,
+            media_id=media_id,
+            campaign_id=campaign_id,
+            media_type="video",
+            local_path=res["local_path"],
+            filename=res["filename"],
+            mime_type=res["mime_type"],
+            file_size=res["file_size"],
+            duration_seconds=res.get("duration_seconds", 5.0),
+        )
 
-        updated_media = connection.execute(
-            "select * from campaign_media where id = %s", (media_id,)
-        ).fetchone()
-
+    media_url = f"/{res['local_path']}"
     return CampaignMediaItem(
         id=str(updated_media["id"]),
         campaign_id=str(updated_media["campaign_id"]),
         media_type="video",
         prompt=updated_media["prompt"],
-        local_path=updated_media["local_path"],
+        local_path=media_url,
         provider=updated_media["provider"],
         model=updated_media["model"],
         status=updated_media["status"],
     )
 
 
-@router.post("/{campaign_id}/submit-review", response_model=StudioCampaignDetail)
-def submit_campaign_for_review(campaign_id: str) -> StudioCampaignDetail:
+@router.post("/{campaign_id}/submit-review")
+def submit_campaign_review(campaign_id: str):
     """Transition campaign status from 'generated' to 'pending_review' and enqueue into review_queue."""
-    with get_connection() as connection:
-        c_row = connection.execute(
-            "select * from campaigns where id = %s", (campaign_id,)
-        ).fetchone()
-        if not c_row:
-            raise HTTPException(status_code=404, detail="Campaign not found")
+    try:
+        with transaction() as db:
+            result = campaign_repo.submit_for_verification(db, campaign_id)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-        # Update campaign status
-        connection.execute(
-            "update campaigns set status = 'pending_review' where id = %s",
-            (campaign_id,),
+
+# --- Review Decision Endpoints ---
+
+
+@router.get("/review-queue")
+def get_campaign_review_queue(status: str | None = None):
+    """Retrieve campaigns in the Review Queue."""
+    with get_db() as db:
+        return review_repo.get_review_queue(db, status=status)
+
+
+@router.post("/{campaign_id}/approve")
+def approve_campaign_route(campaign_id: str, body: ReviewApproveRequest = ReviewApproveRequest()):
+    """Approve campaign in review queue."""
+    with transaction() as db:
+        return review_repo.approve_campaign(db, campaign_id, reviewer_note=body.reviewer_note)
+
+
+@router.post("/{campaign_id}/reject")
+def reject_campaign_route(campaign_id: str, body: ReviewRejectRequest):
+    """Reject campaign in review queue and record lesson in MySQL."""
+    with transaction() as db:
+        return review_repo.reject_campaign(
+            db, campaign_id, tag=body.tag, note=body.note, platform=body.platform
         )
 
-        # Enqueue in review_queue
-        rq_id = f"rq_{uuid4().hex[:10]}"
-        connection.execute(
-            """
-            insert into review_queue (id, campaign_id, status)
-            values (%s, %s, 'pending_review')
-            """,
-            (rq_id, campaign_id),
+
+@router.post("/{campaign_id}/edit")
+def edit_campaign_content_route(campaign_id: str, body: ReviewEditRequest):
+    """Edit platform content, preserve original, and record lesson if feedback provided."""
+    with transaction() as db:
+        return review_repo.edit_campaign_content(
+            db,
+            campaign_id=campaign_id,
+            platform=body.platform,
+            new_content=body.new_content,
+            new_title=body.new_title,
+            tag=body.tag,
+            note=body.note,
         )
 
-        # Also push items to content_assets with initial PASS compliance check so it appears in standard review queue too
-        cpc_items = connection.execute(
-            "select * from campaign_platform_content where campaign_id = %s",
-            (campaign_id,),
-        ).fetchall()
 
-        media_items = connection.execute(
-            "select * from campaign_media where campaign_id = %s and local_path is not null",
-            (campaign_id,),
-        ).fetchall()
-        default_media_url = media_items[0]["local_path"] if media_items else None
-
-        for item in cpc_items:
-            asset_id = f"ast_{uuid4().hex[:10]}"
-            content_type_map = {
-                "linkedin": "post",
-                "x": "post",
-                "instagram": "caption",
-                "blog": "article",
-                "reel": "script",
-            }
-            c_type = content_type_map.get(item["platform"], "post")
-            connection.execute(
-                """
-                insert into content_assets
-                  (id, campaign_id, brand_id, platform, content_type, variant, language, title, body, hashtags, media_url, status)
-                values (%s, %s, %s, %s, %s, 'A', %s, %s, %s, %s, %s, 'pending_review')
-                """,
-                (
-                    asset_id,
-                    campaign_id,
-                    c_row["brand_id"],
-                    item["platform"],
-                    c_type,
-                    c_row.get("language", "en"),
-                    item.get("title"),
-                    item["content"],
-                    item.get("hashtags") or "[]",
-                    default_media_url,
-                ),
-            )
-
-            # Insert passing compliance check entry
-            check_id = f"chk_{uuid4().hex[:10]}"
-            connection.execute(
-                """
-                insert into compliance_checks
-                  (id, asset_id, result, risk, rules, issues, suggested_revision)
-                values (%s, %s, 'PASS', 'LOW', '["STATUTORY_DISCLOSURE", "TONE_ALIGNMENT"]', '[]', NULL)
-                """,
-                (check_id, asset_id),
-            )
-
-    return get_studio_campaign(campaign_id)
+@router.get("/{campaign_id}/events")
+def get_campaign_events(campaign_id: str):
+    """Retrieve audit trail of events for this campaign."""
+    with get_db() as db:
+        return event_repo.list_events_for_campaign(db, campaign_id)
 
 
 @router.get("/{campaign_id}", response_model=Campaign)
 def get_campaign(campaign_id: str) -> Campaign:
-    with get_connection() as connection:
-        row = connection.execute(
-            "select * from campaigns where id = %s", (campaign_id,)
-        ).fetchone()
-    if row is None:
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+    if not detail:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    return _campaign(row)
-
+    return _campaign(detail["campaign"])
