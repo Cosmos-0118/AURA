@@ -129,3 +129,15 @@ export function listLeads(brandId?: string): Promise<Lead[]> {
 export function getMetrics(): Promise<Metrics> {
   return request<Metrics>("/api/metrics");
 }
+
+export function generateVideo(body: import("./types").VideoGenerateRequest): Promise<import("./types").VideoGenerateResponse> {
+  return request<import("./types").VideoGenerateResponse>("/api/video/generate", jsonBody(body));
+}
+
+export function getVideoConfig(): Promise<import("./types").VideoConfig> {
+  return request<import("./types").VideoConfig>("/api/video/config");
+}
+
+export function attachVideoToAsset(body: import("./types").VideoAttachRequest): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
+  return request<{ ok: boolean; asset_id: string; media_url: string }>("/api/video/attach", jsonBody(body));
+}
