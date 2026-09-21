@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="JA Assure competitor intelligence monitor" />
+    <title>JA Assure · Competitor Intelligence</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="JA Assure competitor intelligence home">
+          <span class="brand-mark">JA</span>
+          <span>
+            <strong>JA Assure</strong>
+            <small>Competitor intelligence</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span id="api-status" class="status-pill status-loading">Connecting</span>
+          <button id="scan-all" class="button button-primary">Scan watchlist</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Signal room / live workspace</p>
+          <h1>Know what moved before the market does.</h1>
+          <p class="hero-copy">
+            Deterministic snapshots, meaningful diffs, and an evidence trail for Jade,
+            DoctorShield, and Jaguar Transit.
+          </p>
+        </div>
+        <div class="hero-note">
+          <span class="pulse-dot"></span>
+          <span>Independent monitor</span>
+          <small>No AURA API connection required</small>
+        </div>
+      </section>
+
+      <section id="summary" class="summary-grid" aria-label="Intelligence summary">
+        <article class="summary-card summary-card-accent">
+          <span class="summary-label">High impact</span>
+          <strong id="summary-high">—</strong>
+          <small>Requires review</small>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">All detected changes</span>
+          <strong id="summary-total">—</strong>
+          <small>Persisted events</small>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Watchlist</span>
+          <strong id="summary-competitors">—</strong>
+          <small>Registered competitors</small>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Data path</span>
+          <strong class="summary-word">Hash + diff</strong>
+          <small>LLM optional, evidence first</small>
+        </article>
+      </section>
+
+      <div id="notice" class="notice" role="status" hidden></div>
+
+      <section class="workspace-grid">
+        <div class="main-column">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Prioritised feed</p>
+              <h2>Detected changes</h2>
+            </div>
+            <span id="event-count" class="muted">0 events</span>
+          </div>
+
+          <form id="filters" class="filters" aria-label="Filter intelligence events">
+            <label class="search-field">
+              <span class="sr-only">Search events</span>
+              <input id="filter-search" name="search" type="search" placeholder="Search competitor, summary, or evidence…" />
+            </label>
+            <label>
+              <span class="sr-only">Brand</span>
+              <select id="filter-brand" name="brand_id">
+                <option value="">All brands</option>
+                <option value="jade">Jade</option>
+                <option value="doctorshield">DoctorShield</option>
+                <option value="jaguar">Jaguar Transit</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Impact</span>
+              <select id="filter-impact" name="impact">
+                <option value="">All impact</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Country</span>
+              <select id="filter-country" name="country">
+                <option value="">All markets</option>
+                <option value="SG">Singapore</option>
+                <option value="MY">Malaysia</option>
+                <option value="HK">Hong Kong</option>
+                <option value="ID">Indonesia</option>
+                <option value="TH">Thailand</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Change type</span>
+              <select id="filter-type" name="change_type">
+                <option value="">All change types</option>
+                <option value="price_change">Price change</option>
+                <option value="new_product">New product</option>
+                <option value="new_market">New market</option>
+                <option value="coverage_change">Coverage change</option>
+                <option value="partnership">Partnership</option>
+                <option value="positioning_change">Positioning</option>
+                <option value="social_post">Social post</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Source</span>
+              <select id="filter-source" name="source">
+                <option value="">All sources</option>
+                <option value="website">Website</option>
+                <option value="pricing">Pricing</option>
+                <option value="changedetection">Changedetection</option>
+                <option value="rsshub">RSSHub</option>
+                <option value="news">News</option>
+              </select>
+            </label>
+            <button id="clear-filters" type="button" class="button button-quiet">Clear</button>
+          </form>
+
+          <div id="events" class="events" aria-live="polite"></div>
+        </div>
+
+        <aside class="side-column">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Collection layer</p>
+                <h2>Source health</h2>
+              </div>
+              <span class="panel-icon">◌</span>
+            </div>
+            <div id="source-health" class="health-list"></div>
+          </section>
+
+          <section class="panel watchlist-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Registry</p>
+                <h2>Watchlist</h2>
+              </div>
+            </div>
+            <div id="watchlist" class="watchlist"></div>
+          </section>
+
+          <section class="panel digest-panel">
+            <p class="eyebrow">Operating principle</p>
+            <h2>Analyst, not sensor.</h2>
+            <p>
+              Every signal begins as a captured source, then passes through a hash,
+              diff, and evidence check before it reaches this feed.
+            </p>
+            <div class="pipeline">
+              <span>Capture</span><i>→</i><span>Diff</span><i>→</i><span>Classify</span>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="event-dialog" class="event-dialog">
+      <button id="close-dialog" class="dialog-close" aria-label="Close event details">×</button>
+      <div id="event-detail"></div>
+    </dialog>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

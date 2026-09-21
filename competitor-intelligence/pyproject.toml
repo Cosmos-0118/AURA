@@ -1,0 +1,12 @@
+[project]
+name = "ja-assure-competitor-intelligence"
+version = "0.1.0"
+description = "Standalone deterministic competitor intelligence monitor for JA Assure"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+ja-intel = "competitor_intelligence.__main__:main"
+
+[tool.ruff]
+line-length = 100
