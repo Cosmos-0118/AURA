@@ -42,6 +42,7 @@ require_tools() {
   require_command bun
   require_command curl
   require_command lsof
+  require_command pgrep
 }
 
 ensure_layout() {
@@ -49,6 +50,7 @@ ensure_layout() {
 }
 
 clean_generated() {
+  stop_stack
   log "Removing generated build and runner output only"
 
   rm -rf \
@@ -96,6 +98,18 @@ capture_listener_pid() {
   fi
 }
 
+stop_process_tree() {
+  local pid="$1"
+  local child
+  local children
+
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    stop_process_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 stop_tracked_process() {
   local name="$1"
   local pid_file="$2"
@@ -113,7 +127,7 @@ stop_tracked_process() {
   fi
 
   log "Stopping $name (pid $pid)"
-  kill "$pid" 2>/dev/null || true
+  stop_process_tree "$pid"
   for _ in {1..20}; do
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.25
@@ -123,12 +137,17 @@ stop_tracked_process() {
     log "$name did not stop cleanly; sending SIGKILL to pid $pid"
     kill -KILL "$pid" 2>/dev/null || true
   fi
+
+  if kill -0 "$pid" 2>/dev/null; then
+    log "Could not stop $name; keeping $pid_file for a later retry" >&2
+    return 1
+  fi
   rm -f "$pid_file"
 }
 
 stop_stack() {
-  stop_tracked_process "frontend" "$WEB_PID_FILE"
-  stop_tracked_process "backend" "$API_PID_FILE"
+  stop_tracked_process "frontend" "$WEB_PID_FILE" || true
+  stop_tracked_process "backend" "$API_PID_FILE" || true
 }
 
 port_is_busy() {

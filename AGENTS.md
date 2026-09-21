@@ -30,7 +30,7 @@ Differentiator: **Compliance + Human Review + Feedback Learning**. Not "we gener
 
 | Who | Writes only these paths | Branch |
 |---|---|---|
-| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/agents/_stubs.py`, `api/tests/integration/**`, `api/pyproject.toml`, `api/uv.lock`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx`, `web/src/app/dashboard/page.tsx`, `web/src/app/dashboard/overview/**`, `web/src/features/overview/**`, `docs/**`, `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
+| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/agents/_stubs.py`, `api/tests/integration/**`, `api/pyproject.toml`, `api/uv.lock`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx`, `web/src/app/dashboard/page.tsx`, `web/src/app/dashboard/overview/**`, `web/src/features/overview/**`, `scripts/**`, `docs/**`, `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
 | Team Member 2 | `web/src/features/review/**`, `web/src/features/library/**`, `web/src/app/dashboard/review/**`, `web/src/app/dashboard/library/**`, `web/src/components/aura/m2/**` | `feat/m2-review-ui` |
 | Team Member 3 | `web/src/features/studio/**`, `web/src/features/brands/**`, `web/src/features/insights/**`, `web/src/app/dashboard/studio/**`, `web/src/app/dashboard/brands/**`, `web/src/app/dashboard/insights/**`, `web/src/components/aura/m3/**` | `feat/m3-studio-ui` |
 | Team Member 4 | `api/agents/content.py`, `api/agents/localize.py`, `api/prompts/content/**`, `api/tests/content/**` | `feat/m4-content` |
