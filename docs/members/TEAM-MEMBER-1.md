@@ -84,7 +84,7 @@ Ninety minutes for all six tasks below is the tightest window in the sprint, and
 
 **Done when:** others can `git clone` and open `docs/00-START-HERE.md`.
 
-### Task 0.2 — Supabase
+### Task 0.2 — Supabase [DONE]
 
 - One free project `aura`.
 - Apply `db/schema.sql` then `db/seed.sql` **and `db/demo.sql`** (FAIL Instagram + DoctorShield approved post + one lesson). Demo data is required at T+1.5, not at freeze.
@@ -92,7 +92,7 @@ Ninety minutes for all six tasks below is the tightest window in the sprint, and
 
 **Done when:** SQL editor `select * from brands;` returns 3 rows.
 
-### Task 0.3 — Frontend skeleton
+### Task 0.3 — Frontend skeleton [DONE]
 
 Exact commands are in [02-SETUP.md](../02-SETUP.md) (clone Kiranism into `web/`, delete inner `.git`, cleanup clerk/sentry/chat/kanban/billing).
 
@@ -104,7 +104,7 @@ Then:
 
 **Done when:** `bun run dev` shows the AURA sidebar. Clerk sign-in is gone.
 
-### Task 0.4 — FastAPI skeleton
+### Task 0.4 — FastAPI skeleton [DONE]
 
 `api/pyproject.toml` deps (do not add more without a reason):
 
@@ -132,7 +132,7 @@ Files:
 
 Only these eleven need a real body in Hour 0 — `health`, `brands`, `brands/{id}`, `POST campaigns`, `GET campaigns/{id}`, `GET assets`, `GET assets/{id}`, `approve`, `reject`, `lessons`, `metrics`. Declare the rest (competitors scan, regenerate, localize, leads) and `raise HTTPException(501, "not in this sprint")` so the shape is visible without costing you time.
 
-### Task 0.5 — Typed frontend client
+### Task 0.5 — Typed frontend client [DONE]
 
 `web/src/lib/api/types.ts` + `client.ts` with the function names in contracts §7. Use `fetch` + `NEXT_PUBLIC_API_URL`. No axios unless it is already in the starter.
 
@@ -152,7 +152,7 @@ your branch names are in docs/04-WORKFLOW-RULES.md
 
 ## Must (T+1.5–T+5)
 
-### Task 1.1 — `POST /api/campaigns` + `run_pipeline` in `graph.py`
+### Task 1.1 — `POST /api/campaigns` + `run_pipeline` in `graph.py` [DONE]
 
 **Do not use LangGraph.** A function named `run_pipeline(campaign_id)` is the whole orchestrator.
 
@@ -178,7 +178,7 @@ except ImportError:
 - FAIL compliance → `status=compliance_failed` plus a `compliance_checks` row.
 - Crashing Gemini does not leave `running` forever.
 
-### Task 1.2 — Review writes
+### Task 1.2 — Review writes [DONE]
 
 `POST approve` / `POST reject` / `PATCH body` as in contracts §9.
 
