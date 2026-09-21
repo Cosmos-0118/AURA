@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 API_DIR="$ROOT_DIR/api"
 WEB_DIR="$ROOT_DIR/web"
 RUN_DIR="$ROOT_DIR/.aura/run"
@@ -42,6 +42,7 @@ require_tools() {
   require_command bun
   require_command curl
   require_command lsof
+  require_command pgrep
 }
 
 ensure_layout() {
@@ -49,6 +50,7 @@ ensure_layout() {
 }
 
 clean_generated() {
+  stop_stack
   log "Removing generated build and runner output only"
 
   rm -rf \
@@ -96,6 +98,18 @@ capture_listener_pid() {
   fi
 }
 
+stop_process_tree() {
+  local pid="$1"
+  local child
+  local children
+
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    stop_process_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 stop_tracked_process() {
   local name="$1"
   local pid_file="$2"
@@ -113,7 +127,7 @@ stop_tracked_process() {
   fi
 
   log "Stopping $name (pid $pid)"
-  kill "$pid" 2>/dev/null || true
+  stop_process_tree "$pid"
   for _ in {1..20}; do
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.25
@@ -123,12 +137,17 @@ stop_tracked_process() {
     log "$name did not stop cleanly; sending SIGKILL to pid $pid"
     kill -KILL "$pid" 2>/dev/null || true
   fi
+
+  if kill -0 "$pid" 2>/dev/null; then
+    log "Could not stop $name; keeping $pid_file for a later retry" >&2
+    return 1
+  fi
   rm -f "$pid_file"
 }
 
 stop_stack() {
-  stop_tracked_process "frontend" "$WEB_PID_FILE"
-  stop_tracked_process "backend" "$API_PID_FILE"
+  stop_tracked_process "frontend" "$WEB_PID_FILE" || true
+  stop_tracked_process "backend" "$API_PID_FILE" || true
 }
 
 port_is_busy() {
@@ -137,10 +156,10 @@ port_is_busy() {
 
 assert_ports_free() {
   if port_is_busy "$API_PORT"; then
-    fail "Port $API_PORT is already in use. Run './scripts/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $API_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
   fi
   if port_is_busy "$WEB_PORT"; then
-    fail "Port $WEB_PORT is already in use. Run './scripts/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $WEB_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
   fi
 }
 
@@ -162,7 +181,7 @@ build_backend() {
 
 build_frontend() {
   log "Installing frontend lockfile dependencies"
-  (cd "$WEB_DIR" && BUN_INSTALL_CACHE_DIR="$BUN_INSTALL_CACHE_DIR" bun install --frozen-lockfile)
+  (cd "$WEB_DIR" && HUSKY=0 BUN_INSTALL_CACHE_DIR="$BUN_INSTALL_CACHE_DIR" bun install --frozen-lockfile)
   log "Running frontend typecheck"
   (cd "$WEB_DIR" && bun run typecheck)
   log "Building frontend"
@@ -178,7 +197,7 @@ build_stack() {
 }
 
 ensure_production_build() {
-  [[ -f "$WEB_DIR/.next/BUILD_ID" ]] || fail "No frontend production build found. Choose 'Build + run' or run './scripts/build.sh' first."
+  [[ -f "$WEB_DIR/.next/BUILD_ID" ]] || fail "No frontend production build found. Choose 'Build + run' or run './scripts/macos/build.sh' first."
 }
 
 wait_for_http() {
@@ -271,7 +290,7 @@ start_processes() {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/aura.sh <command>
+Usage: ./scripts/macos/aura.sh <command>
 
 Commands:
   clean   Remove generated build output, Python caches, runner logs/PIDs, and local uv cache

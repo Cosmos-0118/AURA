@@ -26,26 +26,26 @@ team plan.
 The interactive launcher offers **Build only**, **Build + run**, and **Just run**:
 
 ```bash
-./scripts/start.sh
+./scripts/macos/start.sh
 ```
 
 For direct commands:
 
 ```bash
 # clean generated output, install locked dependencies, typecheck, and build
-./scripts/build.sh
+./scripts/macos/build.sh
 
 # start both apps from the existing production build without rebuilding
-./scripts/aura.sh start
+./scripts/macos/aura.sh start
 
 # start both apps in development mode with hot reload
-./scripts/aura.sh dev
+./scripts/macos/aura.sh dev
 
 # clean, build, and start the production frontend plus API
-./scripts/up.sh
+./scripts/macos/up.sh
 
 # stop only processes started by the runner
-./scripts/stop.sh
+./scripts/macos/stop.sh
 ```
 
 - Dashboard: http://localhost:3000

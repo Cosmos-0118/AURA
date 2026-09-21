@@ -55,7 +55,7 @@ commit `.env` or `web/.env.local`.
 From the repository root, the recommended path is the interactive launcher:
 
 ```bash
-./scripts/start.sh
+./scripts/macos/start.sh
 ```
 
 Choose one:
@@ -68,11 +68,11 @@ Choose one:
 The equivalent direct commands are:
 
 ```bash
-./scripts/build.sh
-./scripts/aura.sh start
-./scripts/aura.sh dev
-./scripts/up.sh
-./scripts/stop.sh
+./scripts/macos/build.sh
+./scripts/macos/aura.sh start
+./scripts/macos/aura.sh dev
+./scripts/macos/up.sh
+./scripts/macos/stop.sh
 ```
 
 Verify:

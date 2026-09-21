@@ -182,6 +182,11 @@ Every PR must include:
 
 ## Shared acceptance checks
 
+From the repository root, `./scripts/macos/start.sh` presents the three supported
+launcher choices: **Build only**, **Build + run**, and **Just run**. Use
+`./scripts/macos/aura.sh dev` only when hot reload is needed. The runner clears only
+generated output and tracks/stops the API and frontend processes it starts.
+
 ```bash
 # backend import/syntax check
 cd api && uv run python -m compileall main.py db.py schemas.py graph.py routes agents

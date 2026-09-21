@@ -32,6 +32,7 @@ web/src/app/dashboard/layout.tsx
 web/src/app/dashboard/page.tsx
 web/src/app/dashboard/overview/**
 web/src/features/overview/**
+scripts/**
 README.md
 docs/**
 .env.example
