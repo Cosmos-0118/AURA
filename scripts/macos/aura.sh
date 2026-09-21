@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 API_DIR="$ROOT_DIR/api"
 WEB_DIR="$ROOT_DIR/web"
 RUN_DIR="$ROOT_DIR/.aura/run"
