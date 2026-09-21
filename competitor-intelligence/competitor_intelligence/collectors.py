@@ -64,13 +64,20 @@ class VisibleTextParser(HTMLParser):
         return "\n".join(self._parts)
 
 
-def request_bytes(url: str, *, accept: str = "*/*") -> tuple[bytes, str]:
+def request_bytes(
+    url: str,
+    *,
+    accept: str = "*/*",
+    extra_headers: dict[str, str] | None = None,
+) -> tuple[bytes, str]:
+    headers = {
+        "Accept": accept,
+        "User-Agent": USER_AGENT,
+    }
+    headers.update(extra_headers or {})
     request = urllib.request.Request(
         url,
-        headers={
-            "Accept": accept,
-            "User-Agent": USER_AGENT,
-        },
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
         content_type = response.headers.get("Content-Type", "")
@@ -129,7 +136,14 @@ def search_searxng(query: str, base_url: str = SEARXNG_URL) -> list[FeedItem]:
     if not base_url:
         raise ValueError("SEARXNG_URL is not configured")
     params = urllib.parse.urlencode({"q": query, "format": "json", "language": "en"})
-    body, _ = request_bytes(f"{base_url}/search?{params}", accept="application/json")
+    body, _ = request_bytes(
+        f"{base_url}/search?{params}",
+        accept="application/json",
+        extra_headers={
+            "X-Real-IP": "127.0.0.1",
+            "X-Forwarded-For": "127.0.0.1",
+        },
+    )
     payload = json.loads(body.decode("utf-8"))
     return [
         FeedItem(

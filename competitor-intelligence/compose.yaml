@@ -18,9 +18,9 @@ services:
   changedetection:
     image: dgtlmoon/changedetection.io:latest
     ports:
-      - "5000:5000"
+      - "${CHANGEDETECTION_PORT:-5001}:5000"
     environment:
-      BASE_URL: http://localhost:5000
+      BASE_URL: ${CHANGEDETECTION_BASE_URL:-http://localhost:5001}
     volumes:
       - changedetection-data:/datastore
 
@@ -29,8 +29,14 @@ services:
     profiles: ["discovery"]
     ports:
       - "8080:8080"
+    environment:
+      SEARXNG_LIMITER: "false"
+      SEARXNG_PUBLIC_INSTANCE: "false"
+      SEARXNG_IMAGE_PROXY: "false"
     volumes:
       - searxng-data:/etc/searxng
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./config/searxng/limiter.toml:/etc/searxng/limiter.toml:ro
 
   rsshub:
     image: diygod/rsshub:latest

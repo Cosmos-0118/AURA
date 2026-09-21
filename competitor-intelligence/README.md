@@ -38,11 +38,12 @@ SEARXNG_URL=http://searxng:8080 docker compose --profile discovery --profile soc
 ```
 
 This exposes the intelligence dashboard on `8787`, changedetection.io on
-`5000`, SearXNG on `8080`, and RSSHub on `1200`. In changedetection.io, point a
+`5001`, SearXNG on `8080`, and RSSHub on `1200`. Port `5001` avoids the macOS
+AirPlay service commonly occupying host port `5000`. In changedetection.io, point a
 watch webhook at:
 
 ```text
-http://host.docker.internal:8787/api/webhooks/changedetection
+http://intelligence:8787/api/webhooks/changedetection
 ```
 
 The module consumes RSSHub and YouTube public feeds through `config/feeds.json`
