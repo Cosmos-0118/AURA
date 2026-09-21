@@ -181,7 +181,7 @@ build_backend() {
 
 build_frontend() {
   log "Installing frontend lockfile dependencies"
-  (cd "$WEB_DIR" && BUN_INSTALL_CACHE_DIR="$BUN_INSTALL_CACHE_DIR" bun install --frozen-lockfile)
+  (cd "$WEB_DIR" && HUSKY=0 BUN_INSTALL_CACHE_DIR="$BUN_INSTALL_CACHE_DIR" bun install --frozen-lockfile)
   log "Running frontend typecheck"
   (cd "$WEB_DIR" && bun run typecheck)
   log "Building frontend"
