@@ -182,9 +182,9 @@ Every PR must include:
 
 ## Shared acceptance checks
 
-From the repository root, `./scripts/start.sh` presents the three supported
+From the repository root, `./scripts/macos/start.sh` presents the three supported
 launcher choices: **Build only**, **Build + run**, and **Just run**. Use
-`./scripts/aura.sh dev` only when hot reload is needed. The runner clears only
+`./scripts/macos/aura.sh dev` only when hot reload is needed. The runner clears only
 generated output and tracks/stops the API and frontend processes it starts.
 
 ```bash

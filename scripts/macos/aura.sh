@@ -156,10 +156,10 @@ port_is_busy() {
 
 assert_ports_free() {
   if port_is_busy "$API_PORT"; then
-    fail "Port $API_PORT is already in use. Run './scripts/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $API_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
   fi
   if port_is_busy "$WEB_PORT"; then
-    fail "Port $WEB_PORT is already in use. Run './scripts/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $WEB_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
   fi
 }
 
@@ -197,7 +197,7 @@ build_stack() {
 }
 
 ensure_production_build() {
-  [[ -f "$WEB_DIR/.next/BUILD_ID" ]] || fail "No frontend production build found. Choose 'Build + run' or run './scripts/build.sh' first."
+  [[ -f "$WEB_DIR/.next/BUILD_ID" ]] || fail "No frontend production build found. Choose 'Build + run' or run './scripts/macos/build.sh' first."
 }
 
 wait_for_http() {
@@ -290,7 +290,7 @@ start_processes() {
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/aura.sh <command>
+Usage: ./scripts/macos/aura.sh <command>
 
 Commands:
   clean   Remove generated build output, Python caches, runner logs/PIDs, and local uv cache
