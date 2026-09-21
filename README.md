@@ -1,43 +1,50 @@
 # AURA
 
-AI-powered marketing department dashboard: generate → compliance → human review → learn from corrections.
+AURA is an AI-assisted marketing operations dashboard:
 
-**This is not a chatbot. The team has 6–8 hours — see [docs/05-TIMELINE.md](docs/05-TIMELINE.md).**
-
-## Team: start here
-
-| You are | Open this |
-|---|---|
-| Anyone, first 15 minutes | [docs/00-START-HERE.md](docs/00-START-HERE.md) |
-| Your Cursor agent | [AGENTS.md](AGENTS.md) then your member doc |
-| Team Member 1 | [docs/members/TEAM-MEMBER-1.md](docs/members/TEAM-MEMBER-1.md) |
-| Team Member 2 | [docs/members/TEAM-MEMBER-2.md](docs/members/TEAM-MEMBER-2.md) |
-| Team Member 3 | [docs/members/TEAM-MEMBER-3.md](docs/members/TEAM-MEMBER-3.md) |
-| Team Member 4 | [docs/members/TEAM-MEMBER-4.md](docs/members/TEAM-MEMBER-4.md) |
-| Team Member 5 | [docs/members/TEAM-MEMBER-5.md](docs/members/TEAM-MEMBER-5.md) |
-
-Install and run: [docs/02-SETUP.md](docs/02-SETUP.md)  
-Frozen API/DB shapes: [docs/03-CONTRACTS.md](docs/03-CONTRACTS.md)  
-Git and folders: [docs/04-WORKFLOW-RULES.md](docs/04-WORKFLOW-RULES.md)
-
-Do not write feature code until Team Member 1 posts **contracts are in main**.
-
-## Stack (do not replace)
-
-- Frontend: Next.js dashboard cloned from [Kiranism/next-shadcn-dashboard-starter](https://github.com/Kiranism/next-shadcn-dashboard-starter) into `web/`
-- Backend: new FastAPI app in `api/` (not a fork of agent-service-toolkit)
-- DB: one shared Supabase Postgres
-- LLM: Gemini Flash, **one API key per person**
-
-## Local run (after scaffold exists)
-
-```bash
-# terminal A
-cd api && uv run uvicorn main:app --reload --port 8000
-
-# terminal B
-cd web && bun run dev
+```text
+campaign -> brand-specific draft -> compliance -> human review -> saved lesson
 ```
 
-Dashboard: http://localhost:3000  
-API docs: http://localhost:8000/docs
+It is a five-person, eight-hour hackathon build. It is not a chatbot, autonomous
+agent swarm, publisher, or full marketing suite.
+
+## Start here
+
+- Everyone: [8-hour team plan](docs/TEAM-PLAN.md)
+- Your coding agent: [repository rules](AGENTS.md)
+- Your exact assignment: [member role cards](docs/members/)
+- Frozen integration shapes: [contracts](docs/03-CONTRACTS.md)
+- Local environment: [setup](docs/02-SETUP.md)
+
+The platform scaffold is already complete on `main`. Do not recreate the API,
+database, typed client, or navigation. Start the feature work assigned in the
+team plan.
+
+## Run locally
+
+```bash
+# terminal 1, from repo root
+cd api
+uv sync
+uv run uvicorn main:app --reload --port 8000
+
+# terminal 2, from repo root
+cd web
+bun install
+bun run dev
+```
+
+- Dashboard: http://localhost:3000
+- API docs: http://localhost:8000/docs
+- Health: http://localhost:8000/api/health
+
+Copy `.env.example` to `.env` and `web/env.example.txt` to `web/.env.local`.
+Never commit real keys. Keep `AURA_MOCK_AGENTS=true` until the deterministic
+end-to-end path works.
+
+## Demo promise
+
+The reliable demo is the seeded failed post: inspect its compliance evidence,
+reject it, and show the saved lesson in Insights. Live content generation is the
+second half of the story, not a dependency for the first half.

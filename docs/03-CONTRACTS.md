@@ -1,8 +1,11 @@
-# Contracts (frozen after T+1.5h)
+# Contracts (frozen)
 
-**Owner: Team Member 1.** Everyone else treats this file as law.
+**Owner: Team Member 1.** The scaffold already implements these shapes on
+`main`. Everyone else treats this file as law.
 
-**6–8 hour sprint:** implement brands, campaigns, assets, reviews, lessons, metrics. Endpoints for competitors scan, localize, leads, and regenerate may return `501` with `{ "detail": "not in this sprint" }` unless the slice is already done. Do not let those endpoints block the demo.
+**Eight-hour sprint:** implement brands, campaigns, assets, reviews, lessons, and
+metrics. Endpoints for competitor scan, localize, leads, and regenerate may return
+`501` with `{ "detail": "not in this sprint" }`. Do not let them block the demo.
 
 If you need a change: follow the request template in [04-WORKFLOW-RULES.md](04-WORKFLOW-RULES.md). Do not add fields in your own code.
 
@@ -459,7 +462,7 @@ All JSON. No auth header for the hackathon.
 | POST | `/api/campaigns` | `CampaignCreate` | `Campaign` (status `running`) |
 | GET | `/api/campaigns/{id}` | — | `Campaign` |
 | GET | `/api/campaigns` | `?brand_id=` | `Campaign[]` |
-| GET | `/api/assets` | `?status=&brand_id=&platform=` | `Asset[]` (each includes latest `compliance`) |
+| GET | `/api/assets` | `?status=&brand_id=&platform=&campaign_id=` | `Asset[]` (each includes latest `compliance`) |
 | GET | `/api/assets/{id}` | — | `Asset` |
 | POST | `/api/assets/{id}/approve` | `ReviewAction` | `Asset` |
 | POST | `/api/assets/{id}/reject` | `ReviewAction` | `Asset` |
@@ -472,12 +475,16 @@ All JSON. No auth header for the hackathon.
 
 Errors: `{ "detail": "string" }` with 4xx/5xx.
 
-`POST /api/campaigns` returns immediately. Poll `GET /api/campaigns/{id}` until `completed` or `failed`. Then `GET /api/assets?campaign_id=` — **add query `campaign_id`** (M1: implement this filter even though it is not in the short list above).
+`POST /api/campaigns` returns immediately. Poll `GET /api/campaigns/{id}` until
+`completed` or `failed`. Then call `GET /api/assets?campaign_id=<uuid>`.
 
-Confirmed extra query params M1 **must** implement:
+Supported queue and campaign query behavior:
 
 - `GET /api/assets?campaign_id=<uuid>`
-- `GET /api/assets?status=pending_review` (single status). For the queue, M2 will call twice or M1 accepts comma: `pending_review,compliance_failed`. **M1 implements:** if `status` omitted, return all; if `status=queue`, return pending_review + compliance_failed.
+- `GET /api/assets?status=pending_review` for one status.
+- `GET /api/assets?status=pending_review,compliance_failed` for an explicit list.
+- `GET /api/assets?status=queue` as the Review Queue shorthand for both values.
+- If `status` is omitted, return all assets matching the other filters.
 
 ---
 
@@ -659,17 +666,18 @@ getMetrics()
 
 ## 8. Nav items (M1 writes `web/src/config/nav-config.ts`)
 
-Routes M2/M3 will create. M1 registers them so the sidebar works before pages exist (placeholder page is OK).
+The sidebar contains Overview plus four primary AURA work screens.
 
 ```text
-/dashboard                     Overview (leave the starter; ignore it in the demo)
+/dashboard                     Overview                    M1  MUST
 /dashboard/studio              Campaign Studio          M3  MUST
 /dashboard/review              Review Queue             M2  MUST
 /dashboard/brands              Brands                   M3  MUST
 /dashboard/insights            Insights                 M3  MUST
 ```
 
-Four items. Do **not** add Library, Competitors, Leads, Chat, or Calendar to the sidebar — nobody is building those pages, and a sidebar link that 404s in front of judges is worse than a missing one.
+Five items total. Library may be added by M1 only after M2 completes it. Do not
+add Competitors, Leads, Chat, or Calendar to the sidebar.
 
 ---
 

@@ -1,162 +1,97 @@
-# Setup
+# Local setup
 
-Do this in order. If a command fails, open [troubleshooting.md](troubleshooting.md) before installing random packages.
+The repository is already scaffolded. Members install dependencies and run it;
+only M1 applies database SQL or changes shared environment examples.
 
-## Accounts (everyone, Hour 0)
+## Prerequisites
 
-1. **GitHub** — you need write access to the team AURA repo (Team Member 1 creates it and adds you).
-2. **Google AI Studio** — [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey) — create **your own** Gemini API key. Put it only in your local `.env`. Never Slack it. Never commit it.
-3. **Supabase** — Team Member 1 creates one free project named `aura`. Everyone else waits for M1 to paste the URL + keys into the team channel (or a 1Password/Bitwarden item). You do **not** create your own project.
+- Git
+- Node.js 20+
+- Bun
+- uv with Python 3.12+
+- access to the shared Supabase database
+- a personal Gemini key only if working on M4/M5's optional live path
 
-## Tools (everyone)
+No Docker or local Postgres is required.
 
-| Tool | Version | Install |
-|---|---|---|
-| Git | any recent | already on macOS |
-| Node.js | 20+ | [https://nodejs.org](https://nodejs.org) or `brew install node` |
-| Bun | latest | `curl -fsSL https://bun.sh/install \| bash` then restart the terminal |
-| uv (Python) | latest | `curl -LsSf https://astral.sh/uv/install.sh \| sh` then restart the terminal |
-| Python | 3.12 | `uv` will fetch it if missing |
-| Cursor | latest | you are using it |
-
-Check:
+## Branch
 
 ```bash
-git --version
-node -v          # v20 or v22
-bun -v
-uv --version
+git fetch origin
+git switch <your-branch>
+git merge origin/main
 ```
 
-You do **not** need Docker for the default path. You do **not** need Redis.
+Use the exact branch from your member card. Never work on `main`, rebase, or
+force-push.
 
-## Clone (after Team Member 1 posts "repo is ready")
+## Environment
 
 ```bash
-git clone git@github.com:<ORG>/AURA.git
-cd AURA
-git checkout -b feat/mN-<short>    # use YOUR branch from docs/04-WORKFLOW-RULES.md
+cp .env.example .env
+cp web/env.example.txt web/.env.local
 ```
 
-Until M1 has pushed the initial `web/` and `api/` skeletons, you can still clone and read docs. Do not invent a parallel project in another folder.
+Root `.env` needs:
 
-## Environment files
-
-There are two env files. Copy the examples; never commit the real ones.
-
-```bash
-cp .env.example .env                 # repo root, used by api/
-cp web/env.example.txt web/.env.local   # name may be env.example.txt from Kiranism
-```
-
-Minimum in **root** `.env`:
-
-```bash
-GEMINI_API_KEY=your_personal_key_here
-GEMINI_MODEL=gemini-2.0-flash
-DATABASE_URL=postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
-SUPABASE_URL=https://<ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<m1_will_give_this>
+```dotenv
+DATABASE_URL=<shared-postgres-url>
+GEMINI_API_KEY=<personal-key-if-needed>
+GEMINI_MODEL=<team-selected-model>
 AURA_MOCK_AGENTS=true
-API_HOST=0.0.0.0
-API_PORT=8000
 ```
 
-`AURA_MOCK_AGENTS=true` means no Gemini call happens anywhere. Two places honour it and that is deliberate: `graph.py` imports from `agents/_stubs.py` when the flag is on, and M4/M5's real functions also check it internally so they stay safe if M1 calls them directly. Flip to `false` once M4/M5 work; flip it back the instant Gemini 429s during the demo.
+`web/.env.local` needs:
 
-Frontend `web/.env.local`:
-
-```bash
+```dotenv
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Do not put the Gemini key in the frontend env. The browser must never see it.
+Never put a Gemini or Supabase service key in the frontend environment. Never
+commit `.env` or `web/.env.local`.
 
-## Backend (api/)
-
-From the repo root, after M1 has committed `api/pyproject.toml`:
+## Install and run
 
 ```bash
+# terminal 1
 cd api
 uv sync
 uv run uvicorn main:app --reload --port 8000
-```
 
-Open [http://localhost:8000/docs](http://localhost:8000/docs). You should see the FastAPI Swagger UI. Hit `GET /api/health` — it should return `{"ok": true}`.
-
-If `api/` does not exist yet, you are before Hour 3. Wait.
-
-## Frontend (web/)
-
-Team Member 1 does the clone + cleanup **once** on `main`. Everyone else just installs:
-
-```bash
+# terminal 2
 cd web
 bun install
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Dashboard should load.
+Verify:
 
-### What Team Member 1 runs once (Hour 0, do not repeat)
+- http://localhost:8000/api/health returns `{"ok":true}`.
+- http://localhost:8000/api/brands returns three brands.
+- http://localhost:8000/api/assets?status=queue returns the seeded failed asset.
+- http://localhost:3000 loads the dashboard shell.
+
+If brands or queue data is missing, tell M1. Do not create a second database or
+hardcode a different response shape.
+
+## M1 database setup
+
+In Supabase SQL Editor, apply in this order:
+
+1. `db/schema.sql`
+2. `db/seed.sql`
+3. `db/demo.sql`
+
+`seed.sql` and `demo.sql` are designed to be rerun. Do not truncate the database.
+M1 reruns `demo.sql` before integration testing and before the presentation.
+
+## Checks
 
 ```bash
-# from repo root, empty web/ not yet present
-git clone https://github.com/Kiranism/next-shadcn-dashboard-starter.git web
-cd web
-rm -rf .git
-bun install
-bun run cleanup clerk sentry kanban chat ai-chat notifications examples --force
-# keep product + users + overview for copy-paste patterns; do not delete during the 8h sprint
-rm -f AGENTS.md CLAUDE.md          # the starter ships its own; ours must win
-cp env.example.txt .env.local
-# set NEXT_PUBLIC_API_URL=http://localhost:8000
-bun install
-bun run dev
+cd api && uv run python -m compileall main.py db.py schemas.py graph.py routes agents
+cd web && bun run typecheck && bun run build
 ```
 
-Those seven are the **only** valid feature names (verified against `scripts/cleanup.js`). `billing`, `workspaces`, `exclusive`, and `profile` are folders *inside* the `clerk` feature — passing them separately just prints "Unknown feature" and moves on. If the names ever change, run `bun run cleanup --list`.
-
-Deleting the starter's `AGENTS.md` / `CLAUDE.md` matters: they land at `web/AGENTS.md`, Cursor auto-applies them to everything under `web/`, and they tell your agent to use Clerk and Sentry. Keep the notes elsewhere if you want them, just not at `web/`.
-
-**Timebox: 25 minutes.** If Clerk removal leaves the app broken past that, stop cleaning and move on — a dead `/dashboard/profile` route costs nothing because it is not in the nav.
-
-Then commit `web/` from the repo root (the inner `.git` was deleted, so it is just files).
-
-## Database (Team Member 1 only)
-
-1. Create a Supabase project `aura` (Singapore region is fine).
-2. Project Settings → Database → copy URI. Use the **transaction** pooler or the direct URI; if `uv` / psycopg has SSL issues see troubleshooting.
-3. SQL Editor → paste `db/schema.sql` → run.
-4. SQL Editor → paste `db/seed.sql` → run.
-5. SQL Editor → paste `db/demo.sql` → run. **This is part of Hour 0**, not the last hour — M2 has nothing to build against until the FAIL row exists.
-6. Put `DATABASE_URL` and service role key in the team secret store. Members copy into local `.env`.
-
-Resetting mid-sprint has to be safe, because the demo fallback is "re-run seed then demo":
-
-- `seed.sql` only ever uses `insert ... on conflict do nothing`. **No `TRUNCATE`, no `DELETE`** — truncating `brands` cascades into every asset and review the team has created.
-- `demo.sql` hardcodes its primary keys as fixed UUIDs and starts by deleting *those ids only*, so it is re-runnable and the demo asset URL never changes between rehearsal and performance.
-
-## How a member verifies "I am unblocked"
-
-You are unblocked when **all** of these work on your laptop:
-
-1. `cd api && uv run uvicorn main:app --reload --port 8000` — `/api/health` 200.
-2. `cd web && bun run dev` — dashboard renders.
-3. Swagger `GET /api/brands` returns Jade, DoctorShield, Jaguar Transit (from seed).
-4. You are on **your** branch, not `main`.
-
-If (1) or (2) fail, you have a local install problem — do not wait for other members. If (3) fails, M1's seed is not in yet — work against the mock types in `docs/03-CONTRACTS.md` and keep files in your zone.
-
-## Two terminals, always
-
-| Terminal | Command | Port |
-|---|---|---|
-| A | `cd api && uv run uvicorn main:app --reload --port 8000` | 8000 |
-| B | `cd web && bun run dev` | 3000 |
-
-You do not run other people's agents as extra processes. They are Python functions imported by FastAPI.
-
-## Optional: Docker
-
-Only if M1 has spare time. Default path is local `uv` + `bun`. Do not spend Hour 0 on Docker.
+Use [troubleshooting.md](troubleshooting.md) for known failures. If still blocked,
+post the exact command, full error, operating system, and whether health/brands
+work; do not send only a screenshot or “it does not run.”

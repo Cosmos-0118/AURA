@@ -1,6 +1,8 @@
 # Troubleshooting
 
-Try these before asking the team. If you are still stuck after **15 minutes**, ping Team Member 1 with the **exact command and the exact error**. In a 6–8 hour sprint, a silent hour is a lost feature — M1's job description includes sitting with you.
+Try these before asking the team. If you are still stuck after **15 minutes**,
+ping Team Member 1 with the exact command and complete error. A silent hour is a
+lost feature; pairing on setup is part of M1's job.
 
 ## 1. `bun: command not found`
 
@@ -43,11 +45,11 @@ You are sharing a key or looping. Use **your** key. Set `AURA_MOCK_AGENTS=true` 
 
 ## 7. Gemini returns markdown fences around JSON
 
-```text
+````text
 ```json
 { ... }
 ```
-```
+````
 
 Strip fences before `json.loads`. Retry once with "Return JSON only, no markdown." If still bad, return the mock. Never crash the request.
 
@@ -95,7 +97,8 @@ Banned terms file not loaded. Path is `api/rules/banned_terms.yaml` relative to 
 cd api && uv run python -c "from agents.compliance import check_compliance; print(check_compliance('Guaranteed protection', 'jade', 'instagram'))"
 ```
 
-Expect FAIL. If the function does not exist yet, you are calling the stub — that is OK until M5 lands.
+Expect FAIL. Until M5's module lands, test the equivalent function in
+`agents/_stubs.py`; do not create a second compliance implementation.
 
 ## 14. Campaign stays `running` forever
 
@@ -120,7 +123,8 @@ Stop. Revert. Paste `AGENTS.md` into the chat and say "you may only edit files i
 
 ## 18. Someone started crawl / FFmpeg / leads
 
-Stop. Those are out of scope for 6–8 hours. Revert the files. Go back to your Must list in `docs/05-TIMELINE.md`.
+Stop. Those are out of scope. Revert the owned change and return to the must-ship
+list in `docs/TEAM-PLAN.md`.
 
 ## 19. Demo laptop has old seed
 

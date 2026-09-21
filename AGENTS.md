@@ -1,13 +1,21 @@
 # AURA — Agent Rules (read this before writing any code)
 
-This file is for AI coding agents (Cursor, Claude Code, Copilot, etc.) working in this repo. Humans: also read `docs/00-START-HERE.md` and your `docs/members/TEAM-MEMBER-N.md`.
+This file is for AI coding agents working in this repo. Humans and agents also
+read `docs/TEAM-PLAN.md` and only their own `docs/members/TEAM-MEMBER-N.md`.
+
+## Current sprint state
+
+The database, FastAPI routes, campaign pipeline, frozen contracts, typed frontend
+client, navigation, and deterministic stubs are already on `main`. Do not rebuild
+the scaffold. The remaining work is the five parallel lanes in
+`docs/TEAM-PLAN.md`.
 
 ## What this project is
 
-AURA is a **6–8 hour** hackathon marketing dashboard. It is **not a chatbot**. The pipeline is:
+AURA is an **8-hour** hackathon marketing dashboard. It is **not a chatbot**. The pipeline is:
 
 ```
-research → generate content → compliance check → human review → learn from corrections
+campaign → generate content → compliance check → human review → learn from corrections
 ```
 
 Differentiator: **Compliance + Human Review + Feedback Learning**. Not "we generated 100 posts".
@@ -22,11 +30,11 @@ Differentiator: **Compliance + Human Review + Feedback Learning**. Not "we gener
 
 | Who | Writes only these paths | Branch |
 |---|---|---|
-| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/agents/_stubs.py`, `api/pyproject.toml`, `api/uv.lock`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx` (nav only), `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
+| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/agents/_stubs.py`, `api/tests/integration/**`, `api/pyproject.toml`, `api/uv.lock`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx`, `web/src/app/dashboard/page.tsx`, `web/src/app/dashboard/overview/**`, `web/src/features/overview/**`, `docs/**`, `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
 | Team Member 2 | `web/src/features/review/**`, `web/src/features/library/**`, `web/src/app/dashboard/review/**`, `web/src/app/dashboard/library/**`, `web/src/components/aura/m2/**` | `feat/m2-review-ui` |
-| Team Member 3 | `web/src/features/studio/**`, `web/src/features/brands/**`, `web/src/features/insights/**`, `web/src/features/competitors/**`, `web/src/features/leads/**`, `web/src/app/dashboard/studio/**`, `web/src/app/dashboard/brands/**`, `web/src/app/dashboard/insights/**`, `web/src/app/dashboard/competitors/**`, `web/src/app/dashboard/leads/**`, `web/src/components/aura/m3/**` | `feat/m3-studio-ui` |
-| Team Member 4 | `api/agents/content.py`, `api/agents/localize.py`, `api/prompts/content/**` | `feat/m4-content` |
-| Team Member 5 | `api/agents/compliance.py`, `api/agents/lessons.py`, `api/agents/research.py`, `api/agents/leads.py`, `api/rules/**`, `api/prompts/compliance/**` | `feat/m5-compliance` |
+| Team Member 3 | `web/src/features/studio/**`, `web/src/features/brands/**`, `web/src/features/insights/**`, `web/src/app/dashboard/studio/**`, `web/src/app/dashboard/brands/**`, `web/src/app/dashboard/insights/**`, `web/src/components/aura/m3/**` | `feat/m3-studio-ui` |
+| Team Member 4 | `api/agents/content.py`, `api/agents/localize.py`, `api/prompts/content/**`, `api/tests/content/**` | `feat/m4-content` |
+| Team Member 5 | `api/agents/compliance.py`, `api/agents/lessons.py`, `api/agents/research.py`, `api/agents/leads.py`, `api/rules/**`, `api/prompts/compliance/**`, `api/tests/compliance/**` | `feat/m5-compliance` |
 
 Shared folders that **nobody except Team Member 1** may edit:
 
@@ -34,8 +42,8 @@ Shared folders that **nobody except Team Member 1** may edit:
 - `api/routes/**` (M1 wires your functions; you do not add routes)
 - `web/src/components/ui/**` (shadcn primitives — import them, never edit them)
 - `web/src/lib/api/**` (typed fetch client — M1 owns this)
-- `web/package.json` / `web/bun.lock` — frontend members may `bun add` a dep, then immediately commit that lockfile alone; if it conflicts, take `main` and re-run `bun add`
-- `api/pyproject.toml` / `api/uv.lock` — backend members may append a dep at the **end** of the dependencies list; never reorder existing entries
+- `web/package.json` / `web/bun.lock` — the sprint needs no new frontend dependency; ask M1 before adding one
+- `api/pyproject.toml` / `api/uv.lock` — M4/M5 ask M1 for dependency changes
 
 If you need a new shared component, put it in `web/src/components/aura/m2/` or `web/src/components/aura/m3/` (your own folder). Do not dump it in `components/ui`.
 
@@ -59,7 +67,8 @@ If you need a new shared component, put it in `web/src/components/aura/m2/` or `
 - Do not fork or copy Postiz source (AGPL). Do not vendor Crawl4AI. Do not add FFmpeg, leads, localization, X, blog, or reels.
 - Do not turn this into a chat UI. There is no "talk to the agent" page.
 - Do not introduce LangGraph APIs. `graph.py` is a plain `run_pipeline` function.
-- We have 6–8 hours. If the human asks for a stretch feature, remind them it is out of scope per docs/05-TIMELINE.md.
+- The only allowed stretch work is listed in `docs/TEAM-PLAN.md`, and it starts
+  only after the T+4:30 vertical-slice checkpoint passes.
 
 ## When you are stuck
 

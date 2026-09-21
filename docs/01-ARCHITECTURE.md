@@ -1,151 +1,80 @@
-# Architecture
+# Current architecture
 
-This is the system we are actually building in **6–8 hours**. If it disagrees with `Concept.md`, this file wins. `Concept.md` is product thinking; this file is the build.
+This describes the scaffold already on `main`. For assignments and timing, use
+[TEAM-PLAN.md](TEAM-PLAN.md). For exact shapes, use
+[03-CONTRACTS.md](03-CONTRACTS.md).
 
-## Picture
-
-```text
-                     ┌──────────────────────────┐
-                     │  Next.js dashboard (web) │
-                     │  M2 Review  |  M3 Studio │
-                     └────────────┬─────────────┘
-                                  │ REST  localhost:8000
-                     ┌────────────▼─────────────┐
-                     │     FastAPI  (api)       │
-                     │     Team Member 1        │
-                     │  routes → graph.py       │
-                     └────────────┬─────────────┘
-                                  │
-              ┌───────────────────┼───────────────────┐
-              ▼                   ▼                   ▼
-     M5 research.py      M4 content.py +        M5 compliance.py
-     (optional scan)     M4 localize.py         M5 lessons.py
-              │                   │                   │
-              └───────────────────┴───────────────────┘
-                                  │
-                          persist content_assets
-                          status = pending_review
-                                  │
-                          ┌───────▼────────┐
-                          │    Supabase    │
-                          │    Postgres    │
-                          └────────────────┘
-```
-
-There is **no** Redis, Kafka, Celery, Mongo, or second database. Background work is FastAPI `BackgroundTasks` (or a simple `asyncio.create_task`). Fine for a hackathon.
-
-## Why these choices (so nobody "improves" the stack mid-hackathon)
-
-| Decision | Why |
-|---|---|
-| One FastAPI process, not agent-service-toolkit | That repo is a **chat** service (threads, token streaming, Streamlit). We are a **batch pipeline + review queue**. Adapting it costs more than writing ~400 lines of FastAPI. |
-| `graph.py` is a plain `run_pipeline`, owned by M1 | Do not debug LangGraph. M4 and M5 export functions. M1 wires them. |
-| Kiranism dashboard, Clerk stripped | We do not have time for auth. Cleanup script exists. Tables/forms already work. |
-| Supabase hosted Postgres | Nobody installs Postgres locally. One project, everyone uses the same URL. |
-| Per-person Gemini keys | Five Cursor agents on one free-tier key will 429. |
-| No Crawl4AI, no FFmpeg, no leads, no localize | 6–8 hours. Seeded FAIL Instagram covers compliance theatre. |
-| `run_pipeline` plain async function, not a LangGraph workshop | Same file `graph.py` so imports stay stable. Do not debug LangGraph. |
-| No Project 2 publisher | Approved rows in the DB **are** the bridge. |
-
-## Data flow (one campaign)
+## Runtime
 
 ```text
-M3 Studio form
-  POST /api/campaigns  { brand_id, topic, country, goal, platforms, language }
-        │
-        ▼
-M1 creates campaigns row (status=running)
-M1 kicks graph.py in the background
-        │
-        ├─ M5 get_relevant_lessons(brand_id, "linkedin")
-        ├─ M4 generate_content(ContentRequest)  → list[GeneratedAsset]
-        ├─ for each asset:
-        │     M5 check_compliance(text, brand_id, platform)
-        │     status = pending_review  (even FAIL still goes to review — humans decide)
-        │     compliance_checks row written
-        └─ campaign status=completed
-        │
-M2 Review Queue  GET /api/assets?status=queue
-        │
-        ├─ Approve  POST /api/assets/{id}/approve
-        └─ Reject   POST /api/assets/{id}/reject  { reason_tag, note }
-                    M1 also calls M5 record_lesson(...)
-        ▼
-Insights  GET /api/metrics  GET /api/lessons
+Next.js dashboard
+  M1 Overview | M2 Review | M3 Studio/Brands/Insights
+                  |
+             typed REST client
+                  |
+              FastAPI routes (M1)
+                  |
+              run_pipeline (M1)
+              /              \
+     generate_content (M4)   compliance + lessons (M5)
+              \              /
+               Supabase Postgres
 ```
 
-**Important:** compliance FAIL does **not** hide the asset. It marks `compliance_failed` **or** still `pending_review` with `risk=HIGH` (see contracts). Humans are the final authority. The system never auto-publishes.
+There is one frontend, one FastAPI process, and one database. Background campaign
+work uses FastAPI `BackgroundTasks`. There is no LangGraph, Redis, Celery, Kafka,
+auth service, or second datastore.
 
-## Folder map of the monorepo
+## Campaign flow
+
+1. M3 posts `CampaignCreate` to `/api/campaigns`.
+2. M1 inserts a campaign with status `running` and schedules `run_pipeline`.
+3. The pipeline retrieves recent M5 lessons.
+4. M4 returns requested `GeneratedAsset` objects.
+5. M5 checks every body; M1 stores the asset and compliance result.
+6. A failed check gives the asset status `compliance_failed`; otherwise it becomes
+   `pending_review`. Both appear in M2's queue.
+7. The campaign becomes `completed`, or `failed` with an error.
+
+`queued` exists in the database contract but the current create route inserts
+`running` immediately.
+
+## Review and learning flow
 
 ```text
-AURA/
-  AGENTS.md                 # rules for Cursor agents
-  Concept.md                # original thinking (not the build spec)
-  README.md                 # M1 writes a short runbook after setup
-  .env.example
-  docker-compose.yml        # optional; local run without Docker is the default
-  db/
-    schema.sql              # M1
-    seed.sql                # M1, idempotent, never TRUNCATEs
-    demo.sql                # M1, fixed UUIDs, written at T+1.5 not at the end
-  api/                      # Python, uv
-    main.py                 # M1
-    db.py                   # M1
-    schemas.py              # M1, FROZEN
-    graph.py                # M1
-    routes/                 # M1 only
-    agents/
-      _stubs.py             # M1, until M4/M5 land
-      content.py            # M4
-      localize.py           # M4
-      compliance.py         # M5
-      lessons.py            # M5
-      research.py           # M5
-      leads.py              # do not create in 6–8h
-    prompts/content/        # M4
-    prompts/compliance/     # M5
-    rules/banned_terms.yaml # M5
-  web/                      # Next.js 16 app (Kiranism clone)
-    src/app/dashboard/...   # route files; M2 and M3 own their route folders
-    src/features/...        # feature modules; do not share folders
-    src/lib/api/            # M1 typed client
-    src/config/nav-config.ts# M1
-    src/components/ui/      # nobody edits
-    src/components/aura/m2/ # M2 shared-within-M2
-    src/components/aura/m3/ # M3 shared-within-M3
-  docs/                     # this pack
+GET queue -> inspect asset + compliance
+          -> approve
+          -> edit and approve -> review row + lesson
+          -> reject           -> review row + lesson
 ```
 
-## Status field (heart of the product)
+Humans are the final authority. A compliance failure is visible and reviewable;
+it is never published automatically. Approved rows are the output boundary for a
+future publisher, but publishing is not in this sprint.
 
-`content_assets.status` is the only workflow state. Do not invent a second state machine.
+## Reliability path
 
-```text
-draft → (pipeline writes) → pending_review → approved
-                          ↘                 ↘ rejected
-                           compliance_failed   (still reviewable)
-```
+`AURA_MOCK_AGENTS=true` makes `graph.py` use `api/agents/_stubs.py`. With the flag
+off, `graph.py` imports M4/M5 modules and falls back to stubs if those imports are
+absent. M4/M5 also keep deterministic behavior for provider failures. The demo is
+therefore not dependent on Gemini availability.
 
-Bonus values, unused until Project 2: `scheduled`, `published`. You may store them in the CHECK constraint so we do not migrate later. Do not build publisher UI.
+## Ownership boundaries
 
-## Who talks to Gemini
+- M1 owns persistence, orchestration, REST, shared frontend client/types, nav,
+  Overview, and integration.
+- M2 owns Review and Library UI.
+- M3 owns Studio, Brands, and Insights UI.
+- M4 owns content generation and content prompts.
+- M5 owns compliance, lessons, rules, and compliance prompts.
 
-| Module | Owner | Calls Gemini? |
-|---|---|---|
-| `content.py` / `localize.py` | M4 | Yes — generation |
-| `compliance.py` (LLM pass only) | M5 | Yes — structured JSON review |
-| `research.py` (summarise diff) | M5 | Yes — short report |
-| `lessons.py` retrieve | M5 | No — SQL |
-| `graph.py` | M1 | No — only calls the functions above |
-| Frontend | M2 / M3 | Never. Browser has no API key. |
+Only M1 changes shared contracts. M2/M3 communicate through shared client types;
+they do not import each other's components. M4/M5 expose plain functions and do
+not import FastAPI or write content assets.
 
-Hard-rule scanning, hashing, status writes, metrics: **plain Python**. Do not ask Gemini "does this seem compliant?" as the only check.
+## Deliberate placeholders
 
-## Combining at the end
-
-Because each person owns disjoint files:
-
-- M1's routes already `from agents.content import generate_content`. When M4 replaces the stub, the import path does not change.
-- M2/M3 already call `web/src/lib/api`. When mocks become real DB rows, the JSON shape does not change.
-- Integration is: merge branches, run seed, click through the demo script. Not "rewrite the glue".
+Competitor scan, regenerate, and localize currently return 501. Leads and
+competitor list routes may return seeded database rows, but their active agent
+workflows and screens are out of scope. The generic starter Products, Users, and
+chart code is reference material, not product architecture.

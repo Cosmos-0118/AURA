@@ -1,92 +1,78 @@
-# Demo script
+# Five-minute demo
 
-Target: **5–6 minutes**. One laptop. Rehearse **twice** after freeze (you do not have time for three).
+Use one laptop. Reset with `db/demo.sql`, open the four target pages in tabs, and
+capture fallback screenshots before presenting.
 
-The **seeded FAIL Instagram post** is the demo. Live generate is extra. Never wait more than 15 seconds on a spinner.
-
-## Roles
-
-| Who | Job |
-|---|---|
-| Speaker A (M1) | Narrative. Clicks Review and Studio. |
-| Speaker B (M2 or M5) | Compliance panel + lessons. Questions. |
-| Everyone else | Silent. Do not open Cursor on the demo machine. |
-
-## Seed (M1, at T+1.5 — not at the end)
-
-`db/demo.sql` must exist before M2 starts. It plants:
-
-1. Jade Instagram, status **`compliance_failed`** (not `pending_review` — pick one and stay with it), body contains **"Guaranteed protection for your jewellery business"**, check `FAIL` / `HIGH` / `CLAIM_001`.
-2. One `lessons` row for Jade: `TOO_SALESY`, note `Never describe coverage as guaranteed. Prefer "coverage subject to policy terms".`
-3. One **approved** DoctorShield LinkedIn post, educational tone.
-4. A couple of `reviews` so metrics are not all zero.
-
-## Click path (sticky note)
+## Click path
 
 ```text
-Brands → Jade vs DoctorShield
-Review → FAIL Instagram → Reject + Unsupported claim
-Insights → lesson row + four numbers
-Studio → Jade / jewellery theft / LinkedIn → Generate
-  (if spinner >15s, skip and say the queue item was produced by the same pipeline)
+Overview -> Brands -> Review failed asset -> reject -> Insights -> Studio
 ```
 
-## Minute-by-minute
+## Script
 
-### 0:00
+### 0:00 — Overview
 
-> "This is not a chatbot. It is a marketing desk: write, compliance, human review, and it remembers corrections."
+> AURA is not a chatbot. It is a marketing operations loop: create, check,
+> review, and learn from the human decision.
 
-Sidebar: Studio, Review Queue, Brands, Insights.
+Point to pending work and the Create Campaign action. Do not narrate the stack.
 
-### 0:30 — Brands
+### 0:40 — Brands
 
-Jade: authoritative, premium, specialist. DoctorShield: reassuring, educational.
+Compare Jade and DoctorShield.
 
-> "Brand voice lives in the database, not one giant prompt."
+> Brand voice is structured data. Jade speaks like a specialist for high-value
+> businesses; DoctorShield speaks like a calm colleague for doctors and clinics.
 
-### 1:00 — Review (star screen)
+### 1:20 — Review
 
-Open the seeded Instagram item.
+Open the seeded Jade Instagram asset. Point to `Guaranteed protection`, `FAIL`,
+`HIGH`, `CLAIM_001`, and the suggested revision.
 
-Left: copy with "Guaranteed protection".  
-Right: CLAIM_001, HIGH, suggested revision.
+> Deterministic rules catch an unsupported absolute claim. The system explains
+> the problem, but the human still makes the decision.
 
-> "Hard rules catch this before a human hunts for it. The human still decides."
+Reject it with `UNSUPPORTED_CLAIM`. Leave the optional note empty during at least
+one rehearsal because this proves the safe fallback.
 
-Reject. Tag: **Unsupported claim**. Short note — and rehearse it once with the note left **empty**, because that is the path most likely to 500.
+### 2:40 — Insights
 
-### 2:30 — Insights
+Show the new lesson and the exact metric cards.
 
-Lesson row is there. Four numbers (even from seed).
+> That review is now reusable guidance for the next campaign. This is the
+> feedback loop, not just another content generator.
 
-> "The system is learning from reviewer feedback."
+### 3:30 — Studio
 
-### 3:20 — Studio (optional live)
+Create a Jade, Malaysia, LinkedIn awareness campaign about jewellery theft
+prevention. If it completes, show the two variants and open one in Review.
 
-Jade, jewellery theft prevention, Malaysia, Awareness, **LinkedIn only**. Generate.
+If generation takes more than 15 seconds:
 
-If it completes: open the new LinkedIn item, approve it.  
-If not: "Same pipeline; the review item is the recorded run." Move on.
+> The live provider is slow, so I will use the recorded deterministic path. The
+> same pipeline produced the review item you just saw.
 
-### 4:30 — What we did not fake
+Do not wait on a spinner.
 
-> "Approved posts sit in Postgres. Publishing is a later worker on `status=approved`. We did not burn the clock on Instagram OAuth."
+### 4:40 — Close
 
-Stop talking. Take questions. Prefer showing `banned_terms.yaml` or the two brand cards again.
+> AURA keeps compliance evidence, human decisions, approved content, and lessons
+> in one controlled workflow. Publishing can consume approved rows later; it
+> cannot bypass review.
 
-## Fallback
+Stop and take questions.
 
-| Failure | Do this |
+## Fallbacks
+
+| Failure | Response |
 |---|---|
-| API down | Restart uvicorn. Then screenshots M1 took at freeze. |
-| Gemini 429 | `AURA_MOCK_AGENTS=true`. Same UI. |
-| Empty queue | Re-run `seed.sql` + `demo.sql`. Hard refresh. |
-| Live generate hangs | Seeded FAIL post. 15 second rule. |
+| Gemini timeout/429 | Set `AURA_MOCK_AGENTS=true`; use deterministic generation |
+| Empty queue | Reapply `db/demo.sql` and refresh |
+| API unavailable | Restart FastAPI once, then use screenshots |
+| Studio still running after 15 seconds | Return to the seeded review/lesson path |
+| A stretch page fails | Do not open it; the core demo does not depend on it |
 
-## Do not say
-
-- "We also have eight agents / video / leads / Malay, we just ran out of time."
-- "Compliance is an LLM yes/no."
-
-Say: **pipeline, human in the loop, lessons, brand profiles in the DB.**
+Do not claim that competitor crawling, leads, localization, publishing, or video
+are implemented. Do not call compliance an LLM yes/no check; lead with the hard
+rule and human decision.
