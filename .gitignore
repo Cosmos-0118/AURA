@@ -1,0 +1,18 @@
+# Local secrets
+/.env
+/web/.env.local
+
+# Python
+/.venv/
+/api/.venv/
+__pycache__/
+*.py[cod]
+
+# JavaScript / Next.js
+/web/node_modules/
+/web/.next/
+
+# Local tooling and OS files
+.DS_Store
+.idea/
+.vscode/
