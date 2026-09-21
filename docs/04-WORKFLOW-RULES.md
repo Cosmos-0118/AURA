@@ -59,7 +59,7 @@ Then open a PR into `main`. **M1 merges all PRs.** Other members do not hit Merg
 - Title: `[M2] Review queue table`
 - Body: what a reviewer can click, not a file list.
 - If GitHub shows files you do not own, you accidentally edited someone else's zone. Revert those files before asking for merge.
-- PRs should be mergeable at every checkpoint (T+6, T+14, T+24, T+34, T+42). Small PRs, often.
+- PRs should be mergeable at **T+1.5, T+3, T+5**. M1 merges immediately — no review lag. Small PRs, often.
 
 ### Forbidden
 
@@ -87,7 +87,9 @@ Every public function / page ships in this order:
 
 Never skip (1). Never change the return type between (1) and (3).
 
-M1 ships `api/agents/_stubs.py` at Hour 3 so `graph.py` runs even if M4/M5 have not pushed. When the real file exists, M1 deletes the stub import (one-line change in `graph.py`). M4/M5 still own the real file.
+M1 ships `api/agents/_stubs.py` at **T+1.5h** so `run_pipeline` runs even if M4/M5 have not pushed. When the real file exists, M1 switches the import (one-line change in `graph.py`). M4/M5 still own the real file.
+
+M2/M3 may hardcode `MOCK_ASSET` from contracts §10 until the client lands, then delete the constant.
 
 ## Combining (why this is easy)
 
@@ -104,15 +106,9 @@ No shared React context. No shared Python package besides `schemas.py`. No Event
 
 - Team channel for contract requests and "I am blocked".
 - Voice call at each checkpoint (15 min): merge, boot `main`, assign leftover.
-- If someone is stuck > 45 minutes on env/install, they pair with M1. Do not silently rewrite the stack.
+- If someone is stuck > **20 minutes** on env/install, they pair with M1. Do not silently rewrite the stack.
+- No sleep shifts. Eat at the desk. Checkpoints are 10 minutes, not 15.
 
-## Sleep (48h track)
+## Time rule
 
-Stagger so the repo is never empty:
-
-| Window | Who sleeps | Who is awake |
-|---|---|---|
-| T+12 to T+18 | M1, M2 | M3, M4, M5 |
-| T+20 to T+26 | M4, M5 | M1, M2, M3 |
-
-If you only have 24 hours, skip staggered sleep. Take 90 minutes each around T+12 and keep M1 available.
+If it is not in [05-TIMELINE.md](05-TIMELINE.md) **Must ship**, you are stealing demo time. Stop.

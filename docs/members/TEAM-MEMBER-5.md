@@ -1,8 +1,10 @@
 # Team Member 5 — Compliance and Learning
 
-You are the safety officer and the memory. Content generation without you is just another GPT wrapper. The demo wins when a bad claim is **caught**, the reviewer tags it, and the **next** draft improves.
+You are the safety officer and the memory. The demo wins when a bad claim is **caught** with a Python scanner, the reviewer tags it, and a **lesson** is stored.
 
-You do **not** generate marketing copy. You do **not** add FastAPI routes (M1 wires you). You do **not** edit the dashboard.
+You do **not** generate marketing copy, add routes, edit the dashboard, crawl the web, or find leads.
+
+**Time: 6–8 hours. Must = banned-term FAIL on "guaranteed" + lessons write/read. LLM reviewer is optional. Research and leads are out.**
 
 ## Read these first
 
@@ -12,7 +14,7 @@ You do **not** generate marketing copy. You do **not** add FastAPI routes (M1 wi
 4. [../06-DEMO-SCRIPT.md](../06-DEMO-SCRIPT.md) — you must FAIL "Guaranteed protection"
 5. [../../AGENTS.md](../../AGENTS.md)
 
-Concept.md §8–9 is useful product context. Implement the **three-layer** check described here, not "ask the LLM if it seems fine".
+Concept.md §8–9 is useful. Implement **Layer 1 (YAML scanner)** for sure. Layer 3 (Gemini) only if Layer 1 and lessons already work. Skip Layer 2 if short on time.
 
 ## Your branch
 
@@ -23,12 +25,18 @@ Concept.md §8–9 is useful product context. Implement the **three-layer** chec
 ```text
 api/agents/compliance.py
 api/agents/lessons.py
-api/agents/research.py
-api/agents/leads.py          # Phase 3
 api/rules/banned_terms.yaml
-api/rules/fixtures/          # optional HTML snapshots
-api/prompts/compliance/
+api/prompts/compliance/reviewer.md    # only if you attempt Layer 3
 ```
+
+Also add stub files so M1 imports do not crash:
+
+```text
+api/agents/research.py   # scan_competitor returns {changed: false, summary: "skipped"}
+api/agents/leads.py      # find_leads returns []
+```
+
+Do not implement crawl or lead search.
 
 ## Never touch
 
@@ -74,7 +82,7 @@ def scan_competitor(competitor_id: str) -> dict:
     # { competitor_id, hash, changed, summary }
     ...
 
-# api/agents/leads.py  (Phase 3)
+# api/agents/leads.py  (stub only this sprint)
 def find_leads(brand_id: str, country: str, limit: int = 10) -> list[dict]:
     ...
 ```
@@ -87,15 +95,13 @@ Never raise into the pipeline. On LLM failure: still return the **hard-rule** re
 
 ---
 
-## Compliance — three layers
+## Compliance — Layer 1 is the product
 
 ```text
-text
-  → Layer 1 hard-rule scanner (Python, yaml)
-  → Layer 2 claim evidence (Phase 2: if a sentence asserts coverage, require it is hedged)
-  → Layer 3 Gemini structured JSON
-  → merge into one ComplianceResult
+text → YAML banned-term scanner → (optional) Gemini JSON → ComplianceResult
 ```
+
+**Layer 1 is mandatory.** The demo is dead if "Guaranteed protection" does not FAIL.
 
 ### Layer 1 — `api/rules/banned_terms.yaml`
 
@@ -135,19 +141,11 @@ Match **case-insensitive**. Record the actual substring in `issues[].text` (pref
 
 Demo requirement: body containing `Guaranteed protection` → at least `CLAIM_001`, `result="FAIL"`, `risk="HIGH"`.
 
-### Layer 2 — hedge check (simple)
+### Layer 2 — skip
 
-If the text talks about cover/coverage/protect/protection **and** does not contain a hedge like `subject to policy` / `policy terms` / `may` / `designed to`, add:
+Do not build the hedge checker unless Layer 1 + lessons are done and you still have an hour.
 
-```text
-id: CLAIM_010
-reason: "Coverage language without qualification"
-risk: MEDIUM
-```
-
-Do not pretend this is a real regulator rulebook. Comments in yaml: "Hackathon heuristic, not legal advice."
-
-### Layer 3 — Gemini
+### Layer 3 — Gemini (only if Must is done)
 
 Prompt `api/prompts/compliance/reviewer.md`. Input: brand_id, platform, text, already-found issues.
 
@@ -175,6 +173,8 @@ Merge: **worst wins**. If any layer FAIL → FAIL. Else if any REVIEW or MEDIUM+
 
 `record_lesson` INSERT into `lessons`. You need `brand_id` (now in the signature — contracts include it).
 
+`lessons.note` is `NOT NULL` and the reviewer UI does not force a note, so coalesce: `note = note or reason_tag or "OTHER"`. Do not let an empty note become a NOT NULL violation — that 500 lands on the single loudest click of the demo.
+
 `get_relevant_lessons` SELECT `note` FROM lessons WHERE brand_id = %s ORDER BY created_at DESC LIMIT n. If `platform` matches some rows, prefer those first, then fill with other platforms for that brand.
 
 Return **plain strings** (the note, optionally prefixed with the tag):
@@ -189,66 +189,43 @@ Use the same DB helper as M1 if importable (`from db import get_conn`). If not, 
 
 ---
 
-## Research (Phase 2)
+## Research and leads
+
+**Do not implement.** Stubs only:
 
 ```python
 def scan_competitor(competitor_id: str) -> dict:
+    return {"competitor_id": competitor_id, "hash": "", "changed": False, "summary": "skipped"}
+
+def find_leads(brand_id: str, country: str, limit: int = 10) -> list[dict]:
+    return []
 ```
-
-1. Load competitor URL from DB.
-2. Fetch with `httpx` (timeout 15s). Extract text with `trafilatura` (or strip tags).
-3. `hash = sha256(text).hexdigest()`
-4. Compare to latest `research_snapshots.content_hash` for that competitor.
-5. If different, ask Gemini for a 3-bullet `summary` of what changed vs previous content (truncate inputs).
-6. INSERT snapshot.
-7. Return `{ competitor_id, hash, changed, summary }`.
-
-On fetch failure: return `{ changed: false, summary: "scan_failed: ..." }` — do not raise.
-
-Do **not** start with Crawl4AI. Optional Phase 3 swap only.
-
-Do **not** scrape LinkedIn.
 
 ---
 
-## Metrics SQL (M1 may put this in a route; you may provide a function)
+## Metrics SQL
 
-If you have time, add `api/agents/lessons.py` or a small `api/agents/metrics.py` — **metrics.py is not in your ownership table.** Prefer giving M1 this SQL in a comment at the bottom of `lessons.py` and letting M1 paste it into `routes/metrics.py`.
-
-If you want to own a helper, **ask M1** to add `api/agents/metrics.py` to your zone. Default: SQL snippet only.
+Give M1 this comment at the bottom of `lessons.py`. Do not create `metrics.py`.
 
 ```sql
 -- rejection_rate = rejected / (approved+rejected)
--- first_pass_approval = approved with no prior reject on same campaign? keep it simple:
---   approved / (approved+rejected)
+-- first_pass_approval = approved / (approved+rejected)
 -- compliance_failure_rate = assets with a FAIL check / all assets
 -- avg_edits_per_post = reviews where edited_body is not null / reviewed assets
 ```
 
-Simple is fine. Do not build a time-travel dashboard.
-
 ---
 
-## Leads (Phase 3 only)
+## Must vs skip
 
-Public search queries like `jewellery stores Kuala Lumpur`. You may use a search API if you have a key (Tavily/Serper) — **personal key in .env**, tell M1 the env name.
-
-Score 0–100 with a short Gemini or heuristic (jewellery + luxury + inventory words). INSERT `leads`. Return list of dicts matching the `Lead` model without `id` (M1 or you inserts).
-
-Empty list on failure.
-
----
-
-## Phases
-
-### Phase 1
+### Must
 
 | Task | Acceptance |
 |---|---|
 | YAML scanner | `check_compliance("Guaranteed protection for your jewellery business", "jade", "instagram").result == "FAIL"` |
-| LLM merge | Still FAIL if LLM is down |
+| Works without Gemini | Still FAIL if no API key |
 | `record_lesson` + `get_relevant_lessons` | Round-trip against Supabase |
-| `suggested_revision` | Non-empty on FAIL |
+| `suggested_revision` | Non-empty on FAIL (string replace is fine) |
 
 ```bash
 cd api
@@ -260,13 +237,13 @@ assert r.result == 'FAIL'
 "
 ```
 
-### Phase 2
+### If time
 
-Layer 2 hedges. `scan_competitor` with hash diff. Metrics SQL handed to M1.
+Layer 3 Gemini merge. Not required.
 
-### Phase 3
+### Do not build
 
-Leads. Crawl4AI only if scan already works and you are bored.
+`scan_competitor` crawl, Crawl4AI, leads, LinkedIn scrape, Layer 2.
 
 ---
 
@@ -283,13 +260,9 @@ Create api/agents/compliance.py with:
 
 def check_compliance(text, brand_id, platform) -> ComplianceResult
 
-Layer 1: case-insensitive scan of yaml patterns; issues[].text is the substring from the original text; rules list of ids; worst risk wins.
+Layer 1 only unless Layer 1 already works: case-insensitive scan of yaml patterns; issues[].text is the substring from the original text; rules list of ids; worst risk wins. suggested_revision can be a simple string replace of the banned phrase.
 
-Layer 3: if GEMINI_API_KEY set and AURA_MOCK_AGENTS is not true, call Gemini for JSON ComplianceResult using api/prompts/compliance/reviewer.md. Strip fences. Retry once.
-
-Merge: FAIL wins over REVIEW wins over PASS.
-
-Never raise. If LLM fails, return layer-1 result (or REVIEW LLM_UNAVAILABLE if layer-1 clean).
+Do not call Gemini in the first version. Never raise.
 
 Do not write to the database in this function. Do not edit schemas.py, graph.py, routes, content.py, or web/.
 ```
@@ -311,13 +284,12 @@ Do not create HTTP routes.
 ### Prompt C — research
 
 ```text
-Create api/agents/research.py scan_competitor(competitor_id) as specified in docs/members/TEAM-MEMBER-5.md.
+Create api/agents/research.py and api/agents/leads.py as stubs only:
 
-httpx + trafilatura + sha256. Insert research_snapshots. Compare to previous hash. Summarize with Gemini only when changed.
+scan_competitor returns {"competitor_id": competitor_id, "hash": "", "changed": False, "summary": "skipped"}
+find_leads returns []
 
-Return dict keys: competitor_id, hash, changed, summary.
-
-On any network error return changed=false and summary starting with scan_failed. Do not use Crawl4AI. Do not scrape LinkedIn. Do not edit files outside api/agents/research.py and api/rules/fixtures.
+Do not fetch URLs. Do not use Crawl4AI.
 ```
 
 ### Prompt D — unit-ish check
@@ -341,7 +313,7 @@ get_relevant_lessons → (M4 generate) → check_compliance → M1 insert
 reject → record_lesson
 ```
 
-Your FAIL on "guaranteed" is what M2 highlights. Your lesson strings are what M4 puts in the prompt. If either side is empty, the story breaks — test the python -c snippet before you sleep.
+Your FAIL on "guaranteed" is what M2 highlights. Your lesson strings are what M4 puts in the prompt. Test the python -c snippet before you call the work done.
 
 ## Done for demo
 

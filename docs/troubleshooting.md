@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Try these before asking the team. If you are still stuck after 45 minutes, ping Team Member 1 with the **exact command and the exact error**.
+Try these before asking the team. If you are still stuck after **15 minutes**, ping Team Member 1 with the **exact command and the exact error**. In a 6–8 hour sprint, a silent hour is a lost feature — M1's job description includes sitting with you.
 
 ## 1. `bun: command not found`
 
@@ -118,22 +118,25 @@ Cleanup was skipped. M1 re-runs `bun run cleanup --list` and removes clerk. Memb
 
 Stop. Revert. Paste `AGENTS.md` into the chat and say "you may only edit files in my ownership table." Then continue.
 
-## 18. Trafilatura / crawl blocked
+## 18. Someone started crawl / FFmpeg / leads
 
-Phase 3. Use a seeded HTML fixture in `api/rules/fixtures/` instead of hitting the live site. Do not loop retries on 403.
+Stop. Those are out of scope for 6–8 hours. Revert the files. Go back to your Must list in `docs/05-TIMELINE.md`.
 
-## 19. FFmpeg missing (Phase 3)
-
-```bash
-brew install ffmpeg
-ffmpeg -version
-```
-
-If install takes too long, ship storyboard stills only.
-
-## 20. Demo laptop has old seed
+## 19. Demo laptop has old seed
 
 ```text
 Re-run db/seed.sql then db/demo.sql in Supabase SQL editor.
 Hard refresh the browser.
 ```
+
+## 20. Reject returns 500 (`null value in column "note"`)
+
+`lessons.note` is `NOT NULL` and the reviewer left the note box empty. M1 passes `note or reason_tag` into `record_lesson`; M5 coalesces again inside it. Rehearse the reject **with an empty note** so this cannot surprise you on stage.
+
+## 21. Insights is blank or `/api/metrics` 500s
+
+Division by zero on an empty database. Every rate returns `0.0` when its denominator is 0. M1 owns this SQL — M3 must not paper over it with fake numbers.
+
+## 22. Your agent suggests Clerk, Sentry, or Recharts dashboards out of nowhere
+
+The Kiranism starter ships its own `AGENTS.md` and `CLAUDE.md`. If they were not deleted after the clone, they are sitting at `web/AGENTS.md` and Cursor applies them to every file under `web/`. Delete them, then re-open the chat.

@@ -1,6 +1,8 @@
-# Contracts (frozen after T+3)
+# Contracts (frozen after T+1.5h)
 
 **Owner: Team Member 1.** Everyone else treats this file as law.
+
+**6–8 hour sprint:** implement brands, campaigns, assets, reviews, lessons, metrics. Endpoints for competitors scan, localize, leads, and regenerate may return `501` with `{ "detail": "not in this sprint" }` unless the slice is already done. Do not let those endpoints block the demo.
 
 If you need a change: follow the request template in [04-WORKFLOW-RULES.md](04-WORKFLOW-RULES.md). Do not add fields in your own code.
 
@@ -367,6 +369,8 @@ class Metrics(BaseModel):
     assets_pending: int
 ```
 
+**Every rate returns `0.0` when its denominator is 0.** An empty database must give `GET /api/metrics` a 200 with zeros, not a divide-by-zero 500. M3's Insights page is the first screen to hit this at T+3.
+
 JSON from FastAPI uses **snake_case**, same as Python. The TypeScript types below also use snake_case. Do not camelCase in the API.
 
 ---
@@ -425,7 +429,7 @@ def scan_competitor(competitor_id: str) -> dict:
     """
     ...
 
-# api/agents/leads.py       OWNER: Team Member 5 (Phase 3)
+# api/agents/leads.py       OWNER: Team Member 5 (stub only this sprint)
 def find_leads(brand_id: str, country: str, limit: int = 10) -> list[dict]:
     ...
 ```
@@ -658,17 +662,14 @@ getMetrics()
 Routes M2/M3 will create. M1 registers them so the sidebar works before pages exist (placeholder page is OK).
 
 ```text
-/dashboard                     Overview (optional cards)
-/dashboard/studio              Campaign Studio          M3
-/dashboard/review              Review Queue             M2
-/dashboard/library             Content Library          M2
-/dashboard/brands              Brands                   M3
-/dashboard/competitors         Competitors              M3
-/dashboard/leads               Leads                    M3
-/dashboard/insights            Insights                 M3
+/dashboard                     Overview (leave the starter; ignore it in the demo)
+/dashboard/studio              Campaign Studio          M3  MUST
+/dashboard/review              Review Queue             M2  MUST
+/dashboard/brands              Brands                   M3  MUST
+/dashboard/insights            Insights                 M3  MUST
 ```
 
-Do not add `/dashboard/chat` or AI-chat.
+Four items. Do **not** add Library, Competitors, Leads, Chat, or Calendar to the sidebar — nobody is building those pages, and a sidebar link that 404s in front of judges is worse than a missing one.
 
 ---
 
@@ -676,9 +677,9 @@ Do not add `/dashboard/chat` or AI-chat.
 
 ```text
 load brand
-lessons = concat(get_relevant_lessons(brand, p) for p in platforms)
-research_summary = optional scan of first competitor for that brand
-assets = generate_content(ContentRequest(..., lessons, research_summary))
+lessons = get_relevant_lessons(brand, "linkedin")   # one call, not one per platform
+assets = generate_content(ContentRequest(..., lessons, research_summary=None))
+# skip competitor scan in this sprint
 for each asset:
     check = check_compliance(asset.body, brand_id, asset.platform)
     status = "compliance_failed" if check.result == "FAIL" else "pending_review"
@@ -692,8 +693,10 @@ Reject path:
 ```text
 UPDATE asset status=rejected
 INSERT reviews
-record_lesson(...)
+record_lesson(..., note = note or reason_tag, ...)
 ```
+
+**`lessons.note` is `NOT NULL`.** The reviewer UI does not force a note, so M1 must pass `note or reason_tag` (never `None`) and M5's `record_lesson` must coalesce defensively. A null note here is a 500 on the loudest click of the demo.
 
 Approve path:
 

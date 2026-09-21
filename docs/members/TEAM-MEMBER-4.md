@@ -1,8 +1,10 @@
 # Team Member 4 — Content Engine
 
-You are the writer. You turn a `ContentRequest` into platform-ready copy that sounds like **Jade**, **DoctorShield**, or **Jaguar Transit** — not like generic ChatGPT insurance.
+You are the writer. You turn a `ContentRequest` into **LinkedIn** copy that sounds like **Jade**, **DoctorShield**, or **Jaguar Transit** — not like generic ChatGPT insurance.
 
-You also localize (adapt, not translate). You do **not** run compliance. You do **not** create HTTP routes. M1 calls your functions from `graph.py`.
+You do **not** localize, do **not** make reels, do **not** run compliance, do **not** create HTTP routes. M1 calls `generate_content` from `run_pipeline`.
+
+**Time: 6–8 hours. Must = LinkedIn A+B for 3 brands, lessons in the prompt, never raise. Skip Instagram/X/blog/localize/reel.**
 
 ## Read these first
 
@@ -16,27 +18,19 @@ You also localize (adapt, not translate). You do **not** run compliance. You do 
 
 `feat/m4-content`
 
-You can start **stubs** after you clone, even before T+3, as long as the function signatures match the contracts. Real Gemini waits until `api/schemas.py` exists on `main` so you import it.
+You can start **stubs** immediately, even before T+1.5h, as long as the function signatures match the contracts.
 
 ## Files you own
 
 ```text
 api/agents/content.py
-api/agents/localize.py
-api/prompts/content/
-```
-
-Suggested prompt files (you may add more **in this folder only**):
-
-```text
 api/prompts/content/system.md
 api/prompts/content/linkedin.md
-api/prompts/content/instagram.md
-api/prompts/content/x.md
-api/prompts/content/blog.md
-api/prompts/content/reel_script.md
-api/prompts/content/localize.md
 ```
+
+Also create `api/agents/localize.py` as a **5-line stub** that returns the input asset unchanged (`variant` prefixed `loc-`). Do not implement real localization.
+
+Do not add instagram.md, x.md, blog.md, reel, or localize.md.
 
 ## Never touch
 
@@ -102,50 +96,20 @@ Load from DB when possible. Fallback:
 | `doctorshield` | Calm colleague. Educational. Clinics, time, paperwork, patients. | Fear-mongering, "always covered" |
 | `jaguar` | Ops + tech. Transit, chain of custody, speed, security. | Luxury-jewellery tone, "zero risk" |
 
-`req.lessons` is a list of strings from Team Member 5. **Put them in the prompt every time** under a heading `RELEVANT PAST LESSONS`. If you ignore them, the demo's "regenerate after reject" will not work.
+`req.lessons` is a list of strings from Team Member 5. **Put them in the prompt every time** under `RELEVANT PAST LESSONS`. If a lesson says not to use "guaranteed", do not use that word.
 
-`req.research_summary` is optional competitor context. One short paragraph in the prompt. Do not quote it as fact if it is empty.
+`req.research_summary` may be empty. Ignore it if so.
 
 ---
 
-## Per-platform output (Phase 2; Phase 1 is LinkedIn only)
+## Output (LinkedIn only)
 
-Return `GeneratedAsset` objects. JSON from Gemini should parse into this list.
+Return two `GeneratedAsset` objects:
 
-### LinkedIn (Phase 1)
+- `platform="linkedin"`, `content_type="post"`, `variant="A"` and `"B"`
+- ~80–150 words. `hashtags` max 3.
 
-- Two items, `platform="linkedin"`, `content_type="post"`, `variant="A"` and `"B"`.
-- ~80–150 words. No hashtag walls. `hashtags` max 3.
-
-### Instagram
-
-- Caption: `content_type="caption"`, `variant="A"`, body = caption text, hashtags 5–8 in the field not dumped only in body.
-- Carousel: `content_type="carousel"`, `body` is a JSON string array of 4–6 short slide texts (see contracts).
-
-### X
-
-- `content_type="thread"`, `body` = tweets separated by `\n---\n` (2–5 parts).
-- Optional second variant `B` as a single `post`.
-
-### Blog
-
-- `content_type="article"`, `title` set, `body` ~500–800 words markdown-ish plain text. No 4000-word essays.
-
-### Reel (Phase 3)
-
-- `content_type="script"`, `platform="reel"`.
-- Body format:
-
-```text
-HOOK: ...
-BEATS:
-1. ...
-2. ...
-CTA: ...
-DURATION: 25s
-```
-
-Do not generate MP4 here. If you still have time, a separate script `api/agents/content.py` helper is **not** allowed to call FFmpeg unless M1 agrees — keep video in a function `_maybe_render_reel` that is unused by default.
+Always return those two, **even if `req.platforms` does not contain `linkedin`**. Returning an empty list makes a campaign complete with zero assets, which looks like a broken pipeline on stage. Ignore every other platform value; do not start Instagram/X/blog/reel.
 
 ---
 
@@ -153,8 +117,8 @@ Do not generate MP4 here. If you still have time, a separate script `api/agents/
 
 - Model: env `GEMINI_MODEL` default `gemini-2.0-flash`.
 - Key: `GEMINI_API_KEY` from `.env` (your personal key).
-- Temperature ~0.7 for copy, ~0.3 for localization.
-- Demand **JSON only**:
+- Temperature ~0.7.
+- Demand **JSON only**.
 
 ```json
 {
@@ -179,24 +143,25 @@ If `AURA_MOCK_AGENTS=true`, skip the API (M1 may not even call you — still res
 
 ## Localization
 
-`localize.md` prompt must include: brand voice, country, audience, **keep meaning**, adapt CTA and examples (Malaysia jewellery SMEs ≠ US consumers), do not introduce new insurance promises.
+Out of scope. Stub only:
 
-Return the same `platform` and `content_type`, new `language` is not on `GeneratedAsset` — M1 sets language on the DB row. You set `variant` to `loc-{language}`.
+```python
+def localize(asset, language, country, brand_id):
+    return asset.model_copy(update={"variant": f"loc-{language}"})
+```
 
 ---
 
-## Phases
+## Must vs skip
 
-### Phase 1
+### Must
 
 | Task | Acceptance |
 |---|---|
 | Stub `generate_content` | Returns 2 LinkedIn assets, valid Pydantic |
-| Real LinkedIn for all 3 brands | Running the function with Jade vs DoctorShield produces obviously different tone |
-| Lessons in prompt | If `lessons=["Never say guaranteed"]` the mock-or-real output avoids "guaranteed" |
+| Real LinkedIn for all 3 brands | Jade vs DoctorShield is obviously different |
+| Lessons in prompt | `lessons=["Never say guaranteed"]` → output avoids "guaranteed" |
 | JSON retry | Broken model output does not raise |
-
-How to test without the full app:
 
 ```bash
 cd api
@@ -211,13 +176,9 @@ print(r)
 "
 ```
 
-### Phase 2
+### Do not build
 
-Instagram caption + carousel, X thread, blog, `localize()` to `ms` for Malaysia.
-
-### Phase 3
-
-Reel script. Optional TTS later — not required.
+Instagram, carousel, X, blog, reel, FFmpeg, real `localize()`.
 
 ---
 
@@ -244,7 +205,7 @@ Do not create FastAPI routes. Do not edit schemas.py, graph.py, compliance.py, o
 ### Prompt B — prompts on disk
 
 ```text
-Write api/prompts/content/system.md and linkedin.md, instagram.md, x.md, blog.md, localize.md.
+Write api/prompts/content/system.md and linkedin.md only.
 
 system.md must include:
 - You are a marketing writer for JA Assure brands
@@ -253,7 +214,7 @@ system.md must include:
 - No unsupported insurance claims: never guaranteed, 100% covered, always covered, zero risk, cheapest
 - Return JSON only
 
-Each platform file specifies length and the GeneratedAsset fields.
+Each file specifies length and the GeneratedAsset fields for LinkedIn only.
 
 Do not put API keys in prompts. Do not edit files outside api/prompts/content and api/agents/content.py / localize.py.
 ```
@@ -261,25 +222,13 @@ Do not put API keys in prompts. Do not edit files outside api/prompts/content an
 ### Prompt C — multi-platform
 
 ```text
-Update generate_content so for each platform in req.platforms it produces the assets defined in docs/members/TEAM-MEMBER-4.md (LinkedIn A+B, Instagram caption+carousel, X thread, blog article).
-
-Carousel body MUST be a JSON string of an array of strings, not a Python list in the field.
-
-Keep one Gemini call per campaign (all platforms in one JSON) to save rate limits, unless the payload is too big — then one call per platform.
-
-Still never raise. Still mock fallback.
+Do not run this prompt. LinkedIn only for the 6–8 hour sprint.
 ```
 
 ### Prompt D — localize
 
 ```text
-Create api/agents/localize.py:
-
-def localize(asset, language, country, brand_id) -> GeneratedAsset
-
-Adapt, do not literally translate. Use api/prompts/content/localize.md. New variant loc-{language}. Same platform and content_type. On failure return the original body prefixed with [MOCK-LOCALE {language}] rather than raising.
-
-Do not add routes. Do not write to the database.
+Create api/agents/localize.py as a stub that returns asset.model_copy(update={"variant": f"loc-{language}"}) and does not call Gemini. Do not add routes.
 ```
 
 ---
@@ -292,4 +241,4 @@ Do not rename the function. Do not make it `async` unless M1 agrees (if you need
 
 ## Done for demo
 
-Same topic, two brands, visibly different posts. After a TOO_SALESY lesson, regenerate is less salesy. Malay localization of one Instagram caption if Phase 2 landed.
+Same topic, two brands, visibly different LinkedIn posts. Lessons in the prompt so "guaranteed" disappears when told not to use it.

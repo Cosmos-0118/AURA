@@ -1,6 +1,6 @@
 # Architecture
 
-This is the system we are actually building in 24–48 hours. If it disagrees with `Concept.md`, this file wins. `Concept.md` is product thinking; this file is the build.
+This is the system we are actually building in **6–8 hours**. If it disagrees with `Concept.md`, this file wins. `Concept.md` is product thinking; this file is the build.
 
 ## Picture
 
@@ -39,14 +39,13 @@ There is **no** Redis, Kafka, Celery, Mongo, or second database. Background work
 | Decision | Why |
 |---|---|
 | One FastAPI process, not agent-service-toolkit | That repo is a **chat** service (threads, token streaming, Streamlit). We are a **batch pipeline + review queue**. Adapting it costs more than writing ~400 lines of FastAPI. |
-| LangGraph in **one file** (`api/graph.py`), owned by M1 | Four people editing a graph = merge hell. M4 and M5 export plain functions. M1 wires them. |
-| Linear graph: research → content → compliance → persist | Not a swarm. Agents do not call each other. |
+| `graph.py` is a plain `run_pipeline`, owned by M1 | Do not debug LangGraph. M4 and M5 export functions. M1 wires them. |
 | Kiranism dashboard, Clerk stripped | We do not have time for auth. Cleanup script exists. Tables/forms already work. |
 | Supabase hosted Postgres | Nobody installs Postgres locally. One project, everyone uses the same URL. |
 | Per-person Gemini keys | Five Cursor agents on one free-tier key will 429. |
-| `httpx` + `trafilatura` first | Crawl4AI wants Playwright/Docker. Phase 3 upgrade only. |
-| Reel = script + TTS + stills; MP4 is stretch | FFmpeg debugging eats a night. Judges can see a storyboard. |
-| No Project 2 publisher in the default plan | Concept.md is explicit: polish Project 1 first. Approved rows in the DB **are** the bridge. |
+| No Crawl4AI, no FFmpeg, no leads, no localize | 6–8 hours. Seeded FAIL Instagram covers compliance theatre. |
+| `run_pipeline` plain async function, not a LangGraph workshop | Same file `graph.py` so imports stay stable. Do not debug LangGraph. |
+| No Project 2 publisher | Approved rows in the DB **are** the bridge. |
 
 ## Data flow (one campaign)
 
@@ -58,8 +57,7 @@ M3 Studio form
 M1 creates campaigns row (status=running)
 M1 kicks graph.py in the background
         │
-        ├─ M5 get_relevant_lessons(brand_id, platform)
-        ├─ M5 scan_competitor  (skip if none / mock)
+        ├─ M5 get_relevant_lessons(brand_id, "linkedin")
         ├─ M4 generate_content(ContentRequest)  → list[GeneratedAsset]
         ├─ for each asset:
         │     M5 check_compliance(text, brand_id, platform)
@@ -67,16 +65,11 @@ M1 kicks graph.py in the background
         │     compliance_checks row written
         └─ campaign status=completed
         │
-M2 Review Queue  GET /api/assets?status=pending_review
+M2 Review Queue  GET /api/assets?status=queue
         │
         ├─ Approve  POST /api/assets/{id}/approve
-        ├─ Edit     PATCH body, then approve
-        └─ Reject   POST /api/assets/{id}/reject  { reason_tag, note, edited? }
+        └─ Reject   POST /api/assets/{id}/reject  { reason_tag, note }
                     M1 also calls M5 record_lesson(...)
-        │
-Regenerate  POST /api/assets/{id}/regenerate
-        │   M1 rebuilds ContentRequest with fresh lessons
-        │   M4 generate_content again → new asset row
         ▼
 Insights  GET /api/metrics  GET /api/lessons
 ```
@@ -94,7 +87,8 @@ AURA/
   docker-compose.yml        # optional; local run without Docker is the default
   db/
     schema.sql              # M1
-    seed.sql                # M1, idempotent
+    seed.sql                # M1, idempotent, never TRUNCATEs
+    demo.sql                # M1, fixed UUIDs, written at T+1.5 not at the end
   api/                      # Python, uv
     main.py                 # M1
     db.py                   # M1
@@ -108,7 +102,7 @@ AURA/
       compliance.py         # M5
       lessons.py            # M5
       research.py           # M5
-      leads.py              # M5 Phase 3
+      leads.py              # do not create in 6–8h
     prompts/content/        # M4
     prompts/compliance/     # M5
     rules/banned_terms.yaml # M5

@@ -2,7 +2,7 @@
 
 You are the only person who edits shared files. You write **no marketing-agent logic**. You make it possible for the other four to work in parallel and for the demo to boot from `main`.
 
-If anyone is stuck past 45 minutes, you drop new work and unblock them. A working vertical slice beats a fourth platform.
+**Time: 6–8 hours.** Foundation in **90 minutes** including `demo.sql`. Skip LangGraph, deploy, localize, competitors. If anyone is stuck past 20 minutes, you sit with them.
 
 ## Read these first
 
@@ -18,7 +18,9 @@ If anyone is stuck past 45 minutes, you drop new work and unblock them. A workin
 
 `feat/m1-platform`
 
-Hour 0 you may commit the skeleton straight to `main` so others can clone. After T+3, use the branch + PRs like everyone else.
+Hour 0 you may commit the skeleton straight to `main` so others can clone. After **T+1.5h**, use the branch + PRs like everyone else. Merge PRs the minute they are green enough to boot.
+
+You have **6–8 hours total**. `db/demo.sql` is part of foundation, not a last-hour task. Skip LangGraph — `run_pipeline` only. Skip deploy.
 
 ## Files you own
 
@@ -70,9 +72,11 @@ If those files are missing, import `_stubs.py`. Do not write the real agent.
 
 ---
 
-## Phase 0 (T+0–T+3) — you work alone
+## Phase 0 (T+0–T+1.5) — you work alone on *shared* files; others code mocks in parallel
 
-### Task 0.1 — GitHub repo
+Ninety minutes for all six tasks below is the tightest window in the sprint, and four people are blocked behind it. Run **two Cursor agents at once** — the file sets are disjoint, so they will not collide: one on `db/` + `api/` (Prompts A and E), one on the `web/` clone, cleanup, nav, and typed client (Prompt D). Do the Supabase project by hand while they work. Ship `db/` and `web/src/lib/api/` first; those two unblock the most people.
+
+### Task 0.1 — GitHub repo [DONE]
 
 - New repo `AURA` (or the name the team already uses).
 - Add the other four as write collaborators.
@@ -83,7 +87,7 @@ If those files are missing, import `_stubs.py`. Do not write the real agent.
 ### Task 0.2 — Supabase
 
 - One free project `aura`.
-- Apply `db/schema.sql` then `db/seed.sql` (you write both from [03-CONTRACTS.md](../03-CONTRACTS.md)).
+- Apply `db/schema.sql` then `db/seed.sql` **and `db/demo.sql`** (FAIL Instagram + DoctorShield approved post + one lesson). Demo data is required at T+1.5, not at freeze.
 - Share `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` in the team secret place.
 
 **Done when:** SQL editor `select * from brands;` returns 3 rows.
@@ -96,7 +100,7 @@ Then:
 
 - Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `web/.env.local` and document it in `.env.example`.
 - Edit nav to the routes listed in contracts §8.
-- Placeholder `page.tsx` files ("Team Member 2/3 will build this") are allowed **only in Hour 0 on `main`, before anyone else branches**. After T+3, do not touch those route files again — M2/M3 own them. If you skip placeholders, a 404 until they merge is fine.
+- Placeholder `page.tsx` files ("Team Member 2/3 will build this") are allowed **only in the first 90 minutes on `main`, before anyone else branches**. After T+1.5h, do not touch those route files again — M2/M3 own them. If you skip placeholders, a 404 until they merge is fine.
 
 **Done when:** `bun run dev` shows the AURA sidebar. Clerk sign-in is gone.
 
@@ -112,11 +116,9 @@ pydantic-settings
 psycopg[binary]
 httpx
 python-dotenv
-langgraph
-langchain-google-genai   # only if graph needs it; prefer M4/M5 own the Gemini client
 ```
 
-M4/M5 should own Gemini calls. `graph.py` does not call Gemini.
+Do **not** add langgraph. M4/M5 own Gemini. `graph.py` does not call Gemini.
 
 Files:
 
@@ -126,7 +128,9 @@ Files:
 - `routes/*.py` — one router per resource
 - `_stubs.py` — mock `generate_content`, `check_compliance`, `get_relevant_lessons`, `record_lesson`, `scan_competitor`
 
-**Done when:** Swagger at `http://localhost:8000/docs` lists every endpoint in contracts §6. `GET /api/brands` hits the real DB.
+**Done when:** Swagger at `http://localhost:8000/docs` lists every endpoint in contracts §6 and `GET /api/brands` hits the real DB.
+
+Only these eleven need a real body in Hour 0 — `health`, `brands`, `brands/{id}`, `POST campaigns`, `GET campaigns/{id}`, `GET assets`, `GET assets/{id}`, `approve`, `reject`, `lessons`, `metrics`. Declare the rest (competitors scan, regenerate, localize, leads) and `raise HTTPException(501, "not in this sprint")` so the shape is visible without costing you time.
 
 ### Task 0.5 — Typed frontend client
 
@@ -146,11 +150,11 @@ your branch names are in docs/04-WORKFLOW-RULES.md
 
 ---
 
-## Phase 1 (T+3–T+12)
+## Must (T+1.5–T+5)
 
-### Task 1.1 — `POST /api/campaigns` + `graph.py`
+### Task 1.1 — `POST /api/campaigns` + `run_pipeline` in `graph.py`
 
-Linear LangGraph (or even a plain async function if LangGraph fights you — a function named `run_pipeline(campaign_id)` is acceptable; do not burn 3 hours on graph APIs):
+**Do not use LangGraph.** A function named `run_pipeline(campaign_id)` is the whole orchestrator.
 
 ```text
 running → lessons + optional research → generate_content → for each asset check_compliance → insert rows → completed
@@ -180,40 +184,25 @@ except ImportError:
 
 Reject **must** call `record_lesson(...)`. If `_stubs.record_lesson` is a no-op, that is fine until M5 lands.
 
-**Acceptance:** rejecting the seeded FAIL Instagram row sets `rejected`, inserts `reviews`, and does not 500.
+Pass `note or reason_tag` — never `None`. `lessons.note` is `NOT NULL` and M2's note field is optional, so an empty textarea would otherwise 500 on the demo's biggest click.
+
+**Acceptance:** rejecting the seeded FAIL Instagram row **with an empty note** sets `rejected`, inserts `reviews`, inserts a lesson, and does not 500.
 
 ### Task 1.3 — Merge hygiene
 
-Merge M2–M5 PRs at T+6 even if incomplete, as long as `main` boots.
+Merge M2–M5 PRs at **T+3** even if incomplete, as long as `main` boots.
 
----
+Write `GET /api/metrics` yourself with simple SQL. Do not wait for M5. Guard every denominator — an empty DB must return zeros with a 200, or M3's Insights page is a white screen from T+3 until someone rejects something.
 
-## Phase 2 (T+18–T+30)
+`db/demo.sql` should already exist from Phase 0. If not, write it **before** T+3 so M2 has the FAIL row.
 
-### Task 2.1 — regenerate + localize endpoints
+## If time (only after T+5 slice works, 8h track)
 
-- `regenerate`: load asset + brand, `get_relevant_lessons`, call `generate_content` for **that platform only**, compliance, insert **new** row (do not overwrite the rejected one).
-- `localize`: call `localize(...)`, compliance, insert new row with new `language` and `variant` like `loc-ms`.
+Regenerate endpoint (`POST /api/assets/{id}/regenerate`). No localize. No deploy. No competitors scan.
 
-### Task 2.2 — `GET /api/metrics`
+## Freeze
 
-If M5 ships SQL, call it. If not, you write a simple SQL aggregation so M3's charts have numbers. Prefer M5 — if they are behind, you do the SQL in `routes/metrics.py` (this is allowed; it is your route file).
-
-### Task 2.3 — `db/demo.sql`
-
-See [06-DEMO-SCRIPT.md](../06-DEMO-SCRIPT.md). Must be re-runnable.
-
----
-
-## Phase 3 (only if `main` slice is solid)
-
-Pick: deploy (Vercel + Render/Fly) **or** help M4/M5. Do not start Postiz.
-
----
-
-## Phase 4
-
-You run the demo. Three rehearsals. Screenshots if Wi-Fi dies.
+You run the demo. Two rehearsals. Screenshots of Studio, Review FAIL, Brands, Insights.
 
 ---
 
@@ -225,10 +214,8 @@ async def run_pipeline(campaign_id: str) -> None:
     campaign = load_campaign(campaign_id)
     set_status(campaign_id, "running")
     try:
-        lessons: list[str] = []
-        for p in campaign.platforms:
-            lessons.extend(get_relevant_lessons(campaign.brand_id, p))
-        research = None  # optional scan_competitor
+        lessons = get_relevant_lessons(campaign.brand_id, "linkedin")
+        research = None  # skip competitor scan in this sprint
         req = ContentRequest(
             brand_id=campaign.brand_id,
             topic=campaign.topic,
@@ -271,7 +258,7 @@ Do:
 6. Root .env.example.
 7. Optional Hour-0 only: placeholder page.tsx under dashboard routes. After that, never edit M2/M3 folders.
 
-Do not: implement real Gemini, edit feature UI folders after T+3, add Clerk, add Redis.
+Do not: implement real Gemini in this session, edit M2/M3 folders after T+1.5h, add Clerk, add Redis, add LangGraph.
 
 AURA_MOCK_AGENTS=true should make graph.py (or run_pipeline) use stubs.
 
@@ -323,12 +310,13 @@ Do not edit any file under web/src/features.
 ### Prompt E — demo seed
 
 ```text
-Create db/demo.sql that is re-runnable and plants the backup data in docs/06-DEMO-SCRIPT.md:
-- Jade Instagram pending/compliance_failed with body containing "Guaranteed protection"
-- matching compliance_checks FAIL HIGH CLAIM_001
-- one lessons row TOO_SALESY for jade
-- one approved DoctorShield LinkedIn educational post
-Do not truncate brands. Use fixed UUIDs so we can re-run the script.
+Create db/demo.sql in the same session as schema/seed (see docs/06-DEMO-SCRIPT.md). Do not leave it for later.
+
+Plant: the Jade Instagram compliance_failed row whose body contains "Guaranteed protection for your jewellery business", its FAIL / HIGH / CLAIM_001 compliance_checks row, one Jade lesson, one approved DoctorShield LinkedIn post, and two reviews so metrics are not all zero.
+
+Use hardcoded UUID literals for every id, and start the file by deleting those exact ids. Re-running demo.sql must be safe and must not change the asset URL. Never TRUNCATE.
+
+Stay in db/. Do not touch api/ or web/ in this session.
 ```
 
 ---

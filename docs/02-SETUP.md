@@ -62,7 +62,7 @@ API_HOST=0.0.0.0
 API_PORT=8000
 ```
 
-`AURA_MOCK_AGENTS=true` means `graph.py` returns seeded fake assets without calling Gemini. Flip to `false` when M4/M5 functions work.
+`AURA_MOCK_AGENTS=true` means no Gemini call happens anywhere. Two places honour it and that is deliberate: `graph.py` imports from `agents/_stubs.py` when the flag is on, and M4/M5's real functions also check it internally so they stay safe if M1 calls them directly. Flip to `false` once M4/M5 work; flip it back the instant Gemini 429s during the demo.
 
 Frontend `web/.env.local`:
 
@@ -106,14 +106,20 @@ git clone https://github.com/Kiranism/next-shadcn-dashboard-starter.git web
 cd web
 rm -rf .git
 bun install
-bun run cleanup clerk sentry kanban chat ai-chat notifications billing workspaces exclusive
-# keep product + users + overview for copy-paste patterns; delete at T+40
+bun run cleanup clerk sentry kanban chat ai-chat notifications examples --force
+# keep product + users + overview for copy-paste patterns; do not delete during the 8h sprint
+rm -f AGENTS.md CLAUDE.md          # the starter ships its own; ours must win
 cp env.example.txt .env.local
 # set NEXT_PUBLIC_API_URL=http://localhost:8000
+bun install
 bun run dev
 ```
 
-If the cleanup script's feature names differ, run `bun run cleanup --list` and remove everything that is Clerk, Sentry, billing, kanban, chat. Keep `overview`, `product`, `users`.
+Those seven are the **only** valid feature names (verified against `scripts/cleanup.js`). `billing`, `workspaces`, `exclusive`, and `profile` are folders *inside* the `clerk` feature — passing them separately just prints "Unknown feature" and moves on. If the names ever change, run `bun run cleanup --list`.
+
+Deleting the starter's `AGENTS.md` / `CLAUDE.md` matters: they land at `web/AGENTS.md`, Cursor auto-applies them to everything under `web/`, and they tell your agent to use Clerk and Sentry. Keep the notes elsewhere if you want them, just not at `web/`.
+
+**Timebox: 25 minutes.** If Clerk removal leaves the app broken past that, stop cleaning and move on — a dead `/dashboard/profile` route costs nothing because it is not in the nav.
 
 Then commit `web/` from the repo root (the inner `.git` was deleted, so it is just files).
 
@@ -123,9 +129,13 @@ Then commit `web/` from the repo root (the inner `.git` was deleted, so it is ju
 2. Project Settings → Database → copy URI. Use the **transaction** pooler or the direct URI; if `uv` / psycopg has SSL issues see troubleshooting.
 3. SQL Editor → paste `db/schema.sql` → run.
 4. SQL Editor → paste `db/seed.sql` → run.
-5. Put `DATABASE_URL` and service role key in the team secret store. Members copy into local `.env`.
+5. SQL Editor → paste `db/demo.sql` → run. **This is part of Hour 0**, not the last hour — M2 has nothing to build against until the FAIL row exists.
+6. Put `DATABASE_URL` and service role key in the team secret store. Members copy into local `.env`.
 
-To reset demo data later: re-run `seed.sql` (it is written to be idempotent: `ON CONFLICT` / `TRUNCATE ... CASCADE` only on seed tables as documented in that file).
+Resetting mid-sprint has to be safe, because the demo fallback is "re-run seed then demo":
+
+- `seed.sql` only ever uses `insert ... on conflict do nothing`. **No `TRUNCATE`, no `DELETE`** — truncating `brands` cascades into every asset and review the team has created.
+- `demo.sql` hardcodes its primary keys as fixed UUIDs and starts by deleting *those ids only*, so it is re-runnable and the demo asset URL never changes between rehearsal and performance.
 
 ## How a member verifies "I am unblocked"
 

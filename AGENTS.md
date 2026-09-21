@@ -4,7 +4,7 @@ This file is for AI coding agents (Cursor, Claude Code, Copilot, etc.) working i
 
 ## What this project is
 
-AURA is a hackathon marketing dashboard. It is **not a chatbot**. The pipeline is:
+AURA is a **6–8 hour** hackathon marketing dashboard. It is **not a chatbot**. The pipeline is:
 
 ```
 research → generate content → compliance check → human review → learn from corrections
@@ -22,7 +22,7 @@ Differentiator: **Compliance + Human Review + Feedback Learning**. Not "we gener
 
 | Who | Writes only these paths | Branch |
 |---|---|---|
-| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/pyproject.toml`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx` (nav only), `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
+| Team Member 1 | `db/**`, `api/main.py`, `api/db.py`, `api/schemas.py`, `api/graph.py`, `api/routes/**`, `api/agents/_stubs.py`, `api/pyproject.toml`, `api/uv.lock`, `web/src/lib/api/**`, `web/src/config/nav-config.ts`, `web/src/app/dashboard/layout.tsx` (nav only), `docker-compose.yml`, `.env.example`, `README.md` | `feat/m1-platform` |
 | Team Member 2 | `web/src/features/review/**`, `web/src/features/library/**`, `web/src/app/dashboard/review/**`, `web/src/app/dashboard/library/**`, `web/src/components/aura/m2/**` | `feat/m2-review-ui` |
 | Team Member 3 | `web/src/features/studio/**`, `web/src/features/brands/**`, `web/src/features/insights/**`, `web/src/features/competitors/**`, `web/src/features/leads/**`, `web/src/app/dashboard/studio/**`, `web/src/app/dashboard/brands/**`, `web/src/app/dashboard/insights/**`, `web/src/app/dashboard/competitors/**`, `web/src/app/dashboard/leads/**`, `web/src/components/aura/m3/**` | `feat/m3-studio-ui` |
 | Team Member 4 | `api/agents/content.py`, `api/agents/localize.py`, `api/prompts/content/**` | `feat/m4-content` |
@@ -55,11 +55,11 @@ If you need a new shared component, put it in `web/src/components/aura/m2/` or `
 
 ## What not to build
 
-- Do not add Clerk, Sentry, Redis, Kafka, Celery, MongoDB, or a second database.
-- Do not add authentication for the hackathon unless M1 explicitly asks.
-- Do not fork or copy Postiz source (AGPL). Do not vendor Crawl4AI unless M5 has spare time in Phase 3.
+- Do not add Clerk, Sentry, Redis, Kafka, Celery, Mongo, Docker, or a second database.
+- Do not fork or copy Postiz source (AGPL). Do not vendor Crawl4AI. Do not add FFmpeg, leads, localization, X, blog, or reels.
 - Do not turn this into a chat UI. There is no "talk to the agent" page.
-- Do not generate cinematic AI video. Reel fallback is script + audio + stills.
+- Do not introduce LangGraph APIs. `graph.py` is a plain `run_pipeline` function.
+- We have 6–8 hours. If the human asks for a stretch feature, remind them it is out of scope per docs/05-TIMELINE.md.
 
 ## When you are stuck
 

@@ -1,14 +1,16 @@
 # Team Member 3 — Studio and Intelligence UI
 
-You own how a marketer **starts** work (Campaign Studio, Brands) and how they **see learning** (Insights, Competitors, Leads). You do not own the Review Queue.
+You own how a marketer **starts** work (Campaign Studio, Brands) and how they **see learning** (Insights). You do not own the Review Queue.
 
 You do not call Gemini. You do not edit Python. You consume `web/src/lib/api`.
+
+**Time: 6–8 hours. Must = Studio + Brands + Insights numbers. Do not build Competitors or Leads.**
 
 ## Read these first
 
 1. [../00-START-HERE.md](../00-START-HERE.md)
 2. [../02-SETUP.md](../02-SETUP.md)
-3. [../03-CONTRACTS.md](../03-CONTRACTS.md) — `CampaignCreate`, `Brand`, `Metrics`, `Lesson`, `Lead`
+3. [../03-CONTRACTS.md](../03-CONTRACTS.md) — `CampaignCreate`, `Brand`, `Metrics`, `Lesson`
 4. [../04-WORKFLOW-RULES.md](../04-WORKFLOW-RULES.md)
 5. [../../AGENTS.md](../../AGENTS.md)
 
@@ -18,7 +20,7 @@ Skim Concept.md §20–21 for the sidebar names and the four metrics. Specs in `
 
 `feat/m3-studio-ui`
 
-Wait for "contracts are in main". Until then: install, run, read.
+Start immediately. Use mock brands from contracts if `getBrands` is not live yet.
 
 ## Files you own
 
@@ -26,15 +28,13 @@ Wait for "contracts are in main". Until then: install, run, read.
 web/src/features/studio/**
 web/src/features/brands/**
 web/src/features/insights/**
-web/src/features/competitors/**
-web/src/features/leads/**
 web/src/app/dashboard/studio/**
 web/src/app/dashboard/brands/**
 web/src/app/dashboard/insights/**
-web/src/app/dashboard/competitors/**
-web/src/app/dashboard/leads/**
 web/src/components/aura/m3/**
 ```
+
+Do **not** create `competitors/` or `leads/` in this sprint.
 
 Copy form patterns from `web/src/features/products` create-product form. Copy chart patterns from `web/src/features/overview`.
 
@@ -65,8 +65,10 @@ Form fields (names match `CampaignCreate`):
 | `topic` | Text | e.g. Jewellery theft prevention |
 | `country` | Text or select | Malaysia, Singapore, Thailand, Indonesia, Hong Kong |
 | `goal` | Select | Awareness, Lead gen, Education, Product |
-| `platforms` | Multi-check | linkedin, instagram, x, blog, reel |
-| `language` | Select | en, ms, id, th, zh |
+| `platforms` | Multi-check | **linkedin only**, checked by default. Render instagram / x / blog / reel as `disabled` with the hint "next sprint" |
+| `language` | Select | **en only** for now; leave the other options out |
+
+Show the disabled platforms rather than hiding them — it reads as a roadmap instead of a gap, and it stops the speaker from submitting a campaign that generates nothing. M4 only writes LinkedIn this sprint, and `localize` is a stub, so an Instagram or Malay campaign would complete with zero assets and make the pipeline look broken.
 
 Submit → `createCampaign(body)`.
 
@@ -77,9 +79,7 @@ Then show a **run panel** for that campaign id:
 - On completed: `listAssets({ campaign_id })` and list them with links to `/dashboard/review/{id}` (M2's page — just an `<a>`, do not import M2 components)
 - On failed: show `campaign.error`
 
-Do not build a fake progress of 8 agents. Three states are enough: Running / Done / Failed.
-
-Phase 2: a "Localize this asset" is on M2; you may add a language field only on create.
+Do not build a fake progress of 8 agents. Three states are enough: Running / Done / Failed. Default platforms checkbox: **linkedin** only.
 
 ---
 
@@ -94,7 +94,7 @@ Each card:
 - Audience
 - Do / Don't lists
 
-Read-only for the hackathon. No edit form unless you have spare time in Phase 3 — and if you add PATCH `/api/brands/{id}`, that is a **contract change**: ask M1 first. Default is read-only.
+Read-only. No edit form.
 
 Demo uses this screen to prove Jade ≠ DoctorShield.
 
@@ -117,7 +117,7 @@ Two sections.
 | Assets total | `assets_total` | int |
 | Waiting on review | `assets_pending` | int |
 
-Use the starter's overview cards + one Recharts bar or line. If you only have a single snapshot (no history), show **big numbers**, not a fake time series. Do not invent history.
+Use the starter's overview **cards** if they are easy to copy. **Do not** add Recharts time series. Big numbers only.
 
 Caption under the numbers: **The system is learning from reviewer feedback.**
 
@@ -127,53 +127,30 @@ Caption under the numbers: **The system is learning from reviewer feedback.**
 
 ---
 
-## Screen spec — Competitors (`/dashboard/competitors`)
+## Screen spec — Competitors / Leads
 
-Phase 2.
-
-Table from `getCompetitors()`. Button **Scan** → `scanCompetitor(id)`. Show returned `change_summary` in a toast or a detail row.
-
-If scan is slow, disable the button and show "Scanning…".
-
----
-
-## Screen spec — Leads (`/dashboard/leads`)
-
-Phase 3. Table from `listLeads()`: name, url, country, fit_score, why. Sort by `fit_score` desc.
-
-If the API returns `[]`, empty state: "Lead agent not run yet." Do not mock fake companies in the frontend.
-
----
+**Do not build.** Out of scope. If nav still has those links, tell M1 to remove them.
 
 ## Optional overview (`/dashboard`)
 
-The starter overview may still show product metrics. If M1 left it, you **may** replace **only** `web/src/features/overview/**` if that folder is not in anyone's table.
-
-Check: overview is **not** listed as M2. It is also not listed as yours. **Do not edit it unless M1 assigns it.** Safer: leave the starter overview alone. Your Insights page is the real metrics surface.
+Leave the starter overview alone.
 
 ---
 
-## Phases
+## Must vs skip
 
-### Phase 1
+### Must (done by T+5)
 
 | Task | Acceptance |
 |---|---|
 | Studio form | Submit creates a campaign; run panel shows completed using mocks |
 | Asset list after run | Links to `/dashboard/review/{id}` work |
 | Brands cards | Three brands, tones visible |
+| Insights | Four rates + lessons table (zeros OK) |
 
-### Phase 2
+### Do not build
 
-| Task | Acceptance |
-|---|---|
-| Insights numbers | Four rates render from API (zeros are OK if no reviews yet) |
-| Lessons table | Rejected items from M2 appear after refresh |
-| Competitors | List + scan button |
-
-### Phase 3
-
-Leads table. Visual polish. Do not start a calendar.
+Competitors, Leads, calendar, Recharts history, brand edit form.
 
 ---
 
@@ -203,7 +180,9 @@ You are Team Member 3 for AURA. Read AGENTS.md and docs/03-CONTRACTS.md.
 
 Build Campaign Studio at web/src/app/dashboard/studio/page.tsx with implementation in web/src/features/studio/.
 
-Form fields matching CampaignCreate: brand_id (from getBrands), topic, country, goal, platforms (multi), language.
+Form fields matching CampaignCreate: brand_id (from getBrands), topic, country, goal, platforms, language.
+
+platforms: linkedin checked by default; instagram, x, blog, reel rendered but disabled with a "next sprint" hint. language: en only.
 
 Submit calls createCampaign. Then poll getCampaign(id) every 2s until completed or failed.
 
@@ -243,11 +222,7 @@ Import types from @/lib/api/types. Do not create parallel types.
 ### Prompt D — Competitors + Leads
 
 ```text
-Build competitors page: getCompetitors(), scanCompetitor(id) button, show change_summary.
-
-Build leads page: listLeads(), columns name, url, country, fit_score, why, sorted by fit_score desc. Empty state if [].
-
-Stay in web/src/features/competitors, leads, and matching app/dashboard routes. No Python. No review feature files.
+Do not run this prompt. Competitors and Leads are out of scope for the 6–8 hour sprint.
 ```
 
 ---

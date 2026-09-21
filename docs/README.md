@@ -9,7 +9,7 @@ Read [00-START-HERE.md](00-START-HERE.md) first.
 | [02-SETUP.md](02-SETUP.md) | Everyone |
 | [03-CONTRACTS.md](03-CONTRACTS.md) | Everyone — do not drift from this |
 | [04-WORKFLOW-RULES.md](04-WORKFLOW-RULES.md) | Everyone |
-| [05-TIMELINE.md](05-TIMELINE.md) | Everyone |
+| [05-TIMELINE.md](05-TIMELINE.md) | **6–8 hours.** Must / out of scope. |
 | [06-DEMO-SCRIPT.md](06-DEMO-SCRIPT.md) | M1 + whoever is speaking |
 | [troubleshooting.md](troubleshooting.md) | Everyone when stuck |
 | [members/TEAM-MEMBER-1.md](members/TEAM-MEMBER-1.md) | Platform lead |

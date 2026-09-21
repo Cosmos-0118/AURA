@@ -1,14 +1,14 @@
 # AURA
 
-AI-powered marketing department dashboard for the JA Assure hackathon: research → generate → compliance → human review → learn from corrections.
+AI-powered marketing department dashboard: generate → compliance → human review → learn from corrections.
 
-**This is not a chatbot.**
+**This is not a chatbot. The team has 6–8 hours — see [docs/05-TIMELINE.md](docs/05-TIMELINE.md).**
 
 ## Team: start here
 
 | You are | Open this |
 |---|---|
-| Anyone, first 30 minutes | [docs/00-START-HERE.md](docs/00-START-HERE.md) |
+| Anyone, first 15 minutes | [docs/00-START-HERE.md](docs/00-START-HERE.md) |
 | Your Cursor agent | [AGENTS.md](AGENTS.md) then your member doc |
 | Team Member 1 | [docs/members/TEAM-MEMBER-1.md](docs/members/TEAM-MEMBER-1.md) |
 | Team Member 2 | [docs/members/TEAM-MEMBER-2.md](docs/members/TEAM-MEMBER-2.md) |

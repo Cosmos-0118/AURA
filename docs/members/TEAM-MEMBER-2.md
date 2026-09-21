@@ -4,6 +4,8 @@ You own the screen the judges will remember: the **Review Queue**. A human sees 
 
 You do not call Gemini. You do not edit Python. You consume `web/src/lib/api`.
 
+**Time: 6–8 hours. Must = queue + detail + approve/reject. Do not build Library, Competitors, or polish.**
+
 ## Read these first
 
 1. [../00-START-HERE.md](../00-START-HERE.md)
@@ -16,17 +18,17 @@ You do not call Gemini. You do not edit Python. You consume `web/src/lib/api`.
 
 `feat/m2-review-ui`
 
-Wait for M1's "contracts are in main" before you write feature code. Until then: install bun, run the dashboard, read this file.
+Start **immediately** with `const MOCK_ASSET` copied from [03-CONTRACTS.md](../03-CONTRACTS.md) §10. When M1 merges `web/src/lib/api`, swap the mock for `listAssets` / `getAsset`. Do not sit idle.
 
 ## Files you own
 
 ```text
 web/src/features/review/**
-web/src/features/library/**
 web/src/app/dashboard/review/**
-web/src/app/dashboard/library/**
 web/src/components/aura/m2/**
 ```
+
+Do **not** create `library/` in this sprint.
 
 Copy **patterns** from the starter's product table (`web/src/features/products`) and users table. Do not copy product types.
 
@@ -34,7 +36,7 @@ Copy **patterns** from the starter's product table (`web/src/features/products`)
 
 ```text
 web/src/lib/api/**              (import only)
-web/src/config/nav-config.ts    (M1 already added Review + Library)
+web/src/config/nav-config.ts    (M1 already added Review; there is no Library link this sprint)
 web/src/components/ui/**        (import only)
 web/src/features/studio/**
 web/src/features/brands/**
@@ -100,7 +102,7 @@ Layout: two columns on desktop, stacked on mobile.
 
 Approve may send `{ edited_body }` if the textarea differs from original.
 
-Reject should require a `reason_tag`. Disable the button until one is chosen.
+Reject should require a `reason_tag`. Disable the button until one is chosen. The `note` stays optional — M1 falls back to the tag when it is empty, so do not add a second required field to the demo path.
 
 After success: toast, go back to the queue (the item should disappear).
 
@@ -108,40 +110,31 @@ Match the wireframe in Concept.md §20 — you do not need pixel-perfect, you ne
 
 ---
 
-## Screen spec — Library (`/dashboard/library`)
+## Screen spec — Library
 
-Same table component, different default filters: tabs **Approved** | **Rejected** | **All**.
-
-Row opens a read-only detail (reuse the left+right layout, hide action buttons or show "Already {status}").
-
-Phase 2: show latest lesson note if you want — not required. Prefer linking nowhere; keep it simple.
+**Skip.** Out of scope for 6–8 hours. Approved items can stay filterable later; the demo never opens Library.
 
 ---
 
-## Phases
+## Must vs skip
 
-### Phase 1 (T+3–T+12) — must have
+### Must (done by T+5)
 
 | Task | Acceptance |
 |---|---|
 | Queue table | Seeded FAIL Instagram appears without running a campaign |
 | Detail page | Body + compliance issues + suggested_revision visible |
 | Approve | Status becomes approved; item leaves queue |
-| Reject + tag + note | Item leaves queue; no 500 |
+| Reject + tag + note | Item leaves queue; no 500. Tag is required. |
 | Loading and error | Failed fetch shows retry, not a white screen |
 
-### Phase 2
+### If time (8h track, after Must)
 
-| Task | Acceptance |
-|---|---|
-| Edit in place then approve | PATCH or approve with `edited_body` |
-| Regenerate button | New asset shows up in queue |
-| Library page | Approved/rejected tabs work |
-| Highlight flagged span | If `issues[0].text` is a substring of `body`, mark it (simple `<mark>`, not a fancy editor) |
+Edit-in-place then approve, or a Regenerate button, or `<mark>` on flagged text. Pick **one**.
 
-### Phase 3
+### Do not build
 
-Polish only: keyboard shortcut for approve, badge counts on the sidebar (sidebar is M1 — ask them to read `assets_pending` from metrics if you want a number). You may pass the count via the review page title `Review Queue (12)` using `getMetrics().assets_pending`.
+Library page, keyboard shortcuts, sidebar badge wiring, carousel designer, chat.
 
 ---
 
@@ -208,16 +201,10 @@ Only edit files under web/src/features/review, web/src/app/dashboard/review, web
 ### Prompt C — library
 
 ```text
-Add Content Library under web/src/features/library and web/src/app/dashboard/library/page.tsx.
-
-Tabs: Approved (status=approved), Rejected (status=rejected), All (no status).
-
-Reuse the review table columns. Detail can be a sheet or /dashboard/library/[id] read-only (no approve buttons).
-
-Import only from @/lib/api. Do not touch M3 folders or api/.
+Do not run this prompt. Library is out of scope for the 6–8 hour sprint.
 ```
 
-### Prompt D — regenerate
+### Prompt D — regenerate (only if Must is done and you have 8 hours)
 
 ```text
 On the review detail page add a Regenerate button that calls regenerateAsset(id) from @/lib/api/client.
@@ -233,7 +220,7 @@ Stay in M2 folders.
 
 ## How you combine with others
 
-- M1's client already exists. If `listAssets` is missing, you are before T+3 — wait.
+- M1's client already exists. If `listAssets` is missing, keep `MOCK_ASSET` until T+1.5.
 - M3's Studio is what fills the queue. You can develop against seed/demo rows without them.
 - You never import M3 feature code.
 
