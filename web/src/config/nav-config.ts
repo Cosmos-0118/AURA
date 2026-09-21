@@ -1,9 +1,9 @@
 import { NavGroup } from '@/types';
 
-/** AURA's four demo screens plus the starter overview route. */
+/** AURA — AI Marketing Operations Desk Navigation */
 export const navGroups: NavGroup[] = [
   {
-    label: 'AURA',
+    label: 'OPERATIONS',
     items: [
       {
         title: 'Overview',
@@ -22,8 +22,33 @@ export const navGroups: NavGroup[] = [
         title: 'Review Queue',
         url: '/dashboard/review',
         icon: 'checks',
+        label: '8',
         items: []
       },
+      {
+        title: 'Research',
+        url: '/dashboard/research',
+        icon: 'search',
+        items: []
+      },
+      {
+        title: 'Leads',
+        url: '/dashboard/leads',
+        icon: 'teams',
+        label: '34',
+        items: []
+      },
+      {
+        title: 'Content Library',
+        url: '/dashboard/content',
+        icon: 'galleryVerticalEnd',
+        items: []
+      }
+    ]
+  },
+  {
+    label: 'INTELLIGENCE & DELIVERY',
+    items: [
       {
         title: 'Brands',
         url: '/dashboard/brands',
@@ -31,9 +56,21 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Insights',
+        title: 'Learning & Insights',
         url: '/dashboard/insights',
         icon: 'trendingUp',
+        items: []
+      },
+      {
+        title: 'Publishing',
+        url: '/dashboard/publishing',
+        icon: 'send',
+        items: []
+      },
+      {
+        title: 'Settings',
+        url: '/dashboard/settings',
+        icon: 'settings',
         items: []
       }
     ]

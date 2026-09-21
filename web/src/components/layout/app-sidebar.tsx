@@ -4,7 +4,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger
@@ -28,14 +27,13 @@ import { navGroups } from '@/config/nav-config';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 import { Icons } from '@/components/icons';
 
 export default function AppSidebar() {
   const pathname = usePathname();
   const { isOpen } = useMediaQuery();
-  const router = useRouter();
   const filteredGroups = useFilteredNavGroups(navGroups);
 
   React.useEffect(() => {
@@ -44,11 +42,28 @@ export default function AppSidebar() {
 
   return (
     <Sidebar collapsible='icon'>
-      <SidebarHeader />
+      <SidebarHeader className='border-b px-4 py-3'>
+        <div className='flex items-center gap-3'>
+          <div className='flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-background font-bold tracking-tight text-sm shadow-sm'>
+            A
+          </div>
+          <div className='flex flex-col min-w-0'>
+            <div className='flex items-center gap-1.5'>
+              <span className='font-bold text-sm tracking-wide text-foreground'>AURA</span>
+              <span className='rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400'>
+                OPS DESK
+              </span>
+            </div>
+            <span className='text-[10px] text-muted-foreground truncate'>
+              AI Marketing Operations
+            </span>
+          </div>
+        </div>
+      </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
         {filteredGroups.map((group) => (
-          <SidebarGroup key={group.label || 'ungrouped'} className='py-0'>
-            {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
+          <SidebarGroup key={group.label || 'ungrouped'} className='py-1'>
+            {group.label && <SidebarGroupLabel className='text-[10px] tracking-wider text-muted-foreground/80 font-semibold'>{group.label}</SidebarGroupLabel>}
             <SidebarMenu>
               {group.items.map((item) => {
                 const Icon = item.icon ? Icons[item.icon] : Icons.logo;
@@ -67,8 +82,13 @@ export default function AppSidebar() {
                         />
                       }
                     >
-                      {item.icon && <Icon />}
-                      <span>{item.title}</span>
+                      {item.icon && <Icon className='size-4' />}
+                      <span className='text-sm'>{item.title}</span>
+                      {item.label && (
+                        <span className='ml-auto mr-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary'>
+                          {item.label}
+                        </span>
+                      )}
                       <Icons.chevronRight className='ml-auto transition-transform duration-200 group-data-panel-open/collapsible:rotate-90' />
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -93,8 +113,13 @@ export default function AppSidebar() {
                       tooltip={item.title}
                       isActive={pathname === item.url}
                     >
-                      <Icon />
-                      <span>{item.title}</span>
+                      <Icon className='size-4' />
+                      <span className='text-sm'>{item.title}</span>
+                      {item.label && (
+                        <span className='ml-auto rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary'>
+                          {item.label}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
