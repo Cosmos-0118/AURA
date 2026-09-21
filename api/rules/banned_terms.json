@@ -1,0 +1,27 @@
+[
+  {
+    "rule_id": "CLAIM_001",
+    "terms": ["guaranteed"],
+    "reason": "Absolute protection or outcome claims need policy qualifiers."
+  },
+  {
+    "rule_id": "CLAIM_002",
+    "terms": ["100% covered"],
+    "reason": "Coverage cannot be stated as absolute without policy qualifiers."
+  },
+  {
+    "rule_id": "CLAIM_003",
+    "terms": ["zero risk"],
+    "reason": "Risk cannot be stated as zero in marketing copy."
+  },
+  {
+    "rule_id": "CLAIM_004",
+    "terms": ["always covered"],
+    "reason": "Coverage depends on eligibility, policy terms, conditions, and exclusions."
+  },
+  {
+    "rule_id": "CLAIM_005",
+    "terms": ["claim guaranteed"],
+    "reason": "Claims are assessed under the applicable policy terms."
+  }
+]
