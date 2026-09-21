@@ -1,5 +1,7 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .routes import assets, brands, campaigns, competitors, leads, lessons, metrics
@@ -15,6 +17,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure storage directory exists and mount as static files
+storage_path = Path(__file__).resolve().parent.parent / "storage"
+storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+
 
 @app.get("/api/health", tags=["health"])
 def health() -> dict[str, bool]:
@@ -28,3 +35,4 @@ app.include_router(assets.router)
 app.include_router(lessons.router)
 app.include_router(leads.router)
 app.include_router(metrics.router)
+

@@ -174,3 +174,62 @@ class Metrics(BaseModel):
     compliance_failure_rate: float
     assets_total: int
     assets_pending: int
+
+
+# --- Studio Campaign Extended Models ---
+
+
+class StudioCampaignCreate(BaseModel):
+    brand_id: BrandId
+    objective: str = "Awareness"
+    language: Language = "en"
+    thesis: str
+    target_audience: str | None = None
+    platforms: list[Platform] = Field(default_factory=lambda: ["linkedin", "instagram", "x", "reel", "blog"])
+
+
+class CampaignPlatformContentItem(BaseModel):
+    id: str
+    campaign_id: str
+    platform: Platform
+    title: str | None = None
+    content: str
+    hashtags: list[str] = Field(default_factory=list)
+    script: str | None = None
+    visual_concept: str | None = None
+    generation_prompt: str | None = None
+
+
+class CampaignMediaItem(BaseModel):
+    id: str
+    campaign_id: str
+    media_type: str  # "image" | "video"
+    prompt: str
+    local_path: str | None = None
+    provider: str = "local"
+    model: str
+    status: str = "pending"
+
+
+class StudioCampaignDetail(BaseModel):
+    id: str
+    brand_id: BrandId
+    objective: str
+    language: Language
+    thesis: str
+    target_audience: str | None = None
+    platforms: list[Platform]
+    status: str
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+    media: list[CampaignMediaItem] = Field(default_factory=list)
+    image_prompt: str | None = None
+    video_prompt: str | None = None
+
+
+class MediaGenerateRequest(BaseModel):
+    prompt: str | None = None
+    model: str | None = None
+

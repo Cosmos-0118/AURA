@@ -143,3 +143,61 @@ export type Metrics = {
   assets_total: number;
   assets_pending: number;
 };
+
+export type StudioCampaignCreate = {
+  brand_id: BrandId;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string;
+  platforms: Platform[];
+};
+
+export type CampaignPlatformContentItem = {
+  id: string;
+  campaign_id: string;
+  platform: Platform;
+  title?: string | null;
+  content: string;
+  hashtags: string[];
+  script?: string | null;
+  visual_concept?: string | null;
+  generation_prompt?: string | null;
+};
+
+export type CampaignMediaItem = {
+  id: string;
+  campaign_id: string;
+  media_type: "image" | "video";
+  prompt: string;
+  local_path?: string | null;
+  provider: string;
+  model: string;
+  status: string;
+};
+
+export type StudioCampaignDetail = {
+  id: string;
+  brand_id: BrandId;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string | null;
+  platforms: Platform[];
+  status: string;
+  error?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  contents: CampaignPlatformContentItem[];
+  media: CampaignMediaItem[];
+  image_prompt?: string | null;
+  video_prompt?: string | null;
+};
+
+export type OperationalModeInfo = {
+  demo_mode: boolean;
+  groq_model: string;
+  image_model: string;
+  video_model: string;
+};
+

@@ -4,26 +4,25 @@ import type {
   BrandId,
   Campaign,
   CampaignCreate,
+  CampaignMediaItem,
   Competitor,
   Language,
   Lead,
   Lesson,
   Metrics,
+  OperationalModeInfo,
   ReviewAction,
-  Snapshot
+  Snapshot,
+  StudioCampaignCreate,
+  StudioCampaignDetail
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
 import { COMPETITOR_INTEL } from '../demo/research';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== 'false';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (IS_DEMO_MODE) {
-    throw new Error('DEMO_MODE_ACTIVE');
-  }
-
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -36,12 +35,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const error = await response.json().catch(() => null);
     throw new Error(error?.detail ?? `AURA API request failed (${response.status})`);
   }
-  return response.json() as Promise<T>;
+  return (await response.json()) as T;
 }
+
 
 function jsonBody(body: unknown): RequestInit {
   return { method: 'POST', body: JSON.stringify(body) };
 }
+
 
 export async function getBrands(): Promise<Brand[]> {
   try {
@@ -315,3 +316,58 @@ export async function getMetrics(): Promise<Metrics> {
     };
   }
 }
+
+// --- Studio Campaign Flow API ---
+
+export async function getOperationalMode(): Promise<OperationalModeInfo> {
+  try {
+    return await request<OperationalModeInfo>('/api/campaigns/mode');
+  } catch {
+    return {
+      demo_mode: true,
+      groq_model: 'llama-3.3-70b-versatile',
+      image_model: 'fal-ai/flux/schnell',
+      video_model: 'minimax/h3-max-turbo'
+    };
+  }
+}
+
+export async function generateStudioCampaign(
+  body: StudioCampaignCreate
+): Promise<StudioCampaignDetail> {
+  return await request<StudioCampaignDetail>('/api/campaigns/studio/generate', jsonBody(body));
+}
+
+export async function getStudioCampaign(id: string): Promise<StudioCampaignDetail> {
+  return await request<StudioCampaignDetail>(`/api/campaigns/${encodeURIComponent(id)}/studio`);
+}
+
+export async function generateCampaignImage(
+  id: string,
+  prompt?: string,
+  model?: string
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/generate-image`,
+    jsonBody({ prompt, model })
+  );
+}
+
+export async function generateCampaignVideo(
+  id: string,
+  prompt?: string,
+  model?: string
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/generate-video`,
+    jsonBody({ prompt, model })
+  );
+}
+
+export async function submitCampaignForReview(id: string): Promise<StudioCampaignDetail> {
+  return await request<StudioCampaignDetail>(
+    `/api/campaigns/${encodeURIComponent(id)}/submit-review`,
+    { method: 'POST' }
+  );
+}
+

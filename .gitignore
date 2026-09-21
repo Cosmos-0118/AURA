@@ -17,3 +17,7 @@ __pycache__/
 .idea/
 .vscode/
 /.aura/
+
+# Local media storage & SQLite database
+/storage/*.db
+/storage/campaigns/

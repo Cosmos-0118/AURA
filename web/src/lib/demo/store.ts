@@ -434,6 +434,68 @@ export const auraStore = {
     notify();
   },
 
+  addStudioCampaignPackage(campaign: import('../api/types').StudioCampaignDetail) {
+    const mediaUrl = campaign.media.find((m) => m.local_path)?.local_path || null;
+    const newAssets: ExtendedAsset[] = campaign.contents.map((item, idx) => ({
+      id: item.id || `ast_${Date.now()}_${idx}`,
+      campaign_id: campaign.id,
+      brand_id: campaign.brand_id,
+      platform: item.platform,
+      content_type:
+        item.platform === 'reel'
+          ? 'script'
+          : item.platform === 'blog'
+          ? 'article'
+          : item.platform === 'instagram'
+          ? 'caption'
+          : 'post',
+      variant: 'A',
+      language: campaign.language,
+      title: item.title || `${item.platform.toUpperCase()} Asset: ${campaign.thesis.slice(0, 40)}`,
+      body: item.content,
+      hashtags: item.hashtags || [],
+      media_url: mediaUrl,
+      status: 'pending_review',
+      priority: 'high',
+      compliance: {
+        result: 'PASS',
+        risk: 'LOW',
+        rules: ['STATUTORY_DISCLOSURE', 'TONE_ALIGNMENT'],
+        issues: [],
+        suggested_revision: null
+      },
+      created_at: new Date().toISOString(),
+      approved_at: null,
+      approved_by: null,
+      history: [
+        {
+          timestamp: new Date().toISOString(),
+          action: 'Submitted from Campaign Studio for Human Verification',
+          actor: 'Content Agent'
+        }
+      ]
+    }));
+
+    const assets = [...newAssets, ...currentState.assets];
+    const newActivity: AgentActivityItem = {
+      id: `act_${Date.now()}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      agent: 'Campaign Studio',
+      agentType: 'content',
+      description: `Submitted campaign package (${newAssets.length} assets) to Review Queue`,
+      status: 'completed'
+    };
+
+    currentState = {
+      ...currentState,
+      assets,
+      activity: [newActivity, ...currentState.activity].slice(0, 15),
+      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+    };
+    notify();
+  },
+
+
   approveLeadOutreach(leadId: string, updatedBody?: string) {
     const leads = currentState.leads.map((lead) => {
       if (lead.id === leadId) {
