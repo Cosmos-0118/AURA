@@ -209,7 +209,7 @@ Give M1 this comment at the bottom of `lessons.py`. Do not create `metrics.py`.
 
 ```sql
 -- rejection_rate = rejected / (approved+rejected)
--- first_pass_approval = approved / (approved+rejected)
+-- lessons_count = count(*) from lessons
 -- compliance_failure_rate = assets with a FAIL check / all assets
 -- avg_edits_per_post = reviews where edited_body is not null / reviewed assets
 ```

@@ -363,7 +363,7 @@ class Lead(BaseModel):
 class Metrics(BaseModel):
     rejection_rate: float          # 0.0–1.0
     avg_edits_per_post: float
-    first_pass_approval: float     # 0.0–1.0
+    lessons_count: int             # rows in lessons — the "it learns" number
     compliance_failure_rate: float
     assets_total: int
     assets_pending: int
@@ -626,7 +626,7 @@ export type Lead = {
 export type Metrics = {
   rejection_rate: number;
   avg_edits_per_post: number;
-  first_pass_approval: number;
+  lessons_count: number;
   compliance_failure_rate: number;
   assets_total: number;
   assets_pending: number;

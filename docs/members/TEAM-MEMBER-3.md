@@ -112,7 +112,7 @@ Two sections.
 |---|---|---|
 | Rejection rate | `rejection_rate` | percent |
 | Avg human edits / post | `avg_edits_per_post` | 1 decimal |
-| First-pass approval | `first_pass_approval` | percent |
+| Lessons learned | `lessons_count` | int |
 | Compliance failure rate | `compliance_failure_rate` | percent |
 | Assets total | `assets_total` | int |
 | Waiting on review | `assets_pending` | int |
@@ -210,7 +210,7 @@ Read-only. Files only in web/src/features/brands and web/src/app/dashboard/brand
 ```text
 Build /dashboard/insights.
 
-Section 1: getMetrics() displayed as four stat cards (rejection_rate, avg_edits_per_post, first_pass_approval, compliance_failure_rate) formatted as specified in docs/members/TEAM-MEMBER-3.md. Also assets_total and assets_pending. Subtitle: "The system is learning from reviewer feedback." Do not fabricate time-series data.
+Section 1: getMetrics() displayed as four stat cards (rejection_rate, avg_edits_per_post, lessons_count, compliance_failure_rate) formatted as specified in docs/members/TEAM-MEMBER-3.md. Also assets_total and assets_pending. Subtitle: "The system is learning from reviewer feedback." Do not fabricate time-series data.
 
 Section 2: listLessons() table with brand_id, platform, reason_tag, note, created_at. Expandable original_body / edited_body.
 
