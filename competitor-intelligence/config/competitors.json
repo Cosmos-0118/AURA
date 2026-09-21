@@ -1,0 +1,29 @@
+[
+  {
+    "id": "jade-competitor-1",
+    "brand_id": "jade",
+    "name": "Chubb Singapore",
+    "niche": "jewellers block / jewellery insurance",
+    "countries": ["SG", "MY", "HK", "ID", "TH"],
+    "url": "https://www.chubb.com/sg-en/",
+    "priority": "high"
+  },
+  {
+    "id": "doctorshield-competitor-1",
+    "brand_id": "doctorshield",
+    "name": "MSIG Singapore",
+    "niche": "medical indemnity / malpractice insurance",
+    "countries": ["SG", "MY", "HK", "ID", "TH"],
+    "url": "https://www.msig.com.sg/",
+    "priority": "high"
+  },
+  {
+    "id": "jaguar-competitor-1",
+    "brand_id": "jaguar",
+    "name": "AIG Singapore",
+    "niche": "high-value goods / cargo and transit insurance",
+    "countries": ["SG", "MY", "HK", "ID", "TH"],
+    "url": "https://www.aig.sg/home",
+    "priority": "high"
+  }
+]

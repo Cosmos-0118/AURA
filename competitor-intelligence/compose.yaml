@@ -1,0 +1,44 @@
+services:
+  intelligence:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      INTEL_HOST: 0.0.0.0
+      INTEL_PORT: 8787
+      INTEL_DB_PATH: /app/data/intelligence.db
+      INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
+      SEARXNG_URL: ${SEARXNG_URL:-}
+    volumes:
+      - intelligence-data:/app/data
+      - ./config:/app/config:ro
+    depends_on:
+      - changedetection
+
+  changedetection:
+    image: dgtlmoon/changedetection.io:latest
+    ports:
+      - "5000:5000"
+    environment:
+      BASE_URL: http://localhost:5000
+    volumes:
+      - changedetection-data:/datastore
+
+  searxng:
+    image: searxng/searxng:latest
+    profiles: ["discovery"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - searxng-data:/etc/searxng
+
+  rsshub:
+    image: diygod/rsshub:latest
+    profiles: ["social"]
+    ports:
+      - "1200:1200"
+
+volumes:
+  intelligence-data:
+  changedetection-data:
+  searxng-data:
