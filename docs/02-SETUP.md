@@ -63,13 +63,14 @@ Choose one:
 - **Build only** — clean generated output, sync locked dependencies, typecheck,
   and build both applications.
 - **Build + run** — do the build, then start the API and production frontend.
-- **Just run** — start the API and Next.js development server without rebuilding.
+- **Just run** — start the API and existing production frontend without rebuilding.
 
 The equivalent direct commands are:
 
 ```bash
 ./scripts/build.sh
 ./scripts/aura.sh start
+./scripts/aura.sh dev
 ./scripts/up.sh
 ./scripts/stop.sh
 ```

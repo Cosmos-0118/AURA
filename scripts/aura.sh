@@ -177,11 +177,15 @@ build_stack() {
   log "Build completed"
 }
 
+ensure_production_build() {
+  [[ -f "$WEB_DIR/.next/BUILD_ID" ]] || fail "No frontend production build found. Choose 'Build + run' or run './scripts/build.sh' first."
+}
+
 wait_for_http() {
   local name="$1"
   local url="$2"
   for _ in {1..60}; do
-    if curl --silent --show-error --fail --max-time 2 "$url" >/dev/null 2>&1; then
+    if curl --silent --show-error --fail --max-time 10 "$url" >/dev/null 2>&1; then
       log "$name is ready at $url"
       return 0
     fi
@@ -194,6 +198,9 @@ start_processes() {
   local frontend_mode="$1"
   require_tools
   ensure_env
+  if [[ "$frontend_mode" == "production" ]]; then
+    ensure_production_build
+  fi
   ensure_layout
   stop_stack
   assert_ports_free
@@ -269,7 +276,8 @@ Usage: ./scripts/aura.sh <command>
 Commands:
   clean   Remove generated build output, Python caches, runner logs/PIDs, and local uv cache
   build   Clean generated output, install locked dependencies, typecheck, and build both apps
-  start   Start FastAPI and Next.js in development mode and keep both attached
+  start   Start FastAPI and the existing Next.js production build
+  dev     Start FastAPI and Next.js in development mode with hot reload
   up      Clean, build, then start FastAPI and Next.js in production mode
   stop    Stop only AURA processes recorded by this runner
 EOF
@@ -297,7 +305,7 @@ interactive_menu() {
       start_processes "production"
       ;;
     3)
-      start_processes "development"
+      start_processes "production"
       ;;
     q|Q|"")
       log "Nothing started"
@@ -322,6 +330,9 @@ main() {
       build_stack
       ;;
     start)
+      start_processes "production"
+      ;;
+    dev)
       start_processes "development"
       ;;
     up)

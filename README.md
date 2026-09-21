@@ -35,8 +35,11 @@ For direct commands:
 # clean generated output, install locked dependencies, typecheck, and build
 ./scripts/build.sh
 
-# start both apps in development mode without rebuilding
+# start both apps from the existing production build without rebuilding
 ./scripts/aura.sh start
+
+# start both apps in development mode with hot reload
+./scripts/aura.sh dev
 
 # clean, build, and start the production frontend plus API
 ./scripts/up.sh
