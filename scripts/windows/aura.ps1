@@ -27,16 +27,32 @@ $LocalUvCache  = Join-Path $RootDir ".aura\uv-cache"
 $LocalBunCache = Join-Path $RootDir ".aura\bun-cache"
 $AuraTmpDir    = Join-Path $RootDir ".aura\tmp"
 
+# ── PATH bootstrap (resolve uv and bun regardless of whether they are on the
+#    system PATH – add the standard per-user install locations first) ──────────
+$extraPaths = @(
+    "$env:USERPROFILE\.local\bin",   # uv default install location
+    "$env:USERPROFILE\.bun\bin",     # bun default install location
+    "$env:LOCALAPPDATA\uv\bin",      # uv alternate install on Windows
+    "$env:APPDATA\uv\bin"            # uv alternate install on Windows
+)
+foreach ($p in $extraPaths) {
+    if ($p -and (Test-Path $p) -and ($env:Path -notlike "*$p*")) {
+        $env:Path = "$p;$env:Path"
+    }
+}
+
 $ApiHost = if ($env:API_HOST) { $env:API_HOST } else { "127.0.0.1" }
 $ApiPort = if ($env:API_PORT) { $env:API_PORT } else { "8000" }
 $WebPort = if ($env:WEB_PORT) { $env:WEB_PORT } else { "3000" }
-$UvCacheDir = if ($env:UV_CACHE_DIR) { $env:UV_CACHE_DIR } else { $LocalUvCache }
-$BunCacheDir = if ($env:BUN_INSTALL_CACHE_DIR) { $env:BUN_INSTALL_CACHE_DIR } else { $LocalBunCache }
+$UvCacheDir  = if ($env:UV_CACHE_DIR)           { $env:UV_CACHE_DIR }           else { $LocalUvCache }
+$BunCacheDir = if ($env:BUN_INSTALL_CACHE_DIR)  { $env:BUN_INSTALL_CACHE_DIR }  else { $LocalBunCache }
 
 $ApiPidFile = Join-Path $RunDir "api.pid"
 $WebPidFile = Join-Path $RunDir "web.pid"
 $ApiLog     = Join-Path $LogDir "api.log"
+$ApiErrLog  = Join-Path $LogDir "api_err.log"
 $WebLog     = Join-Path $LogDir "web.log"
+$WebErrLog  = Join-Path $LogDir "web_err.log"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,8 +61,9 @@ function Log($msg) {
 }
 
 function Fail($msg) {
-    Write-Error "[aura] ERROR: $msg"
-    exit 1
+    # Use a terminating exception instead of exit 1, so that Pop-Location in
+    # finally blocks still runs before the script ends.
+    throw "[aura] ERROR: $msg"
 }
 
 function Require-Command($name) {
@@ -55,10 +72,21 @@ function Require-Command($name) {
     }
 }
 
+# Detect the best available JS package manager: bun > npm
+function Get-JsPackageManager {
+    if (Get-Command "bun" -ErrorAction SilentlyContinue) { return "bun" }
+    if (Get-Command "npm" -ErrorAction SilentlyContinue) { return "npm" }
+    Fail "No JavaScript package manager found. Install bun (https://bun.sh) or Node.js npm."
+}
+
 function Require-Tools {
     Require-Command "uv"
-    Require-Command "bun"
-    Require-Command "curl"
+    # At least one of bun or npm must be present
+    $null = Get-JsPackageManager
+    # curl.exe (native Windows, always present on Win10 1803+)
+    if (-not (Get-Command "curl.exe" -ErrorAction SilentlyContinue)) {
+        Fail "curl.exe not found. It ships with Windows 10 (1803+). Please update Windows or install curl manually."
+    }
 }
 
 function Ensure-Layout {
@@ -67,72 +95,72 @@ function Ensure-Layout {
 
 # ── PID / process management ────────────────────────────────────────────────
 
-function Read-Pid($pidFile) {
-    if (-not (Test-Path $pidFile)) { return $null }
-    $content = (Get-Content $pidFile -Raw).Trim()
+function Read-ProcId($procIdFile) {
+    if (-not (Test-Path $procIdFile)) { return $null }
+    $content = (Get-Content $procIdFile -Raw).Trim()
     if ($content -match '^\d+$') { return [int]$content }
     return $null
 }
 
-function Get-ListenerPid($port) {
+function Get-ListenerProcId($port) {
     # Use netstat to find the PID listening on a given port
     $lines = netstat -ano 2>$null | Select-String "LISTENING" |
         Where-Object { $_ -match ":$port\s" }
     if ($lines) {
         $parts = ($lines[0].ToString().Trim()) -split '\s+'
-        $pid = $parts[-1]
-        if ($pid -match '^\d+$') { return [int]$pid }
+        $foundId = $parts[-1]
+        if ($foundId -match '^\d+$') { return [int]$foundId }
     }
     return $null
 }
 
 function Port-IsBusy($port) {
-    return $null -ne (Get-ListenerPid $port)
+    return $null -ne (Get-ListenerProcId $port)
 }
 
-function Stop-ProcessTree($pid) {
+function Stop-ProcessTree($procId) {
     # Kill the process and all children via taskkill /T
     try {
-        $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($proc -and -not $proc.HasExited) {
             # /T = kill child processes, /F = force
-            & taskkill /PID $pid /T /F 2>$null | Out-Null
+            & taskkill /PID $procId /T /F 2>$null | Out-Null
         }
     } catch {
         # Process already gone – that's fine
     }
 }
 
-function Stop-TrackedProcess($name, $pidFile) {
-    $pid = Read-Pid $pidFile
-    if ($null -eq $pid) {
-        Remove-Item $pidFile -ErrorAction SilentlyContinue
+function Stop-TrackedProcess($name, $procIdFile) {
+    $procId = Read-ProcId $procIdFile
+    if ($null -eq $procId) {
+        Remove-Item $procIdFile -ErrorAction SilentlyContinue
         return
     }
 
-    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($null -eq $proc -or $proc.HasExited) {
-        Remove-Item $pidFile -ErrorAction SilentlyContinue
+        Remove-Item $procIdFile -ErrorAction SilentlyContinue
         return
     }
 
-    Log "Stopping $name (pid $pid)"
-    Stop-ProcessTree $pid
+    Log "Stopping $name (pid $procId)"
+    Stop-ProcessTree $procId
 
     # Wait up to 5 seconds for exit
     for ($i = 0; $i -lt 20; $i++) {
-        $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($null -eq $proc -or $proc.HasExited) { break }
         Start-Sleep -Milliseconds 250
     }
 
-    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($null -ne $proc -and -not $proc.HasExited) {
-        Log "$name did not stop cleanly; force killing pid $pid"
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        Log "$name did not stop cleanly; force killing pid $procId"
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
     }
 
-    Remove-Item $pidFile -ErrorAction SilentlyContinue
+    Remove-Item $procIdFile -ErrorAction SilentlyContinue
 }
 
 function Stop-Stack {
@@ -140,11 +168,11 @@ function Stop-Stack {
     Stop-TrackedProcess "backend"  $ApiPidFile
 }
 
-function Capture-ListenerPid($name, $port, $pidFile) {
-    $pid = Get-ListenerPid $port
-    if ($null -ne $pid) {
-        Set-Content -Path $pidFile -Value $pid
-        Log "Tracking $name listener (pid $pid)"
+function Capture-ListenerProcId($name, $port, $procIdFile) {
+    $procId = Get-ListenerProcId $port
+    if ($null -ne $procId) {
+        Set-Content -Path $procIdFile -Value $procId
+        Log "Tracking $name listener (pid $procId)"
     }
 }
 
@@ -168,8 +196,15 @@ function Ensure-Env {
 
     $webEnvLocal = Join-Path $WebDir ".env.local"
     if (-not (Test-Path $webEnvLocal)) {
-        Log "Creating web/.env.local from the non-secret template"
-        Copy-Item (Join-Path $WebDir "env.example.txt") $webEnvLocal
+        $exampleTxt = Join-Path $WebDir "env.example.txt"
+        if (Test-Path $exampleTxt) {
+            Log "Creating web/.env.local from the non-secret template"
+            Copy-Item $exampleTxt $webEnvLocal
+        } else {
+            # Create a minimal .env.local so Next.js doesn't complain
+            Log "Creating minimal web/.env.local"
+            Set-Content -Path $webEnvLocal -Value "NEXT_PUBLIC_API_URL=http://localhost:$ApiPort"
+        }
     }
 }
 
@@ -226,20 +261,35 @@ function Build-Backend {
 }
 
 function Build-Frontend {
-    Log "Installing frontend lockfile dependencies"
+    Log "Installing frontend dependencies"
     Push-Location $WebDir
     try {
-        $env:BUN_INSTALL_CACHE_DIR = $BunCacheDir
-        & bun install --frozen-lockfile
-        if ($LASTEXITCODE -ne 0) { Fail "Frontend install failed" }
+        $jsPm = Get-JsPackageManager
 
-        Log "Running frontend typecheck"
-        & bun run typecheck
-        if ($LASTEXITCODE -ne 0) { Fail "Frontend typecheck failed" }
+        if ($jsPm -eq "bun") {
+            $env:BUN_INSTALL_CACHE_DIR = $BunCacheDir
+            & bun install
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend install (bun) failed" }
 
-        Log "Building frontend"
-        & bun run build
-        if ($LASTEXITCODE -ne 0) { Fail "Frontend build failed" }
+            Log "Running frontend typecheck"
+            & bun run typecheck
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend typecheck failed" }
+
+            Log "Building frontend"
+            & bun run build
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend build failed" }
+        } else {
+            & npm install --prefer-offline
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend install (npm) failed" }
+
+            Log "Running frontend typecheck"
+            & npm run typecheck
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend typecheck failed" }
+
+            Log "Building frontend"
+            & npm run build
+            if ($LASTEXITCODE -ne 0) { Fail "Frontend build failed" }
+        }
     } finally {
         Pop-Location
     }
@@ -262,10 +312,11 @@ function Ensure-ProductionBuild {
 
 # ── HTTP wait ────────────────────────────────────────────────────────────────
 
-function Wait-ForHttp($name, $url) {
-    for ($i = 0; $i -lt 60; $i++) {
+function Wait-ForHttp($name, $url, $maxAttempts = 120) {
+    # 120 × 500 ms = 60 s – enough for Next.js first-compile on a slow machine
+    for ($i = 0; $i -lt $maxAttempts; $i++) {
         try {
-            $response = curl --silent --show-error --fail --max-time 10 $url 2>$null
+            $null = curl.exe --silent --show-error --fail --max-time 5 $url 2>$null
             if ($LASTEXITCODE -eq 0) {
                 Log "$name is ready at $url"
                 return $true
@@ -288,9 +339,12 @@ function Start-Processes($frontendMode) {
     Stop-Stack
     Assert-PortsFree
 
-    # Clear log files
-    Set-Content -Path $ApiLog -Value "" -Force
-    Set-Content -Path $WebLog -Value "" -Force
+    $jsPm = Get-JsPackageManager
+
+    # Clear / initialise all log files so each run starts clean
+    foreach ($lf in @($ApiLog, $ApiErrLog, $WebLog, $WebErrLog)) {
+        Set-Content -Path $lf -Value "" -Force
+    }
 
     # ── Start backend ──
     Log "Starting backend on http://localhost:$ApiPort"
@@ -300,7 +354,7 @@ function Start-Processes($frontendMode) {
         -ArgumentList "run uvicorn main:app --host $ApiHost --port $ApiPort" `
         -WorkingDirectory $ApiDir `
         -RedirectStandardOutput $ApiLog `
-        -RedirectStandardError (Join-Path $LogDir "api_err.log") `
+        -RedirectStandardError $ApiErrLog `
         -PassThru -WindowStyle Hidden
 
     Set-Content -Path $ApiPidFile -Value $apiProc.Id
@@ -313,43 +367,58 @@ function Start-Processes($frontendMode) {
         $env:NEXT_PUBLIC_API_URL = "http://localhost:$ApiPort"
     }
 
-    if ($frontendMode -eq "production") {
-        $bunArgs = "run start"
+    # Resolve the executable and args based on available package manager
+    if ($jsPm -eq "bun") {
+        $webExe  = "bun"
+        $devArgs = "run dev"
+        $prodArgs = "run start"
     } else {
-        $bunArgs = "run dev"
+        $webExe  = "npm"
+        $devArgs = "run dev"
+        $prodArgs = "run start"
     }
 
-    $webProc = Start-Process -FilePath "bun" `
-        -ArgumentList $bunArgs `
+    if ($frontendMode -eq "production") {
+        $webArgs = $prodArgs
+    } else {
+        $webArgs = $devArgs
+    }
+
+    $webProc = Start-Process -FilePath $webExe `
+        -ArgumentList $webArgs `
         -WorkingDirectory $WebDir `
         -RedirectStandardOutput $WebLog `
-        -RedirectStandardError (Join-Path $LogDir "web_err.log") `
+        -RedirectStandardError $WebErrLog `
         -PassThru -WindowStyle Hidden
 
     Set-Content -Path $WebPidFile -Value $webProc.Id
 
     # ── Wait for readiness ──
-    if (-not (Wait-ForHttp "backend" "http://localhost:$ApiPort/api/health")) {
+    # Backend is fast; 60 attempts = 30 s
+    if (-not (Wait-ForHttp "backend" "http://localhost:$ApiPort/api/health" 60)) {
         Log "Backend failed to become ready. Recent log:"
-        if (Test-Path $ApiLog) { Get-Content $ApiLog -Tail 40 | Write-Host }
+        if (Test-Path $ApiErrLog) { Get-Content $ApiErrLog -Tail 40 | Write-Host }
+        if (Test-Path $ApiLog)    { Get-Content $ApiLog -Tail 20  | Write-Host }
         Stop-Stack
         Fail "Backend did not start in time."
     }
-    Capture-ListenerPid "backend" $ApiPort $ApiPidFile
+    Capture-ListenerProcId "backend" $ApiPort $ApiPidFile
 
-    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/overview")) {
+    # Frontend first-compile can be slow; 180 attempts = 90 s
+    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/overview" 180)) {
         Log "Frontend failed to become ready. Recent log:"
-        if (Test-Path $WebLog) { Get-Content $WebLog -Tail 40 | Write-Host }
-        Capture-ListenerPid "frontend" $WebPort $WebPidFile
+        if (Test-Path $WebErrLog) { Get-Content $WebErrLog -Tail 40 | Write-Host }
+        if (Test-Path $WebLog)    { Get-Content $WebLog -Tail 20    | Write-Host }
+        Capture-ListenerProcId "frontend" $WebPort $WebPidFile
         Stop-Stack
         Fail "Frontend did not start in time."
     }
-    Capture-ListenerPid "frontend" $WebPort $WebPidFile
+    Capture-ListenerProcId "frontend" $WebPort $WebPidFile
 
     Log "AURA is running. Logs: $ApiLog and $WebLog"
     Log "Press Ctrl-C to stop both processes"
 
-    # Register cleanup on Ctrl-C
+    # Register cleanup on Ctrl-C / PowerShell.Exiting
     try {
         [Console]::TreatControlCAsInput = $false
     } catch { }
@@ -365,20 +434,22 @@ function Start-Processes($frontendMode) {
             $webAlive = $false
 
             try {
-                $a = Get-Process -Id (Read-Pid $ApiPidFile) -ErrorAction SilentlyContinue
+                $a = Get-Process -Id (Read-ProcId $ApiPidFile) -ErrorAction SilentlyContinue
                 if ($null -ne $a -and -not $a.HasExited) { $apiAlive = $true }
             } catch { }
 
             try {
-                $w = Get-Process -Id (Read-Pid $WebPidFile) -ErrorAction SilentlyContinue
+                $w = Get-Process -Id (Read-ProcId $WebPidFile) -ErrorAction SilentlyContinue
                 if ($null -ne $w -and -not $w.HasExited) { $webAlive = $true }
             } catch { }
 
             if (-not $apiAlive -or -not $webAlive) {
-                Log "One process exited. Recent backend log:"
-                if (Test-Path $ApiLog) { Get-Content $ApiLog -Tail 20 | Write-Host }
+                Log "One process exited unexpectedly. Recent backend log:"
+                if (Test-Path $ApiErrLog) { Get-Content $ApiErrLog -Tail 20 | Write-Host }
+                if (Test-Path $ApiLog)    { Get-Content $ApiLog    -Tail 10 | Write-Host }
                 Log "Recent frontend log:"
-                if (Test-Path $WebLog) { Get-Content $WebLog -Tail 20 | Write-Host }
+                if (Test-Path $WebErrLog) { Get-Content $WebErrLog -Tail 20 | Write-Host }
+                if (Test-Path $WebLog)    { Get-Content $WebLog    -Tail 10 | Write-Host }
                 Stop-Stack
                 break
             }
