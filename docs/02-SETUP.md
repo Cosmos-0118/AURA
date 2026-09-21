@@ -52,16 +52,26 @@ commit `.env` or `web/.env.local`.
 
 ## Install and run
 
-```bash
-# terminal 1
-cd api
-uv sync
-uv run uvicorn main:app --reload --port 8000
+From the repository root, the recommended path is the interactive launcher:
 
-# terminal 2
-cd web
-bun install
-bun run dev
+```bash
+./scripts/start.sh
+```
+
+Choose one:
+
+- **Build only** — clean generated output, sync locked dependencies, typecheck,
+  and build both applications.
+- **Build + run** — do the build, then start the API and production frontend.
+- **Just run** — start the API and Next.js development server without rebuilding.
+
+The equivalent direct commands are:
+
+```bash
+./scripts/build.sh
+./scripts/aura.sh start
+./scripts/up.sh
+./scripts/stop.sh
 ```
 
 Verify:

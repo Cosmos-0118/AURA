@@ -954,23 +954,3 @@ That directly proves their requested differentiator.
 Don't spend half the hackathon fighting Instagram OAuth while your actual required project is unfinished.
 
 ---
-
-# The version I would demo
-
-This would be the strongest demo story:
-
-**Jade campaign → competitor research → content creation → LinkedIn + Instagram + X + Reel → Malay localization → compliance catches a bad insurance claim → reviewer edits it and tags "too salesy" → system saves that lesson → regenerate → content is noticeably better → reviewer approves → row enters approved queue → optional Project 2 publishes it to a demo account.**
-
-Then switch from **Jade → DoctorShield** and generate the same type of campaign.
-
-The tone changing automatically proves that you've actually implemented **brand intelligence**, not just another generic GPT wrapper.
-
-### The three repos I'd clone first
-
-**UI:** [Kiranism/next-shadcn-dashboard-starter](https://github.com/Kiranism/next-shadcn-dashboard-starter)  
-**Backend:** [JoshuaC215/agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit)  
-**Scraper:** [unclecode/crawl4ai](https://github.com/unclecode/crawl4ai)
-
-Those three alone remove a **huge** amount of boilerplate and leave your team free to work on the parts the judges actually care about: **marketing intelligence, compliance, human approval and learning from feedback.**
-
-Research basis: I checked the current JA Assure/Jade/Jaguar/DoctorShield public material, the live GitHub repos and their current licences/architecture, plus current Supabase and Gemini documentation. :chatgpt-content-reference{index="30"}

@@ -23,16 +23,26 @@ team plan.
 
 ## Run locally
 
-```bash
-# terminal 1, from repo root
-cd api
-uv sync
-uv run uvicorn main:app --reload --port 8000
+The interactive launcher offers **Build only**, **Build + run**, and **Just run**:
 
-# terminal 2, from repo root
-cd web
-bun install
-bun run dev
+```bash
+./scripts/start.sh
+```
+
+For direct commands:
+
+```bash
+# clean generated output, install locked dependencies, typecheck, and build
+./scripts/build.sh
+
+# start both apps in development mode without rebuilding
+./scripts/aura.sh start
+
+# clean, build, and start the production frontend plus API
+./scripts/up.sh
+
+# stop only processes started by the runner
+./scripts/stop.sh
 ```
 
 - Dashboard: http://localhost:3000

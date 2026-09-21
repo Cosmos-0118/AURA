@@ -12,19 +12,16 @@ import { Icons } from '@/components/icons';
 import React from 'react';
 
 export default function OverViewLayout({
+  children,
   sales,
   pie_stats,
   bar_stats,
   area_stats
-}: {
-  sales: React.ReactNode;
-  pie_stats: React.ReactNode;
-  bar_stats: React.ReactNode;
-  area_stats: React.ReactNode;
-}) {
+}: LayoutProps<'/dashboard/overview'>) {
   return (
     <PageContainer>
       <div className='flex flex-1 flex-col gap-4'>
+        {children}
         <div className='flex items-center justify-between'>
           <h2 className='text-2xl font-bold tracking-tight'>Hi, Welcome back 👋</h2>
         </div>
