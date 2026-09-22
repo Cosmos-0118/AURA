@@ -141,3 +141,17 @@ export function getVideoConfig(): Promise<import("./types").VideoConfig> {
 export function attachVideoToAsset(body: import("./types").VideoAttachRequest): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
   return request<{ ok: boolean; asset_id: string; media_url: string }>("/api/video/attach", jsonBody(body));
 }
+
+export function getBufferStatus(): Promise<import("./types").BufferStatus> {
+  return request<import("./types").BufferStatus>("/api/buffer/status");
+}
+
+export function listBufferChannels(): Promise<{ channels: import("./types").BufferChannel[] }> {
+  return request<{ channels: import("./types").BufferChannel[] }>("/api/buffer/channels");
+}
+
+export function publishToBuffer(
+  body: import("./types").BufferPublishRequest,
+): Promise<import("./types").BufferPublishResult> {
+  return request<import("./types").BufferPublishResult>("/api/buffer/publish", jsonBody(body));
+}

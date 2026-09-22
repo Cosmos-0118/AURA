@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
-    from .routes import assets, brands, campaigns, competitors, leads, lessons, metrics, video
+    from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
-    from routes import assets, brands, campaigns, competitors, leads, lessons, metrics, video
+    from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 
 app = FastAPI(title="AURA API", version="0.1.0")
 app.add_middleware(
@@ -29,3 +29,4 @@ app.include_router(lessons.router)
 app.include_router(leads.router)
 app.include_router(metrics.router)
 app.include_router(video.router)
+app.include_router(buffer.router)

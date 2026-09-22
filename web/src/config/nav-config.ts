@@ -25,6 +25,12 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'Publish',
+        url: '/dashboard/publish',
+        icon: 'send',
+        items: []
+      },
+      {
         title: 'Review Queue',
         url: '/dashboard/review',
         icon: 'checks',
