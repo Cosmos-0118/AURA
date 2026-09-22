@@ -1,5 +1,7 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .agents.lead_intel import start_daily_refresh
@@ -16,6 +18,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure storage directory exists and mount as static files
+storage_path = Path(__file__).resolve().parent.parent / "storage"
+storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(storage_path)), name="media")
+app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+
 
 
 @app.get("/api/health", tags=["health"])

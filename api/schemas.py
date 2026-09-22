@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -174,6 +174,152 @@ class Metrics(BaseModel):
     compliance_failure_rate: float
     assets_total: int
     assets_pending: int
+
+
+# --- Studio Campaign Extended Models ---
+
+
+class StudioCampaignCreate(BaseModel):
+    brand_id: BrandId
+    objective: str = "Awareness"
+    language: Language = "en"
+    thesis: str
+    target_audience: str | None = None
+    platforms: list[Platform] = Field(default_factory=lambda: ["linkedin", "instagram", "x", "reel", "blog"])
+
+
+class CampaignPlatformContentItem(BaseModel):
+    id: str
+    campaign_id: str
+    platform: Platform
+    title: str | None = None
+    content: str
+    hashtags: list[str] = Field(default_factory=list)
+    script: str | None = None
+    visual_concept: str | None = None
+    generation_prompt: str | None = None
+
+
+class CampaignMediaItem(BaseModel):
+    id: str
+    campaign_id: str
+    media_type: str
+    prompt: str
+    local_path: str | None = None
+    provider: str = "local"
+    model: str
+    status: str = "pending"
+    media_stage: str = "final"
+    watermarked: bool = False
+    logo_path: str | None = None
+    logo_position: str | None = None
+    logo_scale: float | None = None
+    logo_opacity: float | None = None
+    parent_media_id: str | None = None
+
+
+class CampaignFacts(BaseModel):
+    event_name: str | None = None
+    date: str | None = None
+    time: str | None = None
+    location: str | None = None
+    price: str | None = None
+    cta: str | None = None
+    brand: str | None = None
+
+
+class StudioCampaignDetail(BaseModel):
+    id: str
+    brand_id: BrandId
+    objective: str
+    language: Language
+    thesis: str
+    target_audience: str | None = None
+    platforms: list[Platform]
+    status: str
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+    media: list[CampaignMediaItem] = Field(default_factory=list)
+    image_prompt: str | None = None
+    video_prompt: str | None = None
+    campaign_facts: CampaignFacts | None = None
+
+
+class MediaGenerateRequest(BaseModel):
+    prompt: str | None = None
+    model: str | None = None
+
+
+class CampaignSubmitResult(BaseModel):
+    success: bool = True
+    campaign_id: str
+    status: str = "pending_review"
+    message: str
+
+
+class CampaignPublicationItem(BaseModel):
+    id: str
+    campaign_id: str
+    platform: str
+    status: str
+    external_post_id: str | None = None
+    external_post_url: str | None = None
+    published_content: str | None = None
+    media_id: str | None = None
+    error_message: str | None = None
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class CampaignEventItem(BaseModel):
+    id: str
+    campaign_id: str
+    event_type: str
+    actor: str = "system"
+    description: str | None = None
+    metadata: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class CampaignReviewCard(BaseModel):
+    review_id: str
+    campaign_id: str
+    review_status: str
+    campaign_status: str
+    reviewer_note: str | None = None
+    feedback_tag: str | None = None
+    reviewed_at: datetime | None = None
+    queued_at: datetime
+    brand_id: BrandId
+    campaign_title: str
+    objective: str
+    language: Language
+    thesis: str
+    target_audience: str | None = None
+    campaign_facts: CampaignFacts | None = None
+    latest_image_url: str | None = None
+    latest_image_prompt: str | None = None
+    has_video: bool = False
+    latest_video_url: str | None = None
+    linkedin_content: str = ""
+    linkedin_hashtags: list[str] = Field(default_factory=list)
+    publications: dict[str, Any] = Field(default_factory=dict)
+    events_count: int = 0
+    compliance_passed: bool = True
+    lessons_applied_count: int = 2
+
+
+class PublishResponse(BaseModel):
+    success: bool = True
+    campaign_id: str
+    platform: str
+    status: str
+    external_post_id: str | None = None
+    external_post_url: str | None = None
+    published_at: str | None = None
+    message: str
 
 
 class VideoGenerateRequest(BaseModel):

@@ -1,117 +1,202 @@
--- AURA database schema. Owner: Team Member 1.
+-- AURA MySQL Database Schema
+-- Idempotent schema creation. Never drops tables or databases.
 
-create extension if not exists "pgcrypto";
+CREATE DATABASE IF NOT EXISTS aura
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
 
-create table if not exists brands (
-  id            text primary key,
-  name          text not null,
-  tone          jsonb not null,
-  audience      text not null,
-  do_list       jsonb not null default '[]',
-  dont_list     jsonb not null default '[]',
-  created_at    timestamptz not null default now()
+USE aura;
+
+-- 4. BRANDS TABLE
+CREATE TABLE IF NOT EXISTS brands (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(100),
+    description TEXT,
+    voice TEXT,
+    audience TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
 );
 
-create table if not exists competitors (
-  id            uuid primary key default gen_random_uuid(),
-  brand_id      text not null references brands(id),
-  name          text not null,
-  url           text not null,
-  created_at    timestamptz not null default now()
+-- 5. CAMPAIGNS TABLE
+CREATE TABLE IF NOT EXISTS campaigns (
+    id CHAR(36) PRIMARY KEY,
+    brand_id VARCHAR(50) NOT NULL,
+    title VARCHAR(255),
+    objective VARCHAR(100) NOT NULL,
+    language VARCHAR(100) NOT NULL,
+    thesis TEXT NOT NULL,
+    target_audience TEXT,
+    status ENUM(
+        'draft',
+        'generating',
+        'generated',
+        'pending_review',
+        'approved',
+        'rejected',
+        'edited'
+    ) NOT NULL DEFAULT 'draft',
+    generation_provider VARCHAR(100),
+    generation_model VARCHAR(100),
+    lessons_used JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (brand_id)
+        REFERENCES brands(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    INDEX idx_campaign_brand (brand_id),
+    INDEX idx_campaign_status (status),
+    INDEX idx_campaign_created (created_at)
 );
 
-create table if not exists research_snapshots (
-  id             uuid primary key default gen_random_uuid(),
-  competitor_id  uuid not null references competitors(id) on delete cascade,
-  content_hash   text not null,
-  content        text not null,
-  change_summary text,
-  scraped_at     timestamptz not null default now()
+-- 6. CAMPAIGN PLATFORM CONTENT TABLE
+CREATE TABLE IF NOT EXISTS campaign_platform_content (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    platform ENUM(
+        'linkedin',
+        'instagram',
+        'x',
+        'reel',
+        'blog'
+    ) NOT NULL,
+    title VARCHAR(500),
+    content LONGTEXT,
+    hashtags JSON,
+    hook TEXT,
+    script LONGTEXT,
+    captions LONGTEXT,
+    visual_concept TEXT,
+    image_generation_prompt LONGTEXT,
+    video_generation_prompt LONGTEXT,
+    language VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    UNIQUE KEY unique_campaign_platform (campaign_id, platform),
+    INDEX idx_platform_campaign (campaign_id)
 );
 
-create table if not exists campaigns (
-  id           uuid primary key default gen_random_uuid(),
-  brand_id     text not null references brands(id),
-  topic        text not null,
-  country      text not null,
-  goal         text not null,
-  platforms    jsonb not null,
-  language     text not null default 'en',
-  status       text not null default 'queued'
-               check (status in ('queued', 'running', 'completed', 'failed')),
-  error        text,
-  created_at   timestamptz not null default now(),
-  completed_at timestamptz
+-- 7. MEDIA TABLE
+CREATE TABLE IF NOT EXISTS campaign_media (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    platform_content_id CHAR(36),
+    media_type ENUM(
+        'image',
+        'video'
+    ) NOT NULL,
+    provider VARCHAR(100),
+    model VARCHAR(150),
+    prompt LONGTEXT,
+    local_path TEXT NOT NULL,
+    filename VARCHAR(255),
+    mime_type VARCHAR(100),
+    file_size BIGINT,
+    width INT,
+    height INT,
+    duration_seconds DECIMAL(10,2),
+    status ENUM(
+        'generating',
+        'completed',
+        'failed'
+    ) NOT NULL DEFAULT 'generating',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    FOREIGN KEY (platform_content_id)
+        REFERENCES campaign_platform_content(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    INDEX idx_media_campaign (campaign_id)
 );
 
-create table if not exists content_assets (
-  id           uuid primary key default gen_random_uuid(),
-  campaign_id  uuid references campaigns(id) on delete set null,
-  brand_id     text not null references brands(id),
-  platform     text not null,
-  content_type text not null,
-  variant      text not null default 'A',
-  language     text not null default 'en',
-  title        text,
-  body         text not null,
-  hashtags     jsonb not null default '[]',
-  media_url    text,
-  status       text not null default 'pending_review'
-               check (status in (
-                 'draft', 'pending_review', 'compliance_failed',
-                 'approved', 'rejected', 'scheduled', 'published'
-               )),
-  created_at   timestamptz not null default now(),
-  approved_at  timestamptz,
-  approved_by  text
+-- 10. LESSONS TABLE
+CREATE TABLE IF NOT EXISTS lessons (
+    id CHAR(36) PRIMARY KEY,
+    brand_id VARCHAR(50),
+    platform VARCHAR(50),
+    tag VARCHAR(100) NOT NULL,
+    note TEXT NOT NULL,
+    original_content LONGTEXT,
+    corrected_content LONGTEXT,
+    source_campaign_id CHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (brand_id)
+        REFERENCES brands(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    FOREIGN KEY (source_campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+    INDEX idx_lessons_brand (brand_id),
+    INDEX idx_lessons_platform (platform)
 );
 
-create table if not exists compliance_checks (
-  id                 uuid primary key default gen_random_uuid(),
-  asset_id           uuid not null references content_assets(id) on delete cascade,
-  result             text not null check (result in ('PASS', 'REVIEW', 'FAIL')),
-  risk               text not null check (risk in ('LOW', 'MEDIUM', 'HIGH')),
-  rules              jsonb not null default '[]',
-  issues             jsonb not null default '[]',
-  suggested_revision text,
-  created_at         timestamptz not null default now()
+-- 11. REVIEW QUEUE TABLE
+CREATE TABLE IF NOT EXISTS review_queue (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    status ENUM(
+        'pending_review',
+        'approved',
+        'rejected',
+        'edited'
+    ) NOT NULL DEFAULT 'pending_review',
+    reviewer_note TEXT,
+    feedback_tag VARCHAR(100),
+    reviewed_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    INDEX idx_review_status (status)
 );
 
-create table if not exists reviews (
-  id            uuid primary key default gen_random_uuid(),
-  asset_id      uuid not null references content_assets(id) on delete cascade,
-  action        text not null check (action in ('approve', 'reject', 'edit')),
-  reason_tag    text,
-  note          text,
-  original_body text,
-  edited_body   text,
-  created_at    timestamptz not null default now()
+-- 12. COMPLIANCE CHECKS TABLE
+CREATE TABLE IF NOT EXISTS compliance_checks (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    status ENUM(
+        'pass',
+        'review',
+        'fail'
+    ) NOT NULL,
+    risk_level ENUM(
+        'low',
+        'medium',
+        'high'
+    ),
+    issues JSON,
+    suggested_fixes JSON,
+    rules_checked INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE
 );
 
-create table if not exists lessons (
-  id            uuid primary key default gen_random_uuid(),
-  brand_id      text not null references brands(id),
-  platform      text,
-  reason_tag    text not null,
-  note          text not null,
-  original_body text,
-  edited_body   text,
-  asset_id      uuid references content_assets(id) on delete set null,
-  created_at    timestamptz not null default now()
+-- 13. CAMPAIGN EVENTS TABLE
+CREATE TABLE IF NOT EXISTS campaign_events (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    description TEXT,
+    metadata JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id)
+        REFERENCES campaigns(id)
+        ON DELETE CASCADE
 );
-
-create table if not exists leads (
-  id         uuid primary key default gen_random_uuid(),
-  brand_id   text not null references brands(id),
-  name       text not null,
-  url        text,
-  country    text,
-  fit_score  int not null default 0,
-  why        text,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_assets_status on content_assets(status);
-create index if not exists idx_assets_brand on content_assets(brand_id);
-create index if not exists idx_lessons_brand on lessons(brand_id);
-create index if not exists idx_checks_asset on compliance_checks(asset_id);

@@ -405,7 +405,7 @@ function Start-Processes($frontendMode) {
     Capture-ListenerProcId "backend" $ApiPort $ApiPidFile
 
     # Frontend first-compile can be slow; 180 attempts = 90 s
-    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/overview" 180)) {
+    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/studio" 180)) {
         Log "Frontend failed to become ready. Recent log:"
         if (Test-Path $WebErrLog) { Get-Content $WebErrLog -Tail 40 | Write-Host }
         if (Test-Path $WebLog)    { Get-Content $WebLog -Tail 20    | Write-Host }

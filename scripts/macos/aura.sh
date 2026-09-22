@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 API_DIR="$ROOT_DIR/api"
@@ -203,7 +204,8 @@ ensure_production_build() {
 wait_for_http() {
   local name="$1"
   local url="$2"
-  for _ in {1..60}; do
+  local max_attempts="${3:-120}"
+  for _ in $(seq 1 "$max_attempts"); do
     if curl --silent --show-error --fail --max-time 10 "$url" >/dev/null 2>&1; then
       log "$name is ready at $url"
       return 0
@@ -259,7 +261,7 @@ start_processes() {
   fi
   capture_listener_pid "backend" "$API_PORT" "$API_PID_FILE"
 
-  if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/overview"; then
+  if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/studio"; then
     log "Frontend failed to become ready. Recent log:"
     tail -n 40 "$WEB_LOG" >&2 || true
     capture_listener_pid "frontend" "$WEB_PORT" "$WEB_PID_FILE"
@@ -309,10 +311,12 @@ interactive_menu() {
   printf '1) Build only\n'
   printf '2) Build + run\n'
   printf '3) Just run\n'
+  printf '4) Dev mode (hot reload)\n'
+  printf '5) Competitor Intelligence (Port 8787)\n'
   printf 'q) Exit\n\n'
 
   local choice
-  read -r -p 'Choose an option [1-3/q]: ' choice
+  read -r -p 'Choose an option [1-5/q]: ' choice
   case "$choice" in
     1)
       clean_generated
@@ -326,11 +330,18 @@ interactive_menu() {
     3)
       start_processes "production"
       ;;
+    4)
+      start_processes "development"
+      ;;
+    5)
+      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
+      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
+      ;;
     q|Q|"")
       log "Nothing started"
       ;;
     *)
-      fail "Unknown option '$choice'. Choose 1, 2, 3, or q."
+      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, 5, or q."
       ;;
   esac
 }
@@ -353,6 +364,10 @@ main() {
       ;;
     dev)
       start_processes "development"
+      ;;
+    intel|intelligence)
+      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
+      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
       ;;
     up)
       clean_generated

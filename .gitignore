@@ -19,3 +19,11 @@ __pycache__/
 
 # AURA runner output
 /.aura/
+
+# Local media storage & SQLite database
+/storage/*.db
+/storage/campaigns/
+/storage/*.mp4
+
+# Reference repos
+/AURA2/

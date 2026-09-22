@@ -1,30 +1,34 @@
+'use client';
+
 import React from 'react';
 import { SidebarTrigger } from '../ui/sidebar';
 import { Separator } from '../ui/separator';
 import { Breadcrumbs } from '../breadcrumbs';
 import SearchInput from '../search-input';
-import { ThemeSelector } from '../themes/theme-selector';
 import { ThemeModeToggle } from '../themes/theme-mode-toggle';
-import CtaGithub from './cta-github';
+import { NotificationBell } from './notification-bell';
+import { UserNav } from './user-nav';
+import { ApiModeToggle } from './api-mode-toggle';
 
 export default function Header() {
   return (
-    <header className='bg-background/60 sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 backdrop-blur-md md:h-14'>
-      <div className='flex items-center gap-2 px-4'>
+    <header className='bg-background/80 sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b backdrop-blur-md px-4'>
+      <div className='flex items-center gap-2'>
         <SidebarTrigger className='-ml-1' />
-        <Separator orientation='vertical' className='mr-2 h-4 data-vertical:self-center' />
+        <Separator orientation='vertical' className='mr-2 h-4' />
         <Breadcrumbs />
       </div>
 
-      <div className='flex items-center gap-2 px-4'>
-        <CtaGithub />
+      <div className='flex items-center gap-2.5'>
         <div className='hidden md:flex'>
           <SearchInput />
         </div>
+        <ApiModeToggle />
+        <NotificationBell />
         <ThemeModeToggle />
-        <div className='hidden sm:block'>
-          <ThemeSelector />
-        </div>      </div>
+        <Separator orientation='vertical' className='h-4 mx-1 hidden sm:block' />
+        <UserNav />
+      </div>
     </header>
   );
 }

@@ -1,17 +1,10 @@
 import { NavGroup } from '@/types';
 
-/** AURA's four demo screens plus the starter overview route. */
+/** AURA — AI Marketing Operations Desk Navigation */
 export const navGroups: NavGroup[] = [
   {
-    label: 'AURA',
+    label: 'MARKETING OPERATIONS',
     items: [
-      {
-        title: 'Overview',
-        url: '/dashboard',
-        icon: 'dashboard',
-        isActive: true,
-        items: []
-      },
       {
         title: 'Campaign Studio',
         url: '/dashboard/studio',
@@ -41,17 +34,16 @@ export const navGroups: NavGroup[] = [
         url: '/dashboard/review',
         icon: 'checks',
         items: []
-      },
+      }
+    ]
+  },
+  {
+    label: 'INTELLIGENCE',
+    items: [
       {
-        title: 'Brands',
-        url: '/dashboard/brands',
-        icon: 'workspace',
-        items: []
-      },
-      {
-        title: 'Insights',
-        url: '/dashboard/insights',
-        icon: 'trendingUp',
+        title: 'Competitor Intelligence',
+        url: '/dashboard/competitor-intelligence',
+        icon: 'search',
         items: []
       }
     ]

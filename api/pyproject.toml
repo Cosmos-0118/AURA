@@ -11,6 +11,8 @@ dependencies = [
   "psycopg[binary]",
   "httpx",
   "python-dotenv",
+  "python-multipart",
+  "openai",
   "fal-client>=1.0.3",
 ]
 

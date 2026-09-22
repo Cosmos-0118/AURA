@@ -1,173 +1,632 @@
 import type {
   Asset,
   Brand,
+  BrandId,
   Campaign,
   CampaignCreate,
+  CampaignMediaItem,
   Competitor,
   Language,
   Lead,
   Lesson,
   Metrics,
+  OperationalModeInfo,
   ReviewAction,
   Snapshot,
-} from "./types";
+  StudioCampaignCreate,
+  StudioCampaignDetail,
+  CampaignSubmitResult,
+  CampaignReviewCard,
+  CampaignPublicationItem,
+  CampaignEventItem,
+  PublishResponse
+} from './types';
+import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
+import { auraStore } from '../demo/store';
+import { COMPETITOR_INTEL } from '../demo/research';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+export function getStoredApiMode(): 'real' | 'mock' {
+  if (typeof window === 'undefined') return 'real';
+  const stored = localStorage.getItem('aura_api_mode');
+  return stored === 'mock' ? 'mock' : 'real';
+}
+
+export function setStoredApiMode(mode: 'real' | 'mock') {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('aura_api_mode', mode);
+    window.dispatchEvent(new CustomEvent('aura_api_mode_change', { detail: mode }));
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Demo-Mode': isMock ? 'true' : 'false',
+    ...(init?.headers as Record<string, string>)
+  };
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
     throw new Error(error?.detail ?? `AURA API request failed (${response.status})`);
   }
-  return response.json() as Promise<T>;
+  return (await response.json()) as T;
 }
+
 
 function jsonBody(body: unknown): RequestInit {
-  return { method: "POST", body: JSON.stringify(body) };
+  return { method: 'POST', body: JSON.stringify(body) };
 }
 
-export function getBrands(): Promise<Brand[]> {
-  return request<Brand[]>("/api/brands");
-}
 
-export function getBrand(id: string): Promise<Brand> {
-  return request<Brand>(`/api/brands/${encodeURIComponent(id)}`);
-}
-
-export function getCompetitors(brandId?: string): Promise<Competitor[]> {
-  const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : "";
-  return request<Competitor[]>(`/api/competitors${query}`);
-}
-
-export function scanCompetitor(id: string): Promise<Snapshot> {
-  return request<Snapshot>(`/api/competitors/${encodeURIComponent(id)}/scan`, {
-    method: "POST",
-  });
-}
-
-export function createCampaign(body: CampaignCreate): Promise<Campaign> {
-  return request<Campaign>("/api/campaigns", jsonBody(body));
-}
-
-export function getCampaign(id: string): Promise<Campaign> {
-  return request<Campaign>(`/api/campaigns/${encodeURIComponent(id)}`);
-}
-
-export function listCampaigns(brandId?: string): Promise<Campaign[]> {
-  const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : "";
-  return request<Campaign[]>(`/api/campaigns${query}`);
-}
-
-export function listAssets(params: {
-  status?: string;
-  brand_id?: string;
-  platform?: string;
-  campaign_id?: string;
-} = {}): Promise<Asset[]> {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value) query.set(key, value);
+export async function getBrands(): Promise<Brand[]> {
+  try {
+    return await request<Brand[]>('/api/brands');
+  } catch {
+    return getDemoBrandsList().map((b) => ({
+      id: b.id,
+      name: b.name,
+      tone: b.tone,
+      audience: b.audience,
+      do_list: b.do_list,
+      dont_list: b.dont_list
+    }));
   }
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return request<Asset[]>(`/api/assets${suffix}`);
 }
 
-export function getAsset(id: string): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}`);
+export async function getBrand(id: string): Promise<Brand> {
+  try {
+    return await request<Brand>(`/api/brands/${encodeURIComponent(id)}`);
+  } catch {
+    const brand = DEMO_BRANDS[id as BrandId] || DEMO_BRANDS.jade;
+    return {
+      id: brand.id,
+      name: brand.name,
+      tone: brand.tone,
+      audience: brand.audience,
+      do_list: brand.do_list,
+      dont_list: brand.dont_list
+    };
+  }
 }
 
-export function approveAsset(id: string, body: ReviewAction = {}): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}/approve`, jsonBody(body));
+export async function getCompetitors(brandId?: string): Promise<Competitor[]> {
+  try {
+    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    return await request<Competitor[]>(`/api/competitors${query}`);
+  } catch {
+    return COMPETITOR_INTEL.filter(
+      (c) => !brandId || c.target_brand === brandId
+    ).map((c) => ({
+      id: c.id,
+      brand_id: c.target_brand,
+      name: c.competitor_name,
+      url: c.source_url
+    }));
+  }
 }
 
-export function rejectAsset(id: string, body: ReviewAction = {}): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}/reject`, jsonBody(body));
+export async function scanCompetitor(id: string): Promise<Snapshot> {
+  try {
+    return await request<Snapshot>(`/api/competitors/${encodeURIComponent(id)}/scan`, {
+      method: 'POST'
+    });
+  } catch {
+    return {
+      id: `snap_${Date.now()}`,
+      competitor_id: id,
+      content_hash: 'hash_demo_78f19b2',
+      change_summary: 'Updated risk prevention terms and pricing schedule detected.',
+      scraped_at: new Date().toISOString()
+    };
+  }
 }
 
-export function patchAsset(
+export async function createCampaign(body: CampaignCreate): Promise<Campaign> {
+  try {
+    return await request<Campaign>('/api/campaigns', jsonBody(body));
+  } catch {
+    const campaignId = `camp_${Date.now()}`;
+    return {
+      id: campaignId,
+      brand_id: body.brand_id,
+      topic: body.topic,
+      country: body.country,
+      goal: body.goal,
+      platforms: body.platforms,
+      language: body.language || 'en',
+      status: 'completed',
+      error: null,
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString()
+    };
+  }
+}
+
+export async function getCampaign(id: string): Promise<Campaign> {
+  try {
+    return await request<Campaign>(`/api/campaigns/${encodeURIComponent(id)}`);
+  } catch {
+    return {
+      id,
+      brand_id: 'jade',
+      topic: 'High-Value Asset Protection',
+      country: 'SG',
+      goal: 'Education',
+      platforms: ['linkedin', 'instagram'],
+      language: 'en',
+      status: 'completed',
+      error: null,
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString()
+    };
+  }
+}
+
+export async function listCampaigns(brandId?: string): Promise<Campaign[]> {
+  try {
+    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    return await request<Campaign[]>(`/api/campaigns${query}`);
+  } catch {
+    const demoCampaigns: Campaign[] = [
+      {
+        id: 'camp_jade_001',
+        brand_id: 'jade',
+        topic: 'How jewellery businesses can reduce transit risk',
+        country: 'SG',
+        goal: 'Education',
+        platforms: ['linkedin', 'instagram', 'blog'],
+        language: 'en',
+        status: 'completed',
+        error: null,
+        created_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+        completed_at: new Date(Date.now() - 3500 * 1000).toISOString()
+      },
+      {
+        id: 'camp_doc_001',
+        brand_id: 'doctorshield',
+        topic: 'Inquiry Defense & Medical Council Protocols',
+        country: 'SG',
+        goal: 'Awareness',
+        platforms: ['linkedin', 'instagram'],
+        language: 'en',
+        status: 'completed',
+        error: null,
+        created_at: new Date(Date.now() - 7200 * 1000).toISOString(),
+        completed_at: new Date(Date.now() - 7100 * 1000).toISOString()
+      }
+    ];
+    return demoCampaigns.filter((c) => !brandId || c.brand_id === brandId);
+  }
+}
+
+export async function listAssets(
+  params: {
+    status?: string;
+    brand_id?: string;
+    platform?: string;
+    campaign_id?: string;
+  } = {}
+): Promise<Asset[]> {
+  try {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value) query.set(key, value);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return await request<Asset[]>(`/api/assets${suffix}`);
+  } catch {
+    let assets = auraStore.getSnapshot().assets;
+    if (params.status && params.status !== 'all') {
+      assets = assets.filter((a) => a.status === params.status);
+    }
+    if (params.brand_id && params.brand_id !== 'all') {
+      assets = assets.filter((a) => a.brand_id === params.brand_id);
+    }
+    if (params.platform && params.platform !== 'all') {
+      assets = assets.filter((a) => a.platform === params.platform);
+    }
+    return assets;
+  }
+}
+
+export async function getAsset(id: string): Promise<Asset> {
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}`);
+  } catch {
+    const asset = auraStore.getSnapshot().assets.find((a) => a.id === id);
+    if (!asset) throw new Error('Asset not found');
+    return asset;
+  }
+}
+
+export async function approveAsset(id: string, body: ReviewAction = {}): Promise<Asset> {
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}/approve`, jsonBody(body));
+  } catch {
+    auraStore.approveAsset(id, body.note);
+    return getAsset(id);
+  }
+}
+
+export async function rejectAsset(id: string, body: ReviewAction = {}): Promise<Asset> {
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}/reject`, jsonBody(body));
+  } catch {
+    auraStore.rejectAsset(id, body.reason_tag || 'OTHER', body.note || 'Rejected by reviewer');
+    return getAsset(id);
+  }
+}
+
+export async function patchAsset(
   id: string,
-  body: { body?: string; title?: string },
+  body: { body?: string; title?: string }
 ): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+  } catch {
+    if (body.body) {
+      auraStore.editAsset(id, body.body);
+    }
+    return getAsset(id);
+  }
 }
 
-export function regenerateAsset(id: string): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}/regenerate`, {
-    method: "POST",
-  });
+export async function regenerateAsset(id: string): Promise<Asset> {
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}/regenerate`, {
+      method: 'POST'
+    });
+  } catch {
+    return getAsset(id);
+  }
 }
 
-export function localizeAsset(
+export async function localizeAsset(
   id: string,
-  body: { language: Language; country: string },
+  body: { language: Language; country: string }
 ): Promise<Asset> {
-  return request<Asset>(`/api/assets/${encodeURIComponent(id)}/localize`, jsonBody(body));
+  try {
+    return await request<Asset>(`/api/assets/${encodeURIComponent(id)}/localize`, jsonBody(body));
+  } catch {
+    return getAsset(id);
+  }
 }
 
-export function listLessons(brandId?: string): Promise<Lesson[]> {
-  const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : "";
-  return request<Lesson[]>(`/api/lessons${query}`);
+export async function listLessons(brandId?: string): Promise<Lesson[]> {
+  try {
+    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    return await request<Lesson[]>(`/api/lessons${query}`);
+  } catch {
+    const lessons = auraStore.getSnapshot().lessons;
+    return brandId ? lessons.filter((l) => l.brand_id === brandId) : lessons;
+  }
 }
 
-export function listLeads(brandId?: string): Promise<Lead[]> {
-  const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : "";
-  return request<Lead[]>(`/api/leads${query}`);
+export async function listLeads(brandId?: string): Promise<Lead[]> {
+  try {
+    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    return await request<Lead[]>(`/api/leads${query}`);
+  } catch {
+    const leads = auraStore.getSnapshot().leads;
+    return brandId ? leads.filter((l) => l.brand_id === brandId) : leads;
+  }
 }
 
-export function getLeadRefreshStatus(): Promise<import("./types").LeadRefreshStatus> {
-  return request<import("./types").LeadRefreshStatus>("/api/leads/status");
+export function getLeadRefreshStatus(): Promise<import('./types').LeadRefreshStatus> {
+  return request<import('./types').LeadRefreshStatus>('/api/leads/status');
 }
 
-export function refreshLeads(): Promise<import("./types").LeadRefreshStatus> {
-  return request<import("./types").LeadRefreshStatus>("/api/leads/refresh", { method: "POST" });
+export function refreshLeads(): Promise<import('./types').LeadRefreshStatus> {
+  return request<import('./types').LeadRefreshStatus>('/api/leads/refresh', { method: 'POST' });
 }
 
-export function getLeadEmailDraft(leadId: string): Promise<import("./types").LeadEmailDraft> {
+export function getLeadEmailDraft(leadId: string): Promise<import('./types').LeadEmailDraft> {
   const query = `?lead_id=${encodeURIComponent(leadId)}`;
-  return request<import("./types").LeadEmailDraft>(`/api/leads/draft${query}`);
+  return request<import('./types').LeadEmailDraft>(`/api/leads/draft${query}`);
 }
 
-export function sendLeadEmail(leadId: string): Promise<import("./types").LeadEmailResult> {
-  return request<import("./types").LeadEmailResult>("/api/leads/send", jsonBody({ lead_id: leadId }));
+export function sendLeadEmail(leadId: string): Promise<import('./types').LeadEmailResult> {
+  return request<import('./types').LeadEmailResult>('/api/leads/send', jsonBody({ lead_id: leadId }));
 }
 
-export function getMetrics(): Promise<Metrics> {
-  return request<Metrics>("/api/metrics");
+export async function getMetrics(): Promise<Metrics> {
+  try {
+    return await request<Metrics>('/api/metrics');
+  } catch {
+    const m = auraStore.getSnapshot().metrics;
+    return {
+      rejection_rate: m.rejectionRate,
+      avg_edits_per_post: 1.2,
+      lessons_count: auraStore.getSnapshot().lessons.length,
+      compliance_failure_rate: Number((100 - m.compliancePassRate).toFixed(1)),
+      assets_total: m.contentGenerated,
+      assets_pending: m.awaitingReview
+    };
+  }
 }
 
-export function generateVideo(body: import("./types").VideoGenerateRequest): Promise<import("./types").VideoGenerateResponse> {
-  return request<import("./types").VideoGenerateResponse>("/api/video/generate", jsonBody(body));
+// --- Studio Campaign Flow API ---
+
+export async function getOperationalMode(): Promise<OperationalModeInfo> {
+  try {
+    return await request<OperationalModeInfo>('/api/campaigns/mode');
+  } catch {
+    return {
+      demo_mode: getStoredApiMode() === 'mock',
+      groq_model: 'openai/gpt-oss-20b',
+      image_model: 'google/nano-banana-2-lites',
+      video_model: 'minimax/h3-max-turbo/text-to-video'
+    };
+  }
 }
 
-export function getVideoConfig(): Promise<import("./types").VideoConfig> {
-  return request<import("./types").VideoConfig>("/api/video/config");
+export async function setOperationalMode(demo_mode: boolean): Promise<OperationalModeInfo> {
+  setStoredApiMode(demo_mode ? 'mock' : 'real');
+  try {
+    return await request<OperationalModeInfo>('/api/campaigns/mode', {
+      method: 'POST',
+      body: JSON.stringify({ demo_mode })
+    });
+  } catch {
+    return {
+      demo_mode,
+      groq_model: 'openai/gpt-oss-20b',
+      image_model: 'google/nano-banana-2-lites',
+      video_model: 'minimax/h3-max-turbo/text-to-video'
+    };
+  }
 }
 
-export function attachVideoToAsset(body: import("./types").VideoAttachRequest): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
-  return request<{ ok: boolean; asset_id: string; media_url: string }>("/api/video/attach", jsonBody(body));
+export async function testApiConnection(): Promise<{
+  success: boolean;
+  message: string;
+  latencyMs: number;
+  data?: Record<string, unknown>;
+}> {
+  const start = performance.now();
+  try {
+    const data = await request<Record<string, unknown>>('/api/campaigns/health');
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      success: true,
+      message: `Connected (${latencyMs}ms)`,
+      latencyMs,
+      data
+    };
+  } catch (err: unknown) {
+    const latencyMs = Math.round(performance.now() - start);
+    const msg = err instanceof Error ? err.message : 'Failed to connect to backend';
+    return {
+      success: false,
+      message: msg,
+      latencyMs
+    };
+  }
 }
 
-export function getBufferStatus(): Promise<import("./types").BufferStatus> {
-  return request<import("./types").BufferStatus>("/api/buffer/status");
+export async function generateStudioCampaign(
+  body: StudioCampaignCreate
+): Promise<StudioCampaignDetail> {
+  return await request<StudioCampaignDetail>('/api/campaigns/studio/generate', jsonBody(body));
 }
 
-export function listBufferChannels(): Promise<{ channels: import("./types").BufferChannel[] }> {
-  return request<{ channels: import("./types").BufferChannel[] }>("/api/buffer/channels");
+export async function getStudioCampaign(id: string): Promise<StudioCampaignDetail> {
+  return await request<StudioCampaignDetail>(`/api/campaigns/${encodeURIComponent(id)}/studio`);
+}
+
+export async function generateCampaignImage(
+  id: string,
+  prompt?: string,
+  model?: string
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/generate-image`,
+    jsonBody({ prompt, model })
+  );
+}
+
+export async function generateCampaignVideo(
+  id: string,
+  prompt?: string,
+  model?: string
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/generate-video`,
+    jsonBody({ prompt, model })
+  );
+}
+
+export async function applyCampaignWatermark(
+  id: string,
+  options: {
+    media_type: 'image' | 'video';
+    parent_media_id?: string | null;
+    logo_preset?: string | null;
+    logo_anchor?: string;
+    logo_scale?: number;
+    logo_opacity?: number;
+    custom_text?: string | null;
+    image_data?: string | null;
+  }
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/apply-watermark`,
+    jsonBody(options)
+  );
+}
+
+export async function uploadWatermarkedMedia(
+  id: string,
+  formData: FormData
+): Promise<CampaignMediaItem> {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const url = `${apiBase}/api/campaigns/${encodeURIComponent(id)}/upload-watermarked-media`;
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Upload failed: ${errorText}`);
+  }
+  return await res.json();
+}
+
+export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
+  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
+  try {
+    const res = await request<CampaignSubmitResult>(
+      `/api/campaigns/${encodeURIComponent(id)}/submit`,
+      { method: 'POST' }
+    );
+    return res;
+  } catch (err: unknown) {
+    if (isMock) {
+      return {
+        success: true,
+        campaign_id: id,
+        status: 'pending_review',
+        message: 'Campaign submitted for verification (Mock Mode).'
+      };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(msg || 'Failed to submit campaign for verification', { cause: err });
+  }
+}
+
+export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
+  return submitCampaign(id);
+}
+
+export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
+  const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
+  return await request<CampaignReviewCard[]>(`/api/campaigns/review-queue${query}`);
+}
+
+export async function approveCampaignReview(
+  campaignId: string,
+  reviewerNote?: string
+): Promise<{ success: boolean; status: string; campaign_id: string }> {
+  return await request<{ success: boolean; status: string; campaign_id: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/approve`,
+    jsonBody({ reviewer_note: reviewerNote })
+  );
+}
+
+export async function rejectCampaignReview(
+  campaignId: string,
+  tag: string,
+  note: string,
+  platform?: string
+): Promise<{ success: boolean; status: string; campaign_id: string }> {
+  return await request<{ success: boolean; status: string; campaign_id: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/reject`,
+    jsonBody({ tag, note, platform })
+  );
+}
+
+export async function editCampaignContent(
+  campaignId: string,
+  payload: {
+    platform: string;
+    new_content: string;
+    new_title?: string;
+    tag?: string;
+    note?: string;
+  }
+): Promise<{ success: boolean; status: string }> {
+  return await request<{ success: boolean; status: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/edit`,
+    jsonBody(payload)
+  );
+}
+
+export async function publishCampaignPlatform(
+  campaignId: string,
+  platform: string
+): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/${encodeURIComponent(platform)}`,
+    { method: 'POST' }
+  );
+}
+
+export async function getCampaignPublications(
+  campaignId: string
+): Promise<CampaignPublicationItem[]> {
+  return await request<CampaignPublicationItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publications`
+  );
+}
+
+export async function getCampaignHistory(
+  campaignId: string
+): Promise<CampaignEventItem[]> {
+  return await request<CampaignEventItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/history`
+  );
+}
+
+export async function getCampaignMediaList(
+  campaignId: string
+): Promise<CampaignMediaItem[]> {
+  return await request<CampaignMediaItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/media`
+  );
+}
+
+export async function resetAllCampaignData(): Promise<{
+  success: boolean;
+  message: string;
+  deleted?: Record<string, number>;
+}> {
+  return await request<{
+    success: boolean;
+    message: string;
+    deleted?: Record<string, number>;
+  }>('/api/campaigns/reset-data', { method: 'POST' });
+}
+
+export function generateVideo(
+  body: import('./types').VideoGenerateRequest
+): Promise<import('./types').VideoGenerateResponse> {
+  return request<import('./types').VideoGenerateResponse>('/api/video/generate', jsonBody(body));
+}
+
+export function getVideoConfig(): Promise<import('./types').VideoConfig> {
+  return request<import('./types').VideoConfig>('/api/video/config');
+}
+
+export function attachVideoToAsset(
+  body: import('./types').VideoAttachRequest
+): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
+  return request<{ ok: boolean; asset_id: string; media_url: string }>(
+    '/api/video/attach',
+    jsonBody(body)
+  );
+}
+
+export function getBufferStatus(): Promise<import('./types').BufferStatus> {
+  return request<import('./types').BufferStatus>('/api/buffer/status');
+}
+
+export function listBufferChannels(): Promise<{ channels: import('./types').BufferChannel[] }> {
+  return request<{ channels: import('./types').BufferChannel[] }>('/api/buffer/channels');
 }
 
 export function publishToBuffer(
-  body: import("./types").BufferPublishRequest,
-): Promise<import("./types").BufferPublishResult> {
-  return request<import("./types").BufferPublishResult>("/api/buffer/publish", jsonBody(body));
+  body: import('./types').BufferPublishRequest
+): Promise<import('./types').BufferPublishResult> {
+  return request<import('./types').BufferPublishResult>('/api/buffer/publish', jsonBody(body));
 }

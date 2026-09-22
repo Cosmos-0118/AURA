@@ -173,13 +173,158 @@ export type Metrics = {
   assets_pending: number;
 };
 
+export type StudioCampaignCreate = {
+  brand_id: BrandId;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string;
+  platforms: Platform[];
+};
+
+export type CampaignPlatformContentItem = {
+  id: string;
+  campaign_id: string;
+  platform: Platform;
+  title?: string | null;
+  content: string;
+  hashtags: string[];
+  script?: string | null;
+  visual_concept?: string | null;
+  generation_prompt?: string | null;
+};
+
+export type CampaignMediaItem = {
+  id: string;
+  campaign_id: string;
+  media_type: "image" | "video";
+  prompt: string;
+  local_path?: string | null;
+  provider: string;
+  model: string;
+  status: string;
+  media_stage?: "original" | "final";
+  watermarked?: boolean;
+  logo_path?: string | null;
+  logo_position?: string | null;
+  logo_scale?: number | null;
+  logo_opacity?: number | null;
+  parent_media_id?: string | null;
+};
+
+export type StudioCampaignDetail = {
+  id: string;
+  brand_id: BrandId;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string | null;
+  platforms: Platform[];
+  status: string;
+  error?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  contents: CampaignPlatformContentItem[];
+  media: CampaignMediaItem[];
+  image_prompt?: string | null;
+  video_prompt?: string | null;
+  campaign_facts?: CampaignFacts | null;
+};
+
+export type CampaignFacts = {
+  event_name?: string | null;
+  date?: string | null;
+  time?: string | null;
+  location?: string | null;
+  price?: string | null;
+  cta?: string | null;
+  brand?: string | null;
+};
+
+export type CampaignSubmitResult = {
+  success: boolean;
+  campaign_id: string;
+  status: string;
+  message: string;
+};
+
+export type OperationalModeInfo = {
+  demo_mode: boolean;
+  groq_model: string;
+  image_model: string;
+  video_model: string;
+};
+
+export type CampaignPublicationItem = {
+  id: string;
+  campaign_id: string;
+  platform: string;
+  status: "queued" | "publishing" | "published" | "failed";
+  external_post_id?: string | null;
+  external_post_url?: string | null;
+  published_content?: string | null;
+  media_id?: string | null;
+  error_message?: string | null;
+  published_at?: string | null;
+  created_at?: string | null;
+};
+
+export type CampaignEventItem = {
+  id: string;
+  campaign_id: string;
+  event_type: string;
+  actor: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type CampaignReviewCard = {
+  review_id: string;
+  campaign_id: string;
+  review_status: string;
+  campaign_status: string;
+  reviewer_note?: string | null;
+  feedback_tag?: string | null;
+  reviewed_at?: string | null;
+  queued_at: string;
+  brand_id: BrandId;
+  campaign_title: string;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string | null;
+  campaign_facts?: CampaignFacts | null;
+  latest_image_url?: string | null;
+  latest_image_prompt?: string | null;
+  has_video: boolean;
+  latest_video_url?: string | null;
+  linkedin_content: string;
+  linkedin_hashtags: string[];
+  publications: Record<string, unknown>;
+  events_count: number;
+  compliance_passed: boolean;
+  lessons_applied_count: number;
+};
+
+export type PublishResponse = {
+  success: boolean;
+  campaign_id: string;
+  platform: string;
+  status: string;
+  external_post_id?: string | null;
+  external_post_url?: string | null;
+  published_at?: string | null;
+  message: string;
+};
+
 export type VideoAspectRatio = '9:16' | '16:9' | '1:1' | '4:3' | '3:4' | '21:9';
 export type VideoResolution = '768P' | '1080P' | '480P';
 export type VideoPromptExpansion = 'disabled' | 'balanced' | 'quality';
 
 export type VideoGenerateRequest = {
   prompt: string;
-  duration?: number; // Capped at max 5 seconds
+  duration?: number;
   aspect_ratio?: VideoAspectRatio;
   resolution?: VideoResolution;
   prompt_expansion_mode?: VideoPromptExpansion;
