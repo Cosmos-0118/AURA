@@ -52,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   };
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: 'no-store',
     ...init,
     headers
   });
@@ -189,7 +190,8 @@ function demoCompetitorDashboard(): CompetitorDashboard {
       { source: 'changedetection', status: 'waiting', detail: 'No live collector in demo mode' },
       { source: 'rsshub', status: 'waiting', detail: 'No live collector in demo mode' },
       { source: 'searxng', status: 'waiting', detail: 'No live collector in demo mode' }
-    ]
+    ],
+    ready: true
   };
 }
 

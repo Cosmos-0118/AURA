@@ -22,7 +22,7 @@ competitor registry + watch registry
         +--> optional SearXNG search adapter
         |
         v
-normalize content -> hash source stream -> compare with last snapshot
+        normalize content -> hash source stream -> compare with last snapshot
         |
         +--> baseline snapshot
         +--> meaningful change classification
@@ -39,6 +39,14 @@ news page, and feed are kept separate so one source cannot overwrite another
 source's history. A first observation creates a baseline; later meaningful
 content changes create an event with impact, evidence, confidence, and a
 recommended action.
+
+Website and changedetection text is normalized before comparison. Consent
+banners, market or country prompts, and their short controls are removed when
+they are recognizable as transient UI. Captures that contain only transient UI,
+an access interstitial, or an unexpected market redirect are rejected so they
+cannot replace a valid baseline. Stored event evidence is normalized as well,
+including evidence from older snapshots, before it is shown or sent to the
+optional AI analyst.
 
 ## What it uses
 

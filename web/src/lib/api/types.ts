@@ -151,6 +151,7 @@ export type CompetitorDashboard = {
   watches: CompetitorWatch[];
   events: CompetitorEvent[];
   source_health: CompetitorSourceHealth[];
+  ready?: boolean;
 };
 
 export type CompetitorScanResult = {

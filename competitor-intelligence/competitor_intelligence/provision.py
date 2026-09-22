@@ -52,8 +52,22 @@ def _is_g4s(url: str) -> bool:
     return hostname == "g4s.com" or hostname.endswith(".g4s.com")
 
 
+def _is_howden(url: str) -> bool:
+    hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return hostname == "howdengroup.com" or hostname.endswith(".howdengroup.com")
+
+
 def _watch_fetch_options(url: str) -> dict[str, Any]:
     """Extra changedetection fields for origins that need a real browser wait."""
+    if _is_howden(url):
+        # Howden shows a market selector when the browser locale and origin
+        # disagree. Pin the language so the selector is less likely to enter
+        # the text snapshot; the shared normalizer remains the backstop.
+        return {
+            "headers": {
+                "Accept-Language": "en-SG,en;q=0.9,en-US;q=0.8",
+            },
+        }
     if not _is_g4s(url):
         return {}
     # Radware returns HTTP 247 + a JS challenge. Ignore the interstitial status,
