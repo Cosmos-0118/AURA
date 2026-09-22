@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 try:
     from ..agents.video import generate_video
     from ..db import get_connection
+    from ..rules.insurance_compliance import check_compliance
     from ..schemas import (
         Asset,
         VideoAttachRequest,
@@ -19,6 +20,7 @@ try:
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
     from agents.video import generate_video  # type: ignore[no-redef]
     from db import get_connection  # type: ignore[no-redef]
+    from rules.insurance_compliance import check_compliance  # type: ignore[no-redef]
     from schemas import (  # type: ignore[no-redef]
         Asset,
         VideoAttachRequest,
@@ -32,6 +34,18 @@ router = APIRouter(prefix="/api/video", tags=["video"])
 @router.post("/generate", response_model=VideoGenerateResponse)
 async def generate_video_endpoint(body: VideoGenerateRequest) -> VideoGenerateResponse:
     """Generate a 5-second video from text prompt using Fal.ai Minimax H3 Max Turbo."""
+    # Video requests do not carry a brand field; the current gate is brand-neutral.
+    compliance = check_compliance(body.prompt, "unknown", "video")
+    if compliance.result == "FAIL":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Video prompt failed the insurance compliance gate.",
+                "rules": compliance.rules,
+                "issues": [issue.model_dump() for issue in compliance.issues],
+                "suggested_revision": compliance.suggested_revision,
+            },
+        )
     # Strict validation: Duration cannot exceed 5 seconds
     if body.duration > 5:
         raise HTTPException(

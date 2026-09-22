@@ -35,6 +35,16 @@ def test_strict_5_second_duration_validation_schema():
         VideoGenerateRequest(prompt="Test prompt", duration=10)
 
 
+def test_video_prompt_compliance_gate_rejects_absolute_claim():
+    payload = {
+        "prompt": "Guaranteed protection with 100% coverage in every situation",
+        "duration": 5,
+    }
+    response = client.post("/api/video/generate", json=payload)
+    assert response.status_code == 422
+    assert "CLAIM_001" in response.json()["detail"]["rules"]
+
+
 def test_video_generation_mock_fallback():
     payload = {
         "prompt": "An emerald watch under soft studio lighting",

@@ -14,24 +14,27 @@ except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
 
 def _agent_functions():
     use_mocks = os.getenv("AURA_MOCK_AGENTS", "true").lower() == "true"
+    try:
+        from .rules.insurance_compliance import check_compliance
+    except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
+        from rules.insurance_compliance import check_compliance
+
     if use_mocks:
         try:
-            from .agents._stubs import check_compliance, generate_content, get_relevant_lessons
+            from .agents._stubs import generate_content, get_relevant_lessons
         except ImportError:
-            from agents._stubs import check_compliance, generate_content, get_relevant_lessons
+            from agents._stubs import generate_content, get_relevant_lessons
         return generate_content, check_compliance, get_relevant_lessons
 
     try:
         from .agents.content import generate_content
-        from .agents.compliance import check_compliance
         from .agents.lessons import get_relevant_lessons
     except ImportError:
         try:
             from agents.content import generate_content
-            from agents.compliance import check_compliance
             from agents.lessons import get_relevant_lessons
         except ImportError:
-            from agents._stubs import check_compliance, generate_content, get_relevant_lessons
+            from agents._stubs import generate_content, get_relevant_lessons
     return generate_content, check_compliance, get_relevant_lessons
 
 
@@ -47,6 +50,20 @@ def _set_campaign_status(campaign_id: str, status: str, error: str | None = None
             """,
             (status, error, status, campaign_id),
         )
+
+
+def _compliance_text(generated) -> str:
+    """Combine every generated text surface before the compliance check."""
+
+    return "\n".join(
+        value
+        for value in (
+            generated.title,
+            generated.body,
+            " ".join(generated.hashtags),
+        )
+        if value
+    )
 
 
 def run_pipeline(campaign_id: str) -> None:
@@ -78,7 +95,7 @@ def run_pipeline(campaign_id: str) -> None:
         with get_connection() as connection:
             for generated in generated_assets:
                 compliance = check_compliance(
-                    generated.body, campaign["brand_id"], generated.platform
+                    _compliance_text(generated), campaign["brand_id"], generated.platform
                 )
                 asset_status = (
                     "compliance_failed" if compliance.result == "FAIL" else "pending_review"

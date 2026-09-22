@@ -1,7 +1,7 @@
 # Local secrets
 /.env
 /web/.env.local
-
+competitor-intelligence/.run/
 # Python
 /.venv/
 /api/.venv/
