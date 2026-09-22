@@ -334,6 +334,7 @@ class VideoGenerateRequest(BaseModel):
     resolution: Literal["768P", "1080P", "480P"] = "768P"
     prompt_expansion_mode: Literal["disabled", "balanced", "quality"] = "disabled"
     asset_id: str | None = None
+    brand_id: str | None = None
 
 
 class VideoFile(BaseModel):
@@ -356,3 +357,30 @@ class VideoGenerateResponse(BaseModel):
 class VideoAttachRequest(BaseModel):
     asset_id: str
     video_url: str
+
+
+class VideoSaveExportRequest(BaseModel):
+    id: str
+    branded_video_url: str
+    branded_file_name: str | None = None
+
+
+class VideoGenerationRecord(BaseModel):
+    id: str
+    brand_id: str | None = None
+    asset_id: str | None = None
+    prompt: str
+    aspect_ratio: str
+    resolution: str
+    duration_secs: int
+    model: str
+    video_url: str | None = None
+    file_name: str | None = None
+    file_size: int | None = None
+    branded_video_url: str | None = None
+    branded_file_name: str | None = None
+    status: Literal["COMPLETED", "FAILED", "IN_PROGRESS"]
+    error_msg: str | None = None
+    request_id: str | None = None
+    created_at: datetime
+

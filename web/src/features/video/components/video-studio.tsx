@@ -9,59 +9,69 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
+  CardTitle
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Icons } from '@/components/icons';
-import { IconCopy, IconDownload } from '@tabler/icons-react';
-import {
-  generateVideo,
-  attachVideoToAsset,
-  listAssets,
-} from '@/lib/api/client';
+import { IconSparkles } from '@tabler/icons-react';
+import { VideoOutputModal } from './video-output-modal';
+import { VideoHistory } from './video-history';
+import { generateVideo, attachVideoToAsset, listAssets, saveVideoExport } from '@/lib/api/client';
 import type {
   VideoAspectRatio,
   VideoResolution,
-  VideoPromptExpansion,
   VideoGenerateResponse,
-  Asset,
+  VideoGenerationRecord,
+  Asset
 } from '@/lib/api/types';
 
 const PRESETS = {
   jade: {
-    name: 'Jade (Jewellers)',
-    badge: 'Luxury / Specialist',
+    id: 'jade',
+    name: 'Jade',
+    badge: 'Luxury Jewellery',
     prompt:
-      'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.',
+      'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.'
   },
   doctorshield: {
-    name: 'DoctorShield (Clinics)',
-    badge: 'Medical / Professional',
+    id: 'doctorshield',
+    name: 'Doctor Shield',
+    badge: 'Clinical Healthcare',
     prompt:
-      'A sunlit modern doctor consultation clinic, clean wooden desk with a stethoscope and medical journal, soft morning sunlight through large windows, calming professional healthcare ambiance, smooth cinematic pan.',
+      'A sunlit modern doctor consultation clinic, clean wooden desk with a stethoscope and medical journal, soft morning sunlight through large windows, calming professional healthcare ambiance, smooth cinematic pan.'
   },
   jaguar: {
-    name: 'Jaguar Transit (Secured)',
-    badge: 'Logistics / High-Tech',
+    id: 'jaguar',
+    name: 'Jaguar Transit',
+    badge: 'Logistics & Security',
     prompt:
-      'A heavy armored transit security vehicle departing a high-security airport vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.',
-  },
+      'A heavy armored transit security vehicle departing a high-security community vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.'
+  }
 };
 
 export default function VideoStudio() {
+  const [selectedBrand, setSelectedBrand] = useState<'jade' | 'doctorshield' | 'jaguar'>('jade');
   const [prompt, setPrompt] = useState(PRESETS.jade.prompt);
   const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>('9:16');
   const [resolution, setResolution] = useState<VideoResolution>('768P');
-  const [promptExpansion, setPromptExpansion] = useState<VideoPromptExpansion>('disabled');
+  const [promptExpansion, setPromptExpansion] = useState<'disabled' | 'balanced'>('disabled');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [assets, setAssets] = useState<Asset[]>([]);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [defaultModalTab, setDefaultModalTab] = useState<'preview' | 'brand'>('preview');
+  const [brandMarkerVideoOverride, setBrandMarkerVideoOverride] = useState<string | null>(null);
+  const [activeRecordId, setActiveRecordId] = useState<string | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<VideoGenerateResponse | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [attachStatus, setAttachStatus] = useState<string | null>(null);
+
+  // History: latest record for instant prepend in VideoHistory
+  const [latestRecord, setLatestRecord] = useState<VideoGenerationRecord | null>(null);
 
   // Load existing assets for attaching video
   useEffect(() => {
@@ -76,6 +86,11 @@ export default function VideoStudio() {
       });
   }, []);
 
+  const handleSelectPreset = (key: 'jade' | 'doctorshield' | 'jaguar') => {
+    setSelectedBrand(key);
+    setPrompt(PRESETS[key].prompt);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return;
 
@@ -84,7 +99,7 @@ export default function VideoStudio() {
     setLogs([
       'Initiating request for Minimax H3 Max Turbo...',
       'Verifying strict 5-second duration constraint...',
-      'Submitting job to Fal.ai pipeline...',
+      'Submitting job to Fal.ai pipeline...'
     ]);
     setAttachStatus(null);
 
@@ -96,6 +111,7 @@ export default function VideoStudio() {
         resolution: resolution,
         prompt_expansion_mode: promptExpansion,
         asset_id: selectedAssetId || null,
+        brand_id: selectedBrand
       });
 
       setResult(response);
@@ -103,21 +119,88 @@ export default function VideoStudio() {
         setLogs((prev) => [...prev, ...response.logs]);
       }
 
+      const newRecId = response.request_id ?? `local-${Date.now()}`;
+      setActiveRecordId(newRecId);
+      setBrandMarkerVideoOverride(response.video?.url ?? null);
+
       if (response.status === 'COMPLETED') {
         setLogs((prev) => [...prev, 'Video generation successfully completed (5.0s MP4).']);
+        setDefaultModalTab('preview');
+        setModalOpen(true);
+        // Build a VideoGenerationRecord from the response for instant history prepend
+        setLatestRecord({
+          id: newRecId,
+          brand_id: selectedBrand,
+          asset_id: selectedAssetId || null,
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio,
+          resolution: resolution,
+          duration_secs: 5,
+          model: 'minimax/h3-max-turbo/text-to-video',
+          video_url: response.video?.url ?? null,
+          file_name: response.video?.file_name ?? null,
+          file_size: response.video?.file_size ?? null,
+          branded_video_url: null,
+          branded_file_name: null,
+          status: 'COMPLETED',
+          error_msg: null,
+          request_id: response.request_id ?? null,
+          created_at: new Date().toISOString()
+        });
       } else if (response.error) {
         setLogs((prev) => [...prev, `Error: ${response.error}`]);
+        // Also record failed generations in history
+        setLatestRecord({
+          id: newRecId,
+          brand_id: selectedBrand,
+          asset_id: selectedAssetId || null,
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio,
+          resolution: resolution,
+          duration_secs: 5,
+          model: 'minimax/h3-max-turbo/text-to-video',
+          video_url: null,
+          file_name: null,
+          file_size: null,
+          branded_video_url: null,
+          branded_file_name: null,
+          status: 'FAILED',
+          error_msg: response.error ?? null,
+          request_id: response.request_id ?? null,
+          created_at: new Date().toISOString()
+        });
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Connection error';
+      const errMsg = err instanceof Error ? err.message : 'Failed to generate video';
       setResult({
         status: 'FAILED',
-        error: message || 'Failed to generate video',
-        logs: [`Exception: ${message}`],
+        error: errMsg,
+        logs: [`Exception: ${errMsg}`]
       });
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleExportSaved = async (recordId: string, brandedUrl: string, fileName: string) => {
+    try {
+      await saveVideoExport({
+        id: recordId,
+        branded_video_url: brandedUrl,
+        branded_file_name: fileName
+      });
+    } catch {
+      // Offline fallback
+    }
+    // Update active record in memory/history
+    setLatestRecord((prev) => {
+      if (!prev || prev.id !== recordId) return prev;
+      return {
+        ...prev,
+        branded_video_url: brandedUrl,
+        branded_file_name: fileName
+      };
+    });
   };
 
   const handleAttach = async () => {
@@ -126,12 +209,12 @@ export default function VideoStudio() {
     try {
       await attachVideoToAsset({
         asset_id: selectedAssetId,
-        video_url: result.video.url,
+        video_url: result.video.url
       });
       setAttachStatus('Attached successfully to asset!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Connection error';
-      setAttachStatus(`Failed to attach: ${message}`);
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      setAttachStatus(`Failed to attach: ${errMsg}`);
     }
   };
 
@@ -145,8 +228,8 @@ export default function VideoStudio() {
   return (
     <PageContainer>
       <div className='flex flex-1 flex-col space-y-6 pb-12'>
-        {/* Header */}
-        <div className='flex flex-col justify-between gap-4 md:flex-row md:items-center'>
+        {/* Header (Centred with max width) */}
+        <div className='w-full max-w-4xl mx-auto flex flex-col justify-between gap-4 md:flex-row md:items-center'>
           <div>
             <div className='flex items-center gap-2'>
               <h1 className='text-3xl font-bold tracking-tight'>AI Video Studio</h1>
@@ -155,377 +238,298 @@ export default function VideoStudio() {
               </Badge>
             </div>
             <p className='text-sm text-muted-foreground mt-1'>
-              Generate high-impact 5-second marketing video reels and product clips powered by Fal.ai.
+              Generate high-impact 5-second marketing video reels and product clips powered by
+              Fal.ai.
             </p>
           </div>
 
-          <div className='flex items-center gap-2'>
-            <Badge variant='secondary' className='flex items-center gap-1.5 py-1 px-3'>
-              <Icons.check className='size-3.5 text-emerald-500' />
-              <span>Strict 5s Max Duration Enforced</span>
+          <div className='flex items-center gap-3'>
+            <Badge variant='secondary' className='px-3 py-1 font-mono text-xs'>
+              Strict limit: 5.0s Max
             </Badge>
           </div>
         </div>
 
-        {/* Studio Layout */}
-        <div className='grid grid-cols-1 gap-6 lg:grid-cols-12'>
-          {/* Left: Input & Controls (7 Cols) */}
-          <div className='space-y-6 lg:col-span-7'>
-            {/* Brand Presets */}
-            <Card>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-base font-semibold'>Brand Style Presets</CardTitle>
-                <CardDescription>
-                  Quickly load tested visual prompts tailored for JA Assure's brand personalities.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-wrap gap-2.5 pt-0'>
-                {Object.entries(PRESETS).map(([key, preset]) => (
-                  <Button
-                    key={key}
-                    variant='outline'
-                    size='sm'
-                    className='h-auto flex-col items-start py-2 px-3 text-left hover:border-primary transition-all'
-                    onClick={() => setPrompt(preset.prompt)}
-                  >
-                    <span className='font-medium text-xs'>{preset.name}</span>
-                    <span className='text-[10px] text-muted-foreground'>{preset.badge}</span>
-                  </Button>
-                ))}
-              </CardContent>
-            </Card>
+        {/* Centered Single-Column Studio Layout */}
+        <div className='w-full max-w-4xl mx-auto space-y-6'>
+          {/* Card 1: Prompt & Brand Settings */}
+          <Card>
+            <CardHeader className='pb-3'>
+              <div className='flex items-center justify-between'>
+                <CardTitle className='text-base font-semibold'>
+                  Prompt &amp; Brand Settings
+                </CardTitle>
+                <Badge variant='outline' className='text-xs'>
+                  Prompt Engine
+                </Badge>
+              </div>
+              <CardDescription>
+                Choose a brand preset or craft a custom video scene prompt.
+              </CardDescription>
+            </CardHeader>
 
-            {/* Prompt Editor */}
-            <Card>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-semibold'>Scene Prompt</CardTitle>
-                  <span className='text-xs text-muted-foreground'>{prompt.length} characters</span>
+            <CardContent className='space-y-4 pt-0'>
+              {/* Brand Presets */}
+              <div className='space-y-2'>
+                <Label className='text-xs font-semibold'>Brand Presets</Label>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                  {(Object.keys(PRESETS) as Array<keyof typeof PRESETS>).map((key) => {
+                    const item = PRESETS[key];
+                    const isSelected = selectedBrand === key && prompt === item.prompt;
+                    return (
+                      <Button
+                        key={key}
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        className={`h-auto flex-col items-start p-2.5 text-left transition-all ${
+                          isSelected
+                            ? 'border-primary ring-1 ring-primary bg-primary/5'
+                            : 'hover:border-primary/50'
+                        }`}
+                        onClick={() => handleSelectPreset(key)}
+                      >
+                        <span className='font-medium text-xs'>{item.name}</span>
+                        <span className='text-[10px] text-muted-foreground'>{item.badge}</span>
+                      </Button>
+                    );
+                  })}
                 </div>
-                <CardDescription>
-                  Describe the visual scene, subject motion, camera movement, and lighting.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-4'>
+              </div>
+
+              {/* Prompt Textarea */}
+              <div className='space-y-2'>
+                <div className='flex items-center justify-between'>
+                  <Label htmlFor='video-prompt' className='text-xs font-semibold'>
+                    Video Prompt
+                  </Label>
+                  <span className='text-[11px] text-muted-foreground'>{prompt.length} chars</span>
+                </div>
                 <Textarea
+                  id='video-prompt'
+                  placeholder='Describe the subject, camera movement, lighting, style, and cinematic mood...'
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder='e.g. A luxury watch rotating slowly under ambient studio lighting, macro lens tracking...'
-                  className='min-h-[140px] resize-y text-sm font-mono leading-relaxed'
+                  rows={4}
+                  className='resize-none text-xs leading-relaxed'
                   disabled={isGenerating}
                 />
+              </div>
 
-                {/* Pre-fill from script selector */}
-                {assets.length > 0 && (
-                  <div className='space-y-1.5 pt-1'>
-                    <Label className='text-xs text-muted-foreground'>
-                      Or load script from recent campaign asset:
-                    </Label>
-                    <select
-                      className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
-                      value=''
-                      onChange={(e) => {
-                        const found = assets.find((a) => a.id === e.target.value);
-                        if (found) {
-                          setPrompt(found.body);
-                          setSelectedAssetId(found.id);
-                        }
-                      }}
-                      disabled={isGenerating}
-                    >
-                      <option value=''>-- Select asset to copy script --</option>
-                      {assets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          [{asset.brand_id.toUpperCase()} - {asset.platform}] {asset.title || asset.body.slice(0, 45)}...
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              {/* Pre-fill from script selector */}
+              {assets.length > 0 && (
+                <div className='space-y-1.5 pt-1'>
+                  <Label className='text-xs text-muted-foreground'>
+                    Or load script from recent campaign asset:
+                  </Label>
+                  <select
+                    className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                    value=''
+                    onChange={(e) => {
+                      const found = assets.find((a) => a.id === e.target.value);
+                      if (found) {
+                        setPrompt(found.body);
+                        setSelectedAssetId(found.id);
+                      }
+                    }}
+                    disabled={isGenerating}
+                  >
+                    <option value=''>-- Select asset to copy script --</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        [{asset.brand_id.toUpperCase()} - {asset.platform}]{' '}
+                        {asset.title || asset.body.slice(0, 45)}...
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-            {/* Video Parameters */}
-            <Card>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-base font-semibold'>Video Generation Settings</CardTitle>
-                <CardDescription>Configure aspect ratio and quality output parameters.</CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-5'>
+              {/* Video Parameters */}
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1'>
                 {/* Aspect Ratio */}
-                <div className='space-y-2'>
+                <div className='space-y-1.5'>
                   <Label className='text-xs font-medium'>Aspect Ratio</Label>
-                  <div className='grid grid-cols-3 gap-2.5'>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '9:16' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('9:16')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>9:16 (Vertical)</span>
-                      <span className='text-[10px] opacity-80'>Reels, TikTok, Shorts</span>
-                    </Button>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '16:9' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('16:9')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>16:9 (Landscape)</span>
-                      <span className='text-[10px] opacity-80'>Widescreen / Web</span>
-                    </Button>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '1:1' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('1:1')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>1:1 (Square)</span>
-                      <span className='text-[10px] opacity-80'>Feed & Carousel</span>
-                    </Button>
-                  </div>
+                  <select
+                    className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                    value={aspectRatio}
+                    onChange={(e) => setAspectRatio(e.target.value as VideoAspectRatio)}
+                    disabled={isGenerating}
+                  >
+                    <option value='9:16'>9:16 (Reel / TikTok / Shorts)</option>
+                    <option value='16:9'>16:9 (Landscape YouTube / Web)</option>
+                    <option value='1:1'>1:1 (Square Feed Post)</option>
+                    <option value='4:3'>4:3 (Classic Video)</option>
+                    <option value='3:4'>3:4 (Portrait Feed)</option>
+                    <option value='21:9'>21:9 (Cinematic Ultrawide)</option>
+                  </select>
                 </div>
 
-                {/* Duration & Resolution Controls */}
-                <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1'>
-                  {/* Duration - Locked to strict 5s */}
-                  <div className='space-y-1.5'>
-                    <Label className='text-xs font-medium'>Duration</Label>
-                    <div className='flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
-                      <span>5 Seconds</span>
-                      <Badge variant='outline' className='text-[10px] border-emerald-500/40'>
-                        Max Cap
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* Resolution */}
-                  <div className='space-y-1.5'>
-                    <Label className='text-xs font-medium'>Resolution</Label>
-                    <select
-                      className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value as VideoResolution)}
-                      disabled={isGenerating}
-                    >
-                      <option value='768P'>768P (Standard HD)</option>
-                      <option value='1080P'>1080P (FHD Refined)</option>
-                      <option value='480P'>480P (Draft Fast)</option>
-                    </select>
-                  </div>
-
-                  {/* Prompt Expansion */}
-                  <div className='space-y-1.5'>
-                    <Label className='text-xs font-medium'>Prompt Expansion</Label>
-                    <select
-                      className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
-                      value={promptExpansion}
-                      onChange={(e) => setPromptExpansion(e.target.value as VideoPromptExpansion)}
-                      disabled={isGenerating}
-                    >
-                      <option value='disabled'>Disabled (Exact prompt)</option>
-                      <option value='balanced'>Balanced (Enhanced)</option>
-                    </select>
-                  </div>
+                {/* Resolution */}
+                <div className='space-y-1.5'>
+                  <Label className='text-xs font-medium'>Resolution</Label>
+                  <select
+                    className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value as VideoResolution)}
+                    disabled={isGenerating}
+                  >
+                    <option value='768P'>768P (Standard HD)</option>
+                    <option value='1080P'>1080P (Full HD)</option>
+                    <option value='480P'>480P (Fast Preview)</option>
+                  </select>
                 </div>
-              </CardContent>
-              <CardFooter className='border-t bg-muted/20 px-6 py-4'>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                  className='w-full font-semibold gap-2'
-                  size='lg'
-                >
-                  {isGenerating ? (
-                    <>
-                      <Icons.spinner className='size-4 animate-spin' />
-                      Generating Video (5s)...
-                    </>
-                  ) : (
-                    <>
-                      <Icons.video className='size-4' />
-                      Generate Video (Max 5s)
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
 
-          {/* Right: Video Output & Live Feed (5 Cols) */}
-          <div className='space-y-6 lg:col-span-5'>
-            {/* Video Player Card */}
-            <Card className='overflow-hidden'>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-semibold'>Video Output</CardTitle>
-                  {result?.status === 'COMPLETED' && (
-                    <Badge variant='outline' className='border-emerald-500/40 text-emerald-600 bg-emerald-500/10'>
-                      5.0s Ready
-                    </Badge>
-                  )}
+                {/* Prompt Expansion */}
+                <div className='space-y-1.5'>
+                  <Label className='text-xs font-medium'>Prompt Enhancer</Label>
+                  <select
+                    className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                    value={promptExpansion}
+                    onChange={(e) => setPromptExpansion(e.target.value as 'disabled' | 'balanced')}
+                    disabled={isGenerating}
+                  >
+                    <option value='disabled'>Disabled (Exact Prompt)</option>
+                    <option value='balanced'>Balanced Expansion</option>
+                  </select>
                 </div>
-                <CardDescription>Preview the generated MP4 media.</CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col items-center justify-center p-4 pt-0'>
+              </div>
+            </CardContent>
+
+            <CardFooter className='border-t bg-muted/20 px-6 py-3.5 flex items-center justify-between'>
+              <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                <Icons.check className='size-3.5 text-emerald-500' />
+                <span>Duration locked to 5.0s</span>
+              </div>
+
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+                className='font-semibold gap-2 min-w-[140px]'
+              >
                 {isGenerating ? (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 p-12 text-center w-full min-h-[320px]'>
-                    <Icons.spinner className='size-10 animate-spin text-primary mb-4' />
-                    <p className='font-semibold text-sm'>Rendering 5s Video with Fal.ai</p>
-                    <p className='text-xs text-muted-foreground mt-1 max-w-xs'>
-                      Model is performing diffusion denoising and temporal alignment...
-                    </p>
-                  </div>
-                ) : result?.video?.url ? (
-                  <div className='w-full space-y-3'>
-                    <div
-                      className={`relative mx-auto overflow-hidden rounded-lg bg-black shadow-lg ${
-                        aspectRatio === '9:16'
-                          ? 'max-w-[270px] aspect-[9/16]'
-                          : aspectRatio === '1:1'
-                          ? 'max-w-[340px] aspect-square'
-                          : 'w-full aspect-video'
-                      }`}
-                    >
-                      <video
-                        src={result.video.url}
-                        controls
-                        autoPlay
-                        loop
-                        playsInline
-                        aria-label='Generated marketing video preview'
-                        className='h-full w-full object-contain'
-                      >
-                        <track kind='captions' />
-                      </video>
-                    </div>
-
-                    <div className='flex flex-col gap-2 pt-2'>
-                      <div className='flex items-center justify-between text-xs text-muted-foreground'>
-                        <span>Duration: <strong>5.0 seconds</strong></span>
-                        <span>Format: <strong>MP4 ({resolution})</strong></span>
-                      </div>
-
-                      <div className='flex items-center gap-2'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='flex-1 gap-1.5'
-                          onClick={copyUrl}
-                        >
-                          <IconCopy className='size-3.5' />
-                          Copy Video URL
-                        </Button>
-                        <a
-                          href={result.video.url}
-                          download={result.video.file_name || 'aura_reel_5s.mp4'}
-                          target='_blank'
-                          rel='noopener noreferrer'
-                          className='flex-1'
-                        >
-                          <Button size='sm' className='w-full gap-1.5'>
-                            <IconDownload className='size-3.5' />
-                            Download MP4
-                          </Button>
-                        </a>
-                      </div>
-
-                      {/* Attach to Asset section */}
-                      {assets.length > 0 && (
-                        <div className='rounded-md border p-3 bg-muted/20 space-y-2 mt-2'>
-                          <Label className='text-xs font-semibold'>Link to Campaign Asset</Label>
-                          <div className='flex gap-2'>
-                            <select
-                              className='flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs'
-                              value={selectedAssetId}
-                              onChange={(e) => setSelectedAssetId(e.target.value)}
-                            >
-                              <option value=''>-- Select target asset --</option>
-                              {assets.map((asset) => (
-                                <option key={asset.id} value={asset.id}>
-                                  [{asset.brand_id.toUpperCase()}] {asset.title || asset.id.slice(0, 8)}
-                                </option>
-                              ))}
-                            </select>
-                            <Button
-                              size='sm'
-                              variant='secondary'
-                              disabled={!selectedAssetId}
-                              onClick={handleAttach}
-                            >
-                              Attach
-                            </Button>
-                          </div>
-                          {attachStatus && (
-                            <p className='text-[11px] font-medium text-emerald-600 dark:text-emerald-400'>
-                              {attachStatus}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : result?.error ? (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center w-full min-h-[260px]'>
-                    <Icons.warning className='size-8 text-destructive mb-3' />
-                    <p className='font-semibold text-sm text-destructive'>Generation Failed</p>
-                    <p className='text-xs text-muted-foreground mt-1 max-w-sm'>{result.error}</p>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='mt-4'
-                      onClick={handleGenerate}
-                    >
-                      Retry Generation
-                    </Button>
-                  </div>
+                  <>
+                    <Icons.spinner className='size-4 animate-spin' />
+                    Generating...
+                  </>
                 ) : (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-dashed p-10 text-center w-full min-h-[300px] text-muted-foreground'>
-                    <Icons.video className='size-12 stroke-[1.2] mb-3 opacity-50' />
-                    <p className='text-sm font-medium'>No video generated yet</p>
-                    <p className='text-xs max-w-xs mt-1'>
-                      Select a brand preset or enter a scene prompt and click "Generate Video".
-                    </p>
-                  </div>
+                  <>
+                    <IconSparkles className='size-4' />
+                    Generate Video
+                  </>
                 )}
-              </CardContent>
-            </Card>
+              </Button>
+            </CardFooter>
+          </Card>
 
-            {/* Execution & Queue Logs */}
-            <Card>
-              <CardHeader className='pb-2'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-xs font-semibold tracking-wide uppercase text-muted-foreground'>
-                    Fal.ai Pipeline Logs
-                  </CardTitle>
-                  <Badge variant='outline' className='text-[10px]'>
-                    {isGenerating ? 'Active' : 'Idle'}
-                  </Badge>
+          {/* Card 2: Fal.ai Pipeline Logs */}
+          <Card>
+            <CardHeader className='pb-2'>
+              <div className='flex items-center justify-between'>
+                <CardTitle className='text-xs font-semibold tracking-wide uppercase text-muted-foreground'>
+                  Fal.ai Pipeline Logs
+                </CardTitle>
+                <Badge variant='outline' className='text-[10px]'>
+                  {isGenerating ? 'Active' : 'Idle'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className='pt-0'>
+              <div className='rounded-md bg-zinc-950 p-3 text-emerald-400 font-mono text-[11px] min-h-[100px] max-h-[160px] overflow-y-auto space-y-1'>
+                {logs.length === 0 ? (
+                  <span className='text-zinc-600'>Awaiting submission...</span>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className='leading-tight'>
+                      <span className='text-zinc-500 select-none'>&gt; </span>
+                      {log}
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Video Output & Brand Studio Action Banner (when ready) */}
+          {(result?.video?.url || brandMarkerVideoOverride) && (
+            <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 p-4'>
+              <div className='flex items-center gap-3'>
+                <div className='flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20'>
+                  <IconSparkles className='size-4' />
                 </div>
-              </CardHeader>
-              <CardContent className='pt-0'>
-                <div className='rounded-md bg-zinc-950 p-3 text-emerald-400 font-mono text-[11px] min-h-[120px] max-h-[180px] overflow-y-auto space-y-1'>
-                  {logs.length === 0 ? (
-                    <span className='text-zinc-600'>Awaiting submission...</span>
-                  ) : (
-                    logs.map((log, index) => (
-                      <div key={index} className='leading-tight'>
-                        <span className='text-zinc-500 select-none'>&gt; </span>
-                        {log}
-                      </div>
-                    ))
-                  )}
+                <div>
+                  <h3 className='text-sm font-semibold'>Video Output &amp; Brand Studio Ready</h3>
+                  <p className='text-xs text-muted-foreground'>
+                    Preview high-definition MP4 playback or customize interactive logo overlays
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              <div className='flex items-center gap-2 w-full sm:w-auto justify-end'>
+                <Button
+                  onClick={() => {
+                    setDefaultModalTab('preview');
+                    setModalOpen(true);
+                  }}
+                  variant='outline'
+                  size='sm'
+                  className='gap-1.5 text-xs'
+                >
+                  <Icons.video className='size-3.5' />
+                  Preview Video
+                </Button>
+                <Button
+                  onClick={() => {
+                    setDefaultModalTab('brand');
+                    setModalOpen(true);
+                  }}
+                  size='sm'
+                  className='gap-1.5 text-xs font-semibold'
+                >
+                  <IconSparkles className='size-3.5' />
+                  Open Brand Studio
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Video Generation History — full-width section below the studio */}
+        <VideoHistory
+          latestRecord={latestRecord}
+          onOpenInBrandMarker={(url, promptText, recordId) => {
+            setBrandMarkerVideoOverride(url);
+            setActiveRecordId(recordId || null);
+            if (promptText) setPrompt(promptText);
+            setDefaultModalTab('brand');
+            setModalOpen(true);
+          }}
+          onRegenerate={(p) => {
+            setPrompt(p);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+
+        {/* Video Output & Brand Composer Pop-up Window */}
+        <VideoOutputModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          defaultTab={defaultModalTab}
+          result={result}
+          isGenerating={isGenerating}
+          aspectRatio={aspectRatio}
+          resolution={resolution}
+          selectedBrand={selectedBrand}
+          brandMarkerVideoOverride={brandMarkerVideoOverride}
+          activeRecordId={activeRecordId}
+          assets={assets}
+          selectedAssetId={selectedAssetId}
+          attachStatus={attachStatus}
+          onSetSelectedAssetId={setSelectedAssetId}
+          onAttach={handleAttach}
+          onCopyUrl={copyUrl}
+          onExportSaved={handleExportSaved}
+          onRetry={handleGenerate}
+        />
       </div>
     </PageContainer>
   );

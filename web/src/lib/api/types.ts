@@ -329,6 +329,7 @@ export type VideoGenerateRequest = {
   resolution?: VideoResolution;
   prompt_expansion_mode?: VideoPromptExpansion;
   asset_id?: string | null;
+  brand_id?: string | null;
 };
 
 export type VideoFile = {
@@ -396,4 +397,30 @@ export type VideoConfig = {
   supported_aspect_ratios: VideoAspectRatio[];
   supported_resolutions: VideoResolution[];
   prompt_presets: Record<string, string>;
+};
+
+export type VideoSaveExportRequest = {
+  id: string;
+  branded_video_url: string;
+  branded_file_name?: string | null;
+};
+
+export type VideoGenerationRecord = {
+  id: string;
+  brand_id?: string | null;
+  asset_id?: string | null;
+  prompt: string;
+  aspect_ratio: string;
+  resolution: string;
+  duration_secs: number;
+  model: string;
+  video_url?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  branded_video_url?: string | null;
+  branded_file_name?: string | null;
+  status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS';
+  error_msg?: string | null;
+  request_id?: string | null;
+  created_at: string;
 };

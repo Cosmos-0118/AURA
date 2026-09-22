@@ -82,3 +82,26 @@ CREATE TABLE IF NOT EXISTS review_queue (
   INDEX idx_review_status (status),
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS video_generations (
+  id VARCHAR(64) PRIMARY KEY,
+  brand_id VARCHAR(64),
+  asset_id VARCHAR(64),
+  prompt TEXT NOT NULL,
+  aspect_ratio VARCHAR(16) NOT NULL DEFAULT '9:16',
+  resolution VARCHAR(16) NOT NULL DEFAULT '768P',
+  duration_secs INT NOT NULL DEFAULT 5,
+  model VARCHAR(128) NOT NULL DEFAULT 'minimax/h3-max-turbo/text-to-video',
+  video_url TEXT,
+  file_name VARCHAR(255),
+  file_size BIGINT,
+  branded_video_url TEXT,
+  branded_file_name VARCHAR(255),
+  status VARCHAR(32) NOT NULL DEFAULT 'COMPLETED',
+  error_msg TEXT,
+  request_id VARCHAR(255),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_video_gen_created (created_at),
+  INDEX idx_video_gen_brand (brand_id),
+  INDEX idx_video_gen_branded (branded_video_url(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

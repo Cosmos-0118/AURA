@@ -617,6 +617,25 @@ export function attachVideoToAsset(
   );
 }
 
+export function listVideoHistory(
+  params: { limit?: number; brand_id?: string } = {}
+): Promise<import('./types').VideoGenerationRecord[]> {
+  const query = new URLSearchParams();
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.brand_id) query.set('brand_id', params.brand_id);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<import('./types').VideoGenerationRecord[]>(`/api/video/history${suffix}`);
+}
+
+export function saveVideoExport(
+  body: import('./types').VideoSaveExportRequest
+): Promise<{ ok: boolean; id: string; branded_video_url: string }> {
+  return request<{ ok: boolean; id: string; branded_video_url: string }>(
+    '/api/video/export-record',
+    jsonBody(body)
+  );
+}
+
 export function getBufferStatus(): Promise<import('./types').BufferStatus> {
   return request<import('./types').BufferStatus>('/api/buffer/status');
 }

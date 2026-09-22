@@ -240,6 +240,26 @@ def init_sqlite_db(conn: sqlite3.Connection):
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS video_generations (
+          id TEXT PRIMARY KEY,
+          brand_id TEXT,
+          asset_id TEXT,
+          prompt TEXT NOT NULL,
+          aspect_ratio TEXT NOT NULL DEFAULT '9:16',
+          resolution TEXT NOT NULL DEFAULT '768P',
+          duration_secs INTEGER NOT NULL DEFAULT 5,
+          model TEXT NOT NULL DEFAULT 'minimax/h3-max-turbo/text-to-video',
+          video_url TEXT,
+          file_name TEXT,
+          file_size INTEGER,
+          branded_video_url TEXT,
+          branded_file_name TEXT,
+          status TEXT NOT NULL DEFAULT 'COMPLETED',
+          error_msg TEXT,
+          request_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS competitors (
           id TEXT PRIMARY KEY,
           brand_id TEXT NOT NULL,
@@ -477,5 +497,4 @@ def reset_campaign_data(db: Any) -> dict[str, int]:
 
 get_connection = get_db
 transaction = get_db
-
 
