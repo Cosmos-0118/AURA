@@ -98,11 +98,10 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Don't let policy exclusions blindside your atelier. Speak with Jade by JA Assure.",
         },
         "image_generation_prompt": (
-            "A luxury commercial marketing poster for Jade jewellery risk protection. "
-            "The poster prominently features bold typography text \"JADE VAULT AUDIT\" in elegant gold serif letters across the top, "
-            "and sub-headline text \"INSTITUTIONAL JEWELLERY SECURITY · SINGAPORE\" below it. "
-            "In the center is an editorial photograph of a high-security titanium vault with sparkling diamonds on dark velvet. "
-            "High-end graphic design poster layout, crisp typography hierarchy, award-winning luxury advertising poster."
+            "Commercial advertising poster with bold typography text overlay. "
+            "Large prominent headline text overlay across the top in elegant gold lettering reads: \"COME TO JADE · VAULT AUDIT 2026\". "
+            "Secondary sub-headline text overlay reads: \"INSTITUTIONAL JEWELLERY SECURITY · BESPOKE ADVISORY\". "
+            "High-contrast graphic design poster layout with clean typography text overlay on an editorial photograph of a high-security titanium vault with sparkling emeralds and diamond necklaces on dark velvet."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 shot of an armoured courier in elegant black uniform locking a biometric titanium transit case, "
@@ -158,11 +157,10 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Calm, experienced medical defense. DoctorShield by JA Assure.",
         },
         "image_generation_prompt": (
-            "A professional commercial marketing poster for DoctorShield medical indemnity. "
-            "The poster prominently features bold, clean typography text \"STAND PROTECTED\" in refined navy lettering at the top, "
-            "with sub-headline text \"PEER-GUIDED MEDICO-LEGAL DEFENSE\" in crisp sans-serif below. "
-            "In the center is an empathetic editorial photograph of a clinician in a modern sunlit clinic office. "
-            "Minimalist graphic design poster layout, trustworthy medical branding poster."
+            "Commercial advertising poster with bold typography text overlay. "
+            "Large prominent headline text overlay across the top reads: \"STAND PROTECTED WITH DOCTORSHIELD\". "
+            "Secondary sub-headline text overlay reads: \"PEER-GUIDED MEDICO-LEGAL DEFENSE · SINGAPORE & ASEAN\". "
+            "Clean graphic design poster layout with high-contrast text overlay on a serene, professional photograph of a clinic consultation room."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 slow push-in shot of a modern medical clinic consultation room, daylight through large windows, "
@@ -216,11 +214,10 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Real-time telemetry cargo protection. Jaguar Transit by JA Assure.",
         },
         "image_generation_prompt": (
-            "A high-impact commercial logistics marketing poster for Jaguar Transit. "
-            "The poster prominently features bold industrial typography text \"CHAIN OF CUSTODY ASSURED\" in sharp electric blue letters across the top, "
-            "with sub-headline text \"REAL-TIME TELEMETRY FREIGHT PROTECTION\" below. "
-            "In the center is a high-tech container freight truck with glowing digital security seals at a twilight port terminal. "
-            "Dynamic graphic poster design, editorial typography, supply chain advertising poster."
+            "Commercial advertising poster with bold typography text overlay. "
+            "Large prominent headline text overlay across the top reads: \"CHAIN OF CUSTODY ASSURED · JAGUAR TRANSIT\". "
+            "Secondary sub-headline text overlay reads: \"REAL-TIME TELEMETRY FREIGHT ENDORSEMENT\". "
+            "High-contrast industrial graphic design poster layout with bold text overlay on a high-tech container freight truck with glowing digital security seals at dusk."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 tracking shot alongside a sleek commercial freight truck driving across a modern cable-stayed bridge at night, "
@@ -296,11 +293,11 @@ The JSON must have this exact structure:
     "voiceover": "...",
     "captions": "..."
   }},
-  "image_generation_prompt": "MUST be a prompt for a commercial marketing poster with bold typography text embedded directly in the visual. Must explicitly include: 1) A primary bold headline text in quotes related to the campaign thesis (e.g. 'commercial advertising poster prominently featuring bold typography text \"HEADLINE\" across the top in elegant lettering'), 2) A secondary sub-headline text in quotes, 3) High-end graphic design poster layout with clear typography hierarchy, negative space, and premium brand aesthetics.",
+  "image_generation_prompt": "CRITICAL: MUST be a detailed prompt for a commercial marketing poster with BOLD TYPOGRAPHY TEXT OVERLAY. You MUST format this prompt as: 'Commercial advertising poster with bold typography text overlay. Large prominent headline text overlay across the top reads: \"[PUNCHY CAMPAIGN HEADLINE OR CALL TO ACTION IN QUOTES, e.g. COME TO JADE · VAULT AUDIT 2026]\". Secondary sub-headline text overlay reads: \"[SUB-HEADLINE IN QUOTES, e.g. INSTITUTIONAL JEWELLERY SECURITY · SINGAPORE]\". High-contrast graphic design poster layout with legible typography text overlay on top of [DESCRIPTION OF SCENE]'. NEVER generate a bare photographic prompt without text overlay.",
   "video_generation_prompt": "..."
 }}
 
-IMPORTANT: The image_generation_prompt MUST always specify that the image is a commercial marketing poster featuring bold readable headline text in quotes related to the campaign thesis.
+CRITICAL REQUIREMENT: The image_generation_prompt MUST NEVER be just a description of a photo. It MUST ALWAYS command bold typography text overlay with quotes (e.g. 'Large prominent headline text overlay across the top reads: \"COME TO JADE · VAULT AUDIT\"').
 """
 
 

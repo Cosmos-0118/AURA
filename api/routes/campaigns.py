@@ -106,7 +106,7 @@ def get_operational_mode():
     return {
         "demo_mode": is_demo_mode(),
         "groq_model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
-        "image_model": os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell"),
+        "image_model": os.environ.get("IMAGE_MODEL", "google/nano-banana-2-lites"),
         "video_model": os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo/text-to-video"),
         "has_groq_key": has_groq,
         "has_fal_key": has_fal,
@@ -369,7 +369,7 @@ def generate_campaign_image(
 ) -> CampaignMediaItem:
     """Generate image and save locally to storage/campaigns/{campaign_id}/image/{filename}."""
     demo_mode = is_demo_mode(x_demo_mode)
-    chosen_model = body.model or os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")
+    chosen_model = body.model or os.environ.get("IMAGE_MODEL", "google/nano-banana-2-lites")
     prompt = body.prompt
 
     # 1. Load campaign and image prompt from MySQL
@@ -387,9 +387,10 @@ def generate_campaign_image(
             brand_title = detail["campaign"]["brand_id"].upper()
             thesis = detail["campaign"]["thesis"]
             prompt = (
-                f'A sleek commercial marketing poster for {brand_title}. '
-                f'The poster prominently features bold typography text "{thesis}" in elegant lettering across the top, '
-                f'with graphic design advertising poster layout and high-end typography hierarchy.'
+                f'Commercial advertising poster with bold typography text overlay. '
+                f'Large prominent headline text overlay across the top reads: "COME TO {brand_title} · {thesis[:32].upper()}". '
+                f'Secondary sub-headline text overlay reads: "INSTITUTIONAL RISK PROTECTION · SINGAPORE". '
+                f'High-contrast graphic design poster layout with legible typography text overlay.'
             )
 
     # 2. Record media generating in MySQL

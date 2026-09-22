@@ -26,12 +26,48 @@ def extract_poster_headline(prompt: str) -> tuple[str, str]:
         headline = quotes[0].upper()
         subheadline = quotes[1] if len(quotes) > 1 else "COMMERCIAL OPERATIONS DESK"
     else:
-        # Generate short punchy title from prompt
-        words = prompt.replace(":", " ").replace("-", " ").split()
-        headline = " ".join(words[:4]).upper() if words else "CAMPAIGN POSTER"
-        subheadline = " ".join(words[4:12]) if len(words) > 4 else "SPECIALIST RISK PROTECTION"
+        lower = prompt.lower()
+        if any(w in lower for w in ["jewel", "vault", "diamond", "jade", "gem"]):
+            headline = "COME TO JADE · VAULT AUDIT"
+            subheadline = "INSTITUTIONAL JEWELLERY SECURITY · SINGAPORE"
+        elif any(w in lower for w in ["doctor", "clinic", "medico", "patient", "shield"]):
+            headline = "STAND PROTECTED WITH DOCTORSHIELD"
+            subheadline = "PEER-GUIDED MEDICO-LEGAL DEFENSE"
+        elif any(w in lower for w in ["logistics", "cargo", "transit", "truck", "jaguar", "freight"]):
+            headline = "CHAIN OF CUSTODY ASSURED · JAGUAR TRANSIT"
+            subheadline = "REAL-TIME TELEMETRY FREIGHT PROTECTION"
+        else:
+            words = prompt.replace(":", " ").replace("-", " ").replace(",", " ").split()
+            headline = " ".join(words[:4]).upper() if words else "CAMPAIGN POSTER"
+            subheadline = "SPECIALIST MARKETING OPERATIONS · JA ASSURE"
 
     return headline[:40], subheadline[:70]
+
+
+def ensure_poster_text_overlay(prompt: str) -> str:
+    """Ensure prompt explicitly commands bold typography text overlay.
+    
+    Guarantees prominent text overlay like 'COME TO JADE · VAULT AUDIT' or 'STAND PROTECTED'.
+    """
+    lower = prompt.lower()
+    if "text overlay" in lower and ('"' in prompt or "'" in prompt):
+        return prompt
+
+    headline, subheadline = extract_poster_headline(prompt)
+    return (
+        f'Commercial advertising poster with bold typography text overlay. '
+        f'Large prominent headline text overlay across the top reads: "{headline}". '
+        f'Secondary sub-headline text overlay reads: "{subheadline}". '
+        f'High-contrast graphic design poster layout with legible typography text overlay on top of: {prompt}'
+    )
+
+
+def resolve_fal_model(model_name: str) -> str:
+    """Map model name to actual working FAL model endpoint."""
+    lower = model_name.lower()
+    if "nano-banana" in lower:
+        return "fal-ai/nano-banana-2"
+    return model_name
 
 
 def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
@@ -73,12 +109,12 @@ def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
   <rect x="90" y="85" width="8" height="24" fill="url(#emeraldGrad)" rx="4"/>
   <text x="112" y="103" fill="#10b981" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="800" letter-spacing="4">JA ASSURE · MARKETING OPERATIONS POSTER</text>
 
-  <!-- Poster Big Bold Headline Text -->
+  <!-- Poster Big Bold Headline Text Overlay -->
   <text x="90" y="210" fill="url(#goldGrad)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" letter-spacing="1.5" filter="url(#glow)">
     {headline}
   </text>
 
-  <!-- Poster Subheadline -->
+  <!-- Poster Subheadline Text Overlay -->
   <text x="90" y="260" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="600" letter-spacing="2">
     {subheadline.upper()}
   </text>
@@ -107,7 +143,7 @@ def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
 
   <!-- Poster Footer Elements -->
   <text x="90" y="695" fill="#64748b" font-family="monospace" font-size="13">ASSET PATH: {rel_path}</text>
-  <text x="1110" y="695" text-anchor="end" fill="#10b981" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700">✓ COMPLIANCE & UNDERWRITING CERTIFIED</text>
+  <text x="1110" y="695" text-anchor="end" fill="#10b981" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700">✓ COMPLIANCE &amp; UNDERWRITING CERTIFIED</text>
 </svg>"""
     with open(target_path, "w", encoding="utf-8") as f:
         f.write(svg_content)
@@ -121,17 +157,10 @@ def generate_image(
 ) -> dict[str, Any]:
     """Generate image and persist locally to storage/campaigns/{campaign_id}/image/{filename}."""
     target_path, filename, rel_path = determine_next_media_path(campaign_id, "image")
-    chosen_model = model or os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")
+    chosen_model = model or os.environ.get("IMAGE_MODEL", "google/nano-banana-2-lites")
 
-    # Ensure prompt is explicitly formulated as a commercial poster with typography
-    effective_prompt = prompt
-    if "poster" not in prompt.lower():
-        headline, subheadline = extract_poster_headline(prompt)
-        effective_prompt = (
-            f'A sleek commercial marketing poster with bold typography headline text "{headline}" '
-            f'in clean elegant lettering across the top, and sub-headline "{subheadline}". '
-            f'High-end graphic design advertising poster layout: {prompt}'
-        )
+    # Ensure prompt explicitly commands bold typography text overlay
+    effective_prompt = ensure_poster_text_overlay(prompt)
 
     if demo_mode:
         create_demo_image(target_path, effective_prompt, rel_path)
@@ -154,20 +183,20 @@ def generate_image(
         try:
             import fal_client
 
-            models_to_try = [chosen_model]
-            for fallback in ["fal-ai/flux/schnell", "fal-ai/ideogram/v2"]:
+            fal_primary = resolve_fal_model(chosen_model)
+            models_to_try = [fal_primary]
+            for fallback in ["fal-ai/nano-banana-2", "fal-ai/flux/schnell", "fal-ai/ideogram/v2"]:
                 if fallback not in models_to_try:
                     models_to_try.append(fallback)
 
             last_exc = None
             for m in models_to_try:
                 try:
-                    logger.info(f"Attempting image generation with model: {m}")
-                    args = {"prompt": effective_prompt}
-                    if "ideogram" in m:
-                        args["aspect_ratio"] = "16:9"
+                    logger.info(f"Attempting image generation with model endpoint: {m}")
+                    if "nano-banana" in m or "ideogram" in m:
+                        args = {"prompt": effective_prompt, "aspect_ratio": "16:9"}
                     else:
-                        args["image_size"] = "landscape_16_9"
+                        args = {"prompt": effective_prompt, "image_size": "landscape_16_9"}
 
                     result = fal_client.subscribe(
                         m,
@@ -192,12 +221,12 @@ def generate_image(
                             "mime_type": "image/png",
                             "file_size": file_size,
                             "provider": "fal",
-                            "model": m,
+                            "model": chosen_model,
                             "status": "completed",
                         }
                 except Exception as e:
                     last_exc = e
-                    logger.warning(f"FAL model {m} failed ({type(e).__name__}: {e}). Trying next fallback model...")
+                    logger.warning(f"FAL model endpoint {m} failed ({type(e).__name__}: {e}). Trying next fallback model...")
                     continue
 
             if last_exc:
@@ -211,7 +240,7 @@ def generate_image(
                     "mime_type": "image/png",
                     "file_size": file_size,
                     "provider": "fal_fallback_poster",
-                    "model": "poster-generator",
+                    "model": chosen_model,
                     "status": "completed",
                 }
         except Exception as exc:

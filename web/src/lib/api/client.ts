@@ -343,7 +343,7 @@ export async function getOperationalMode(): Promise<OperationalModeInfo> {
     return {
       demo_mode: getStoredApiMode() === 'mock',
       groq_model: 'openai/gpt-oss-20b',
-      image_model: 'fal-ai/flux/schnell',
+      image_model: 'google/nano-banana-2-lites',
       video_model: 'minimax/h3-max-turbo/text-to-video'
     };
   }
@@ -360,7 +360,7 @@ export async function setOperationalMode(demo_mode: boolean): Promise<Operationa
     return {
       demo_mode,
       groq_model: 'openai/gpt-oss-20b',
-      image_model: 'fal-ai/flux/schnell',
+      image_model: 'google/nano-banana-2-lites',
       video_model: 'minimax/h3-max-turbo/text-to-video'
     };
   }

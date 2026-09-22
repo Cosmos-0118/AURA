@@ -1240,7 +1240,7 @@ function StudioContent() {
                   <CardContent className='p-4 flex flex-col gap-4 text-xs'>
                     <div className='flex flex-col gap-1.5'>
                       <Label className='font-bold text-foreground flex items-center justify-between'>
-                        <span>Image Prompt (FAL Flux / Local)</span>
+                        <span>Poster Image Prompt (with Text Overlay)</span>
                         <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
                       </Label>
                       <Textarea
@@ -1281,7 +1281,7 @@ function StudioContent() {
                       </CardTitle>
                     </div>
                     <Badge variant='outline' className='text-[10px] font-mono'>
-                      {imageMedia?.model || modeInfo?.image_model || 'fal-ai/flux/schnell'}
+                      {imageMedia?.model || modeInfo?.image_model || 'google/nano-banana-2-lites'}
                     </Badge>
                   </div>
                 </CardHeader>

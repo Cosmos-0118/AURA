@@ -262,10 +262,10 @@ export function ApiModeToggle({ variant = 'header', className }: ApiModeTogglePr
 
           <div className='flex items-center justify-between text-muted-foreground py-0.5'>
             <span className='flex items-center gap-1.5'>
-              <IconSparkles className='size-3 text-muted-foreground' /> FAL Flux Model:
+              <IconSparkles className='size-3 text-muted-foreground' /> Image Model:
             </span>
             <span className='font-mono text-[11px] text-foreground font-medium truncate max-w-[130px]'>
-              {modeInfo?.image_model || 'fal-ai/flux/schnell'}
+              {modeInfo?.image_model || 'google/nano-banana-2-lites'}
             </span>
           </div>
 
