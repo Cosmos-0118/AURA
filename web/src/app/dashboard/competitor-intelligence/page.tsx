@@ -122,18 +122,18 @@ function impactClasses(impact: string): { badge: string; rail: string } {
   if (impact === 'high') {
     return {
       badge: 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-300',
-      rail: 'bg-red-500'
+      rail: 'border-l-red-500 dark:border-l-red-500'
     };
   }
   if (impact === 'medium') {
     return {
       badge: 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300',
-      rail: 'bg-amber-500'
+      rail: 'border-l-amber-500 dark:border-l-amber-500'
     };
   }
   return {
     badge: 'border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-300',
-    rail: 'bg-blue-500'
+    rail: 'border-l-blue-500 dark:border-l-blue-500'
   };
 }
 
@@ -419,8 +419,7 @@ export default function CompetitorIntelligencePage() {
         {filteredEvents.map((event) => {
           const impactStyle = impactClasses(event.impact);
           return (
-            <button key={event.id} type='button' aria-label={`View change from ${competitorName(event, dashboard?.competitors || [])}: ${event.summary}`} className='grid min-w-0 grid-cols-[5px_minmax(0,1fr)] items-stretch gap-4 rounded-xl border border-[#e6e6e6] bg-white pr-4 text-left transition hover:-translate-y-px hover:border-[#737373] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:border-[#424242] dark:bg-[#171717] dark:hover:border-[#a3a3a3] dark:hover:bg-[#242424] dark:focus-visible:ring-white' onClick={() => setSelectedEvent(event)}>
-              <span className={`rounded-r-md ${impactStyle.rail}`} />
+            <button key={event.id} type='button' aria-label={`View change from ${competitorName(event, dashboard?.competitors || [])}: ${event.summary}`} className={`block w-full min-w-0 rounded-xl border border-l-[6px] border-[#e6e6e6] bg-white px-4 text-left transition-[transform,background-color,box-shadow] duration-150 hover:-translate-y-px hover:bg-[#f7f7f7] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black motion-reduce:transform-none dark:border-[#424242] dark:bg-[#171717] dark:hover:bg-[#242424] dark:focus-visible:ring-white ${impactStyle.rail}`} onClick={() => setSelectedEvent(event)}>
               <span className={`${styles.eventBody} py-4`}>
                 <span className='min-w-0'>
                   <span className='mb-2 flex min-w-0 flex-wrap items-center gap-[7px]'>
@@ -545,7 +544,7 @@ export default function CompetitorIntelligencePage() {
     const eventAnalysis = analysis[event.id];
     const confidence = Math.round(event.confidence * 100);
     return (
-      <section className='mx-auto max-w-[1120px] min-w-0 pb-10 pt-7'>
+      <section className='w-full min-w-0 pb-10 pt-7'>
         <button type='button' className='mb-5 inline-flex text-[13px] text-[#737373] hover:text-[#09090b] hover:underline dark:text-[#a3a3a3] dark:hover:text-white' onClick={() => setSelectedEvent(null)}>← Back to feed</button>
         <div className='mb-6 border-b border-[#e6e6e6] pb-6 dark:border-[#424242]'>
           <p className={`mb-2 text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>{competitorName(event, dashboard?.competitors || [])} · {label(event.country)}</p>
@@ -557,32 +556,32 @@ export default function CompetitorIntelligencePage() {
             <span className='text-xs text-[#737373] dark:text-[#a3a3a3]'>{formatDate(event.detected_at)} · {event.source}</span>
           </div>
         </div>
-        <section className={`${panelClass} mb-4 min-w-0 p-5`}>
-          <h2 className='mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:text-[#a3a3a3]'>Signal profile</h2>
-          <div className='grid gap-5 md:grid-cols-[12rem_minmax(0,1fr)]'>
-            <div className='min-w-0'>
-              <div className='mb-3 flex items-end justify-between gap-3'>
-                <span className='text-[12px] text-[#737373] dark:text-[#a3a3a3]'>Analysis confidence</span>
-                <strong className='text-[26px] leading-none text-[#09090b] dark:text-white'>{confidence}%</strong>
-              </div>
-              <div className='h-1.5 overflow-hidden rounded-full bg-[#e6e6e6] dark:bg-[#424242]' role='img' aria-label={`Analysis confidence ${confidence} percent`}>
-                <span className='block h-full rounded-full bg-[#09090b] dark:bg-white' style={{ width: `${Math.max(0, Math.min(100, event.confidence * 100))}%` }} />
-              </div>
-            </div>
-            <dl className='grid min-w-0 gap-x-5 gap-y-3 border-t border-[#e6e6e6] pt-4 dark:border-[#424242] sm:grid-cols-2 md:border-l md:border-t-0 md:py-0 md:pl-5 lg:grid-cols-5'>
-              {[
-                ['Competitor', competitorName(event, dashboard?.competitors || [])],
-                ['Market', label(event.country)],
-                ['Change type', label(event.change_type)],
-                ...(event.product_category ? [['Product category', event.product_category]] : []),
-                ['Source', event.source]
-              ].map(([name, value]) => (
-                <div key={name} className='min-w-0 text-[12px]'>
-                  <dt className='mb-1 text-[#737373] dark:text-[#a3a3a3]'>{name}</dt>
-                  <dd className={`m-0 font-semibold text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</dd>
+        <section className={`${panelClass} mb-4 min-w-0 overflow-hidden`}>
+          <h2 className='border-b border-[#e6e6e6] px-5 py-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:border-[#424242] dark:text-[#a3a3a3]'>Signal profile</h2>
+          <div className='min-w-0 overflow-x-auto'>
+            <div className='grid min-w-[880px] grid-cols-[minmax(0,1.4fr)_minmax(0,4.6fr)] px-1 py-4'>
+              <div className='flex min-w-0 flex-col justify-between px-4'>
+                <span className='text-[11px] text-[#737373] dark:text-[#a3a3a3]'>Analysis confidence</span>
+                <strong className='mt-2 text-[26px] leading-none text-[#09090b] dark:text-white'>{confidence}%</strong>
+                <div className='mt-3 h-1.5 overflow-hidden rounded-full bg-[#e6e6e6] dark:bg-[#424242]' role='img' aria-label={`Analysis confidence ${confidence} percent`}>
+                  <span className='block h-full rounded-full bg-[#09090b] dark:bg-white' style={{ width: `${Math.max(0, Math.min(100, event.confidence * 100))}%` }} />
                 </div>
-              ))}
-            </dl>
+              </div>
+              <dl className='grid min-w-0 grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)_minmax(0,1fr)]'>
+                {[
+                  ['Competitor', competitorName(event, dashboard?.competitors || [])],
+                  ['Market', label(event.country)],
+                  ['Change type', label(event.change_type)],
+                  ['Product category', event.product_category || '—'],
+                  ['Source', event.source]
+                ].map(([name, value]) => (
+                  <div key={name} className='min-w-0 border-l border-[#e6e6e6] px-4 dark:border-[#424242]'>
+                    <dt className='mb-2 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>{name}</dt>
+                    <dd className={`m-0 max-h-24 min-w-0 overflow-y-auto text-[12px] font-semibold leading-5 text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </div>
         </section>
         <div className='min-w-0 space-y-4'>
@@ -643,7 +642,7 @@ export default function CompetitorIntelligencePage() {
 
   return (
     <main className='min-h-[calc(100vh-4rem)] min-w-0 w-full bg-white px-4 pb-16 pt-6 text-[#09090b] dark:bg-black dark:text-white sm:px-6 lg:px-8 xl:px-12'>
-      <div className={`mx-auto min-w-0 w-full max-w-[1440px] ${styles.workspace}`}>
+      <div className={`min-w-0 w-full ${styles.workspace}`}>
         {renderHeader()}
         {notice ? (
           <div className='fixed bottom-5 right-5 z-50 flex max-w-[380px] items-start gap-2.5 rounded-[10px] border border-[#e6e6e6] bg-white p-3 text-[13px] leading-6 text-[#09090b] shadow-2xl dark:border-[#424242] dark:bg-[#171717] dark:text-white' role='status'>
