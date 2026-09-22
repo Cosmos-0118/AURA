@@ -1,11 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="JA Assure competitor intelligence monitor — full diff" />
+    <meta name="theme-color" content="#fafafa" />
     <title>Full diff · Competitor Intelligence</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <script>
+      try {
+        var t = localStorage.getItem('ja-intel-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    </script>
   </head>
   <body>
     <main class="shell">
@@ -18,6 +31,7 @@
           </span>
         </a>
         <div class="topbar-actions">
+          <button id="theme-toggle" type="button" class="button button-quiet theme-toggle" data-theme-toggle aria-pressed="false" aria-label="Switch to dark theme"><span class="theme-icon-moon" aria-hidden="true">☾</span><span class="theme-icon-sun" aria-hidden="true">☀</span> <span data-theme-label>Dark</span></button>
           <a class="button button-quiet" href="/sources">Sources</a>
           <a class="button button-quiet" href="/watchlist">Watchlist</a>
         </div>
@@ -37,6 +51,7 @@
       <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
     </main>
 
+    <script src="/static/theme.js" defer></script>
     <script src="/static/diff.js" defer></script>
   </body>
 </html>

@@ -317,7 +317,7 @@ class IntelligenceService:
         diff = "\n".join(unified_diff(before.splitlines(), after.splitlines(),
                                        fromfile="before", tofile="after", lineterm=""))
         return {"event_id": event_id, "source_url": event.source_url, "before": before[:12000],
-                "after": after[:12000], "diff": diff[:16000]}
+                "after": after[:12000], "diff": diff}
 
     def analyze_event(self, event_id: str) -> dict[str, str] | None:
         evidence = self.event_diff(event_id)
