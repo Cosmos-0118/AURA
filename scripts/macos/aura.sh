@@ -312,10 +312,11 @@ interactive_menu() {
   printf '2) Build + run\n'
   printf '3) Just run (production)\n'
   printf '4) Dev mode (hot reload)\n'
+  printf '5) Competitor Intelligence (Port 8787)\n'
   printf 'q) Exit\n\n'
 
   local choice
-  read -r -p 'Choose an option [1-4/q]: ' choice
+  read -r -p 'Choose an option [1-5/q]: ' choice
   case "$choice" in
     1)
       clean_generated
@@ -332,11 +333,15 @@ interactive_menu() {
     4)
       start_processes "development"
       ;;
+    5)
+      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
+      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
+      ;;
     q|Q|"")
       log "Nothing started"
       ;;
     *)
-      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, or q."
+      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, 5, or q."
       ;;
   esac
 }
@@ -359,6 +364,10 @@ main() {
       ;;
     dev)
       start_processes "development"
+      ;;
+    intel|intelligence)
+      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
+      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
       ;;
     up)
       clean_generated
