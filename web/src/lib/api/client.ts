@@ -8,7 +8,6 @@ import type {
   Lead,
   Lesson,
   Metrics,
-  Platform,
   ReviewAction,
   Snapshot,
 } from "./types";
@@ -20,7 +19,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+      ...init?.headers,
     },
   });
 
@@ -124,6 +123,23 @@ export function listLessons(brandId?: string): Promise<Lesson[]> {
 export function listLeads(brandId?: string): Promise<Lead[]> {
   const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : "";
   return request<Lead[]>(`/api/leads${query}`);
+}
+
+export function getLeadRefreshStatus(): Promise<import("./types").LeadRefreshStatus> {
+  return request<import("./types").LeadRefreshStatus>("/api/leads/status");
+}
+
+export function refreshLeads(): Promise<import("./types").LeadRefreshStatus> {
+  return request<import("./types").LeadRefreshStatus>("/api/leads/refresh", { method: "POST" });
+}
+
+export function getLeadEmailDraft(leadId: string): Promise<import("./types").LeadEmailDraft> {
+  const query = `?lead_id=${encodeURIComponent(leadId)}`;
+  return request<import("./types").LeadEmailDraft>(`/api/leads/draft${query}`);
+}
+
+export function sendLeadEmail(leadId: string): Promise<import("./types").LeadEmailResult> {
+  return request<import("./types").LeadEmailResult>("/api/leads/send", jsonBody({ lead_id: leadId }));
 }
 
 export function getMetrics(): Promise<Metrics> {

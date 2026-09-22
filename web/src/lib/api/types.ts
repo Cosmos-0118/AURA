@@ -133,6 +133,35 @@ export type Lead = {
   country: string | null;
   fit_score: number;
   why: string | null;
+  email?: string | null;
+  phone?: string | null;
+  requirements?: string | null;
+  source_url?: string | null;
+  source_title?: string | null;
+};
+
+export type LeadRefreshStatus = {
+  refreshing: boolean;
+  configured: boolean;
+  last_scraped_at: string | null;
+  last_error: string | null;
+  updated: number;
+  watched: number;
+};
+
+export type LeadEmailDraft = {
+  from_email: string;
+  to_email: string;
+  subject: string;
+  body: string;
+  configured: boolean;
+};
+
+export type LeadEmailResult = {
+  ok: boolean;
+  from_email: string;
+  to_email: string;
+  subject: string;
 };
 
 export type Metrics = {
