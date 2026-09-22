@@ -37,8 +37,8 @@ export function UserNav() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem render={<Link href='/dashboard/settings' aria-label='Workspace Settings' />}>
-            Workspace Settings
+          <DropdownMenuItem render={<Link href='/dashboard/studio' aria-label='Campaign Studio' />}>
+            Campaign Studio
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link href='/dashboard/review' aria-label='Review Queue' />}>
             Review Queue
