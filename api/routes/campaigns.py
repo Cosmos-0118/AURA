@@ -271,30 +271,31 @@ def generate_studio_campaign(
             note = r.get("note", "")
             lessons_used.append({"id": str(r["id"]), "tag": tag, "note": note})
 
-    # Step 2: Create initial campaign in draft / generating status
-    with transaction() as db:
-        campaign_repo.create_campaign(
-            db=db,
-            campaign_id=campaign_id,
-            brand_id=body.brand_id,
-            objective=body.objective,
-            language=body.language,
-            thesis=body.thesis,
-            target_audience=body.target_audience,
-            status="generating",
-        )
-        event_repo.log_event(
-            db,
-            campaign_id=campaign_id,
-            event_type="generation_started",
-            description=f"Initiated campaign content generation for {body.brand_id}",
-            metadata={"platforms": body.platforms, "lessons_count": len(lessons_used)},
-        )
-
-    # Step 3: Run content generation engine
-    provider = "demo_local" if demo_mode else "groq"
-    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Step 2: Run generation within try-except to ensure CORS headers and clear errors
     try:
+        with transaction() as db:
+            campaign_repo.create_campaign(
+                db=db,
+                campaign_id=campaign_id,
+                brand_id=body.brand_id,
+                objective=body.objective,
+                language=body.language,
+                thesis=body.thesis,
+                target_audience=body.target_audience,
+                status="generating",
+                platforms=body.platforms,
+            )
+            event_repo.log_event(
+                db,
+                campaign_id=campaign_id,
+                event_type="generation_started",
+                description=f"Initiated campaign content generation for {body.brand_id}",
+                metadata={"platforms": body.platforms, "lessons_count": len(lessons_used)},
+            )
+
+        # Step 3: Run content generation engine
+        provider = "demo_local" if demo_mode else "groq"
+        model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
         content_pkg = generate_campaign_content(
             brand_id=body.brand_id,
             objective=body.objective,
@@ -305,24 +306,25 @@ def generate_studio_campaign(
             lessons=lessons_used,
             demo_mode=demo_mode,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Campaign content generation failed: {exc}")
 
-    # Step 4: Atomically persist generated campaign and all platform contents
-    with transaction() as db:
-        campaign_repo.save_generated_campaign_package(
-            db=db,
-            campaign_id=campaign_id,
-            brand_id=body.brand_id,
-            objective=body.objective,
-            language=body.language,
-            thesis=body.thesis,
-            target_audience=body.target_audience,
-            content_pkg=content_pkg,
-            lessons_used=lessons_used,
-            provider=provider,
-            model=model,
-        )
+        # Step 4: Atomically persist generated campaign and all platform contents
+        with transaction() as db:
+            campaign_repo.save_generated_campaign_package(
+                db=db,
+                campaign_id=campaign_id,
+                brand_id=body.brand_id,
+                objective=body.objective,
+                language=body.language,
+                thesis=body.thesis,
+                target_audience=body.target_audience,
+                content_pkg=content_pkg,
+                lessons_used=lessons_used,
+                provider=provider,
+                model=model,
+            )
+    except Exception as exc:
+        logger.error(f"Campaign studio generation failed: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Campaign content generation failed: {exc}")
 
     return get_studio_campaign(campaign_id)
 

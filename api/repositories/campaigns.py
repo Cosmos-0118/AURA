@@ -22,14 +22,20 @@ def create_campaign(
     target_audience: str | None = None,
     status: str = "draft",
     title: str | None = None,
+    platforms: list[str] | str | None = None,
 ) -> str:
     """Create a campaign row in draft or generating status."""
+    platforms_val = (
+        json.dumps(platforms)
+        if isinstance(platforms, list)
+        else (platforms or '["linkedin"]')
+    )
     db.execute(
         """
         INSERT INTO campaigns
-            (id, brand_id, title, topic, goal, objective, language, thesis, target_audience, status)
+            (id, brand_id, title, topic, goal, objective, language, thesis, target_audience, status, platforms)
         VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             campaign_id,
@@ -42,6 +48,7 @@ def create_campaign(
             thesis,
             target_audience,
             status,
+            platforms_val,
         ),
     )
 
