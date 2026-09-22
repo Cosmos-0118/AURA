@@ -9,13 +9,16 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from competitor_intelligence.analysis import classify_change, confidence_for_change, content_hash, meaningful_change
+from competitor_intelligence.analysis import (capture_quality_error, classify_change,
+                                               confidence_for_change, content_hash,
+                                               meaningful_change, normalize_content)
 from competitor_intelligence.collectors import (CollectedContent, FeedItem, collect_watch,
                                                 collect_website, extract_income_pricing_text,
                                                 request_bytes)
 from competitor_intelligence.config import load_competitors, load_watches
 from competitor_intelligence.models import Competitor, WatchSource
-from competitor_intelligence.provision import _fetch_backend, _notification_url, provision_changedetection
+from competitor_intelligence.provision import (_fetch_backend, _notification_url,
+                                               _watch_fetch_options, provision_changedetection)
 from competitor_intelligence.service import IntelligenceService
 from competitor_intelligence.store import Store
 
@@ -226,11 +229,196 @@ class IntelligenceCoreTests(unittest.TestCase):
 
         self.assertTrue(meaningful_change(old, new))
 
+    def test_cookie_wording_on_price_row_does_not_create_change(self) -> None:
+        old = "Annual premium S$500. We use necessary cookies to make our site work."
+        new = "Annual premium S$500. We use optional analytics cookies to improve the site."
+
+        self.assertFalse(meaningful_change(old, new))
+
+    def test_cookie_suffix_does_not_hide_real_copy(self) -> None:
+        old = "Stable product copy. We use necessary cookies to make our site work."
+        new = "Stable product copy. We use optional analytics cookies to improve the site."
+
+        self.assertFalse(meaningful_change(old, new))
+
+    def test_cookie_banner_does_not_remove_unrelated_yes_no_copy(self) -> None:
+        old = "Howden uses cookies\nFAQ\nYes\nNo"
+        new = "FAQ\nYes\nNo"
+
+        self.assertFalse(meaningful_change(old, new))
+
     def test_cookie_filter_preserves_ambiguous_consent_first_product_changes(self) -> None:
         old = "Accept all cookies New product launch announced for doctors."
         new = "Accept all cookies New product launch postponed until next quarter."
 
         self.assertTrue(meaningful_change(old, new))
+
+    def test_howden_consent_and_market_prompt_diff_is_ignored(self) -> None:
+        before = """×
+Howden uses cookies
+We use necessary cookies to make our site work. We'd also like to set optional analytics cookies to help us improve it. We won't set optional cookies unless you enable them. For more detailed information about the cookies we use, see our Cookie Policy.
+Manage cookie preferences
+Accept All
+Skip to main content
+Hello, we have detected you are visiting from India
+Would you like to go to the India website?
+Yes No
+* Private Wealth
+* Business & Corporate
+* Reinsurance
+* Group site
+Follow us
+Copyright © 2026 Howden Insurance Brokers (S.) Pte. Limited is a licensed insurance intermediary regulated by the Monetary Authority of Singapore and registered in Singapore under company registration no. 196800039M. Registered address: 9 Straits View, Marina One West Tower, #10-07 Singapore 018937.
+Manage cookie preferences"""
+        after = """Skip to main content
+* Private Wealth
+* Business & Corporate
+* Reinsurance
+* Group site
+Follow us
+Copyright © 2026 Howden Insurance Brokers (S.) Pte. Limited is a licensed insurance intermediary regulated by the Monetary Authority of Singapore and registered in Singapore under company registration no. 196800039M. Registered address: 9 Straits View, Marina One West Tower, #10-07 Singapore 018937.
+preferences"""
+
+        self.assertEqual(normalize_content(before), normalize_content(after))
+        self.assertFalse(meaningful_change(before, after))
+        self.assertIsNone(capture_quality_error(before))
+
+    def test_transient_only_capture_is_rejected(self) -> None:
+        popup = "Howden uses cookies\nAccept All\nHello, we have detected you are visiting from India\nYes No"
+        self.assertIsNotNone(capture_quality_error(popup))
+
+    def test_interstitial_capture_is_rejected(self) -> None:
+        self.assertIsNotNone(capture_quality_error("Please enable JavaScript to continue."))
+
+    def test_popup_dominated_capture_is_rejected(self) -> None:
+        popup = (
+            "Howden uses cookies\n"
+            "We use necessary cookies to make our site work. We also set optional analytics cookies "
+            "to help improve your experience and provide more detailed information about our Cookie Policy.\n"
+            "Accept All\nWelcome"
+        )
+        self.assertIsNotNone(capture_quality_error(popup))
+
+    def test_short_shell_after_popup_cannot_replace_long_baseline(self) -> None:
+        baseline = "Professional indemnity cover and claims support. " * 8
+        popup_shell = (
+            "Howden uses cookies\n"
+            "We use necessary cookies to make our site work. We also set optional analytics cookies "
+            "to help improve your experience and provide more detailed information about our Cookie Policy.\n"
+            "Accept All\nWelcome to our insurance website."
+        )
+        self.assertIsNotNone(capture_quality_error(popup_shell, baseline=baseline))
+
+    def test_changedetection_effective_market_redirect_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            competitor = Competitor(
+                id="redirect-webhook-1",
+                brand_id="jade",
+                name="Redirect Webhook Test",
+                niche="valuable goods",
+                countries=["SG"],
+                url="https://www.howdengroup.com/sg-en/cover/jewellers-insurance",
+            )
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+
+            with self.assertRaisesRegex(ValueError, "Unexpected redirect"):
+                service.ingest_changedetection({
+                    "competitor_id": competitor.id,
+                    "watch_url": competitor.url,
+                    "current_url": "https://www.howdengroup.com/in-en/cover/jewellers-insurance",
+                    "current_snapshot": "Professional indemnity cover",
+                })
+
+    def test_market_mismatch_in_snapshot_is_rejected(self) -> None:
+        self.assertIsNotNone(
+            capture_quality_error(
+                "Howden India\nProfessional indemnity cover",
+                baseline="Singapore jewellers cover and claims support. " * 8,
+                expected_url="https://www.howdengroup.com/sg-en/medicalmalpractice",
+            )
+        )
+
+    def test_cross_border_market_copy_is_not_treated_as_redirect(self) -> None:
+        self.assertIsNone(
+            capture_quality_error(
+                "Howden India launches cross-border jewellery cover for Singapore clients.\n"
+                "New underwriting terms and claims support.",
+                baseline="Singapore jewellers cover and claims support. " * 8,
+                expected_url="https://www.howdengroup.com/sg-en/cover/jewellers-insurance",
+            )
+        )
+
+    def test_mixed_product_change_has_clean_event_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            competitor = Competitor(
+                id="mixed-popup-1",
+                brand_id="jade",
+                name="Mixed Popup Test",
+                niche="valuable goods",
+                countries=["SG"],
+                url="https://example.test/monitor",
+            )
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            service.scan(
+                competitor.id,
+                CollectedContent("Stable product copy", "website", url=competitor.url, source_key=competitor.url),
+            )
+            result = service.scan(
+                competitor.id,
+                CollectedContent(
+                    "Stable product copy with a new product launch.\n"
+                    "Howden uses cookies\nAccept All\n"
+                    "Hello, we have detected you are visiting from India\nYes No",
+                    "website",
+                    url=competitor.url,
+                    source_key=competitor.url,
+                ),
+            )
+
+            self.assertTrue(result.changed)
+            evidence = service.event_diff(result.event_id or "")
+            self.assertIsNotNone(evidence)
+            self.assertIn("new product launch", evidence["diff"].lower())
+            self.assertNotIn("cookies", evidence["diff"].lower())
+            self.assertNotIn("india", evidence["diff"].lower())
+
+    def test_popup_only_scan_returns_error_without_replacing_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            competitor = Competitor(
+                id="popup-only-1",
+                brand_id="jade",
+                name="Popup Test",
+                niche="valuable goods",
+                countries=["SG"],
+                url="https://example.test/monitor",
+            )
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            baseline = service.scan(
+                competitor.id,
+                CollectedContent("Stable product copy", "website", url=competitor.url, source_key=competitor.url),
+            )
+            failed = service.scan(
+                competitor.id,
+                CollectedContent(
+                    "Howden uses cookies\nAccept All\nHello, we have detected you are visiting from India\nYes No",
+                    "changedetection",
+                    url=competitor.url,
+                    source_key=competitor.url,
+                ),
+            )
+
+            self.assertEqual(baseline.status, "baseline")
+            self.assertEqual(failed.status, "error")
+            self.assertIn("transient", failed.error or "")
+            snapshot = store.latest_snapshot(competitor.id, f"website:{competitor.url}")
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(snapshot.content, "Stable product copy")
 
     def test_cookie_labelled_void_element_does_not_hide_following_content(self) -> None:
         html = (
@@ -243,6 +431,18 @@ class IntelligenceCoreTests(unittest.TestCase):
 
         self.assertIn("Professional indemnity cover", page.content)
         self.assertIn("Annual premium S$500.", page.content)
+
+    def test_market_selector_container_is_excluded_from_website_content(self) -> None:
+        html = (
+            b"<html><body><div id='country-selector' role='dialog'>"
+            b"Hello, we have detected you are visiting from India. Yes No</div>"
+            b"<main><h1>Professional indemnity cover</h1></main></body></html>"
+        )
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(html, "text/html")):
+            page = collect_website("https://example.test/monitor")
+
+        self.assertIn("Professional indemnity cover", page.content)
+        self.assertNotIn("India", page.content)
 
     def test_cookie_only_change_is_unchanged_and_creates_no_event(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -361,6 +561,19 @@ class IntelligenceCoreTests(unittest.TestCase):
         with patch("competitor_intelligence.collectors.urllib.request.urlopen", return_value=response):
             with self.assertRaisesRegex(ValueError, "HTTP 247 bot-protection challenge"):
                 collect_watch("https://www.g4s.com/what-we-do/cash-solutions", "logistics")
+
+    def test_unexpected_market_redirect_is_rejected(self) -> None:
+        response = type("Response", (), {
+            "status": 200,
+            "headers": {"Content-Type": "text/html"},
+            "read": lambda self: b"<main><h1>India site</h1></main>",
+            "geturl": lambda self: "https://www.howdengroup.com/in-en/cover/jewellers-insurance",
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: False,
+        })()
+        with patch("competitor_intelligence.collectors.urllib.request.urlopen", return_value=response):
+            with self.assertRaisesRegex(ValueError, "Unexpected redirect"):
+                collect_website("https://www.howdengroup.com/sg-en/cover/jewellers-insurance")
 
     def test_transient_http_failure_is_retried(self) -> None:
         response = type("Response", (), {
@@ -854,6 +1067,10 @@ class IntelligenceCoreTests(unittest.TestCase):
         self.assertTrue(options["ignore_status_codes"])
         self.assertGreaterEqual(options["webdriver_delay"], 20)
         self.assertIn("kramericaindustries", options["text_should_not_be_present"])
+
+    def test_howden_watch_pins_singapore_language(self) -> None:
+        options = _watch_fetch_options("https://www.howdengroup.com/sg-en/cover/jewellers-insurance")
+        self.assertEqual(options["headers"]["Accept-Language"], "en-SG,en;q=0.9,en-US;q=0.8")
 
     def test_existing_unconfigured_watch_is_preserved(self) -> None:
         class FakeResponse:

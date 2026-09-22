@@ -5,11 +5,17 @@ from fastapi.staticfiles import StaticFiles
 
 try:
     from .agents.lead_intel import start_daily_refresh
-    from .services.competitor_intelligence import start_competitor_refresh
+    from .services.competitor_intelligence import (
+        competitor_readiness,
+        start_competitor_refresh,
+    )
     from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
     from agents.lead_intel import start_daily_refresh
-    from services.competitor_intelligence import start_competitor_refresh
+    from services.competitor_intelligence import (  # type: ignore[no-redef]
+        competitor_readiness,
+        start_competitor_refresh,
+    )
     from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 
 app = FastAPI(
@@ -44,8 +50,13 @@ if logos_path.exists():
 
 
 @app.get("/api/health", tags=["health"])
-def health() -> dict[str, bool]:
-    return {"ok": True}
+def health() -> dict[str, object]:
+    payload: dict[str, object] = {"ok": True}
+    try:
+        payload["competitor_intelligence"] = competitor_readiness()
+    except Exception as exc:  # pragma: no cover - defensive health reporting
+        payload["competitor_intelligence"] = {"ready": False, "error": str(exc)}
+    return payload
 
 
 @app.get("/api/logos", tags=["logos"])

@@ -59,7 +59,13 @@ def competitor_dashboard(brand_id: BrandId | None = None) -> dict[str, Any]:
     """Return the complete native dashboard payload from the AURA API."""
 
     service = _service()
-    payload = service_payload(service)
+    try:
+        payload = service_payload(service)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Competitor intelligence is still initializing: {exc}",
+        ) from exc
     if brand_id:
         payload["competitors"] = [
             item for item in payload["competitors"] if item["brand_id"] == brand_id

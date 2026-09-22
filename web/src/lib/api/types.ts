@@ -151,6 +151,7 @@ export type CompetitorDashboard = {
   watches: CompetitorWatch[];
   events: CompetitorEvent[];
   source_health: CompetitorSourceHealth[];
+  ready?: boolean;
 };
 
 export type CompetitorScanResult = {
@@ -271,18 +272,6 @@ export type Lead = {
   last_verified_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-};
-
-export type LeadSearchRequest = {
-  brand_id: BrandId;
-  category: string;
-  location: string;
-  keywords?: string | null;
-};
-
-export type LeadOutreachRequest = {
-  brand_id: BrandId;
-  lead_id: string;
 };
 
 export type LeadRefreshStatus = {

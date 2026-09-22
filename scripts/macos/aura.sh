@@ -398,6 +398,21 @@ wait_for_http() {
   return 1
 }
 
+wait_for_competitor_intelligence() {
+  local max_attempts="${1:-60}"
+  local url="http://localhost:$API_PORT/api/health"
+  local body
+  for _ in $(seq 1 "$max_attempts"); do
+    body="$(curl --silent --show-error --fail --max-time 10 "$url" 2>/dev/null || true)"
+    if [[ -n "$body" ]] && python3 -c 'import json,sys; data=json.loads(sys.argv[1]); ready=data.get("competitor_intelligence",{}); sys.exit(0 if ready.get("ready") and int(ready.get("competitors") or 0) > 0 else 1)' "$body" 2>/dev/null; then
+      log "Competitor intelligence registry is ready"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
 start_processes() {
   local frontend_mode="$1"
   require_tools
@@ -444,6 +459,17 @@ start_processes() {
     return 1
   fi
   capture_listener_pid "backend" "$API_PORT" "$API_PID_FILE"
+  if [[ "$COMPETITOR_ENABLED" == "true" ]]; then
+    if ! wait_for_competitor_intelligence; then
+      log "Competitor intelligence did not finish initializing. Recent log:"
+      tail -n 40 "$API_LOG" >&2 || true
+      if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
+        stop_stack
+        return 1
+      fi
+      log "Continuing without a fully initialized competitor registry."
+    fi
+  fi
   provision_competitor_watches
 
   if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/studio"; then
