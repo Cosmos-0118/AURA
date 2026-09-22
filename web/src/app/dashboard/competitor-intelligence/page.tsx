@@ -637,7 +637,7 @@ export default function CompetitorIntelligencePage() {
             <div className='mx-auto mb-4 size-8 animate-spin rounded-full border-[3px] border-[#e6e6e6] border-t-black dark:border-[#424242] dark:border-t-white' />
             <h2 className='mb-2 text-[17px] font-semibold tracking-[-0.02em]'>Scanning</h2>
             <p className='mb-[18px] text-[13px] leading-6 text-[#737373] dark:text-[#a3a3a3]'>Checking sources for changes. This may take a few seconds.</p>
-            <div className='h-1 overflow-hidden rounded-full border border-[#e6e6e6] bg-[#f7f7f7] dark:border-[#424242] dark:bg-[#242424]'><span className='block h-full w-2/5 animate-pulse rounded-full bg-black dark:bg-white' /></div>
+            <div className={styles.progressTrack} aria-hidden='true'><span className={styles.progressBar} /></div>
           </div>
         </div>
       ) : null}

@@ -2,6 +2,41 @@
   container: intelligence / inline-size;
 }
 
+.progressTrack {
+  position: relative;
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #f0f0f0;
+}
+
+:global(.dark) .progressTrack {
+  background: #2a2a2a;
+}
+
+.progressBar {
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: #09090b;
+  animation: scan-progress 1.2s ease-in-out infinite;
+}
+
+:global(.dark) .progressBar {
+  background: #fafafa;
+}
+
+@keyframes scan-progress {
+  0% {
+    left: -40%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
 .header {
   display: flex;
   flex-direction: column;
