@@ -46,7 +46,7 @@ export function useWatermarkComposer() {
   const [logos, setLogos] = useState<WatermarkLogo[]>([
     {
       id: 'logo-primary',
-      logoPath: '/logos/Jade.png',
+      logoPath: '/logo/Jade.png',
       name: 'Jade',
       anchor: 'bottom-right',
       scale: 80,
@@ -86,7 +86,7 @@ export function useWatermarkComposer() {
     const coords = getCoordinatesForAnchor(anchor);
     const newLogo: WatermarkLogo = {
       id: newId,
-      logoPath: logoPartial.logoPath || '/logos/ja.png',
+      logoPath: logoPartial.logoPath || '/logo/ja.png',
       name: logoPartial.name || 'Brand Logo',
       anchor,
       scale: logoPartial.scale ?? 60,
@@ -132,12 +132,13 @@ export function useWatermarkComposer() {
   }, [updateLogo]);
 
   const setPresetLogo = useCallback((url: string, name?: string) => {
+    const safeUrl = url || '/logo/ja.png';
     setLogoFileState(null);
     setLogos((prev) => {
       if (prev.length === 0) {
         return [{
           id: 'logo-primary',
-          logoPath: url,
+          logoPath: safeUrl,
           name: name || 'Primary Logo',
           anchor: 'bottom-right',
           scale: 80,
@@ -148,7 +149,7 @@ export function useWatermarkComposer() {
         }];
       }
       return prev.map((l, idx) =>
-        idx === 0 ? { ...l, logoPath: url, name: name || l.name } : l
+        idx === 0 ? { ...l, logoPath: safeUrl, name: name || l.name } : l
       );
     });
   }, []);

@@ -52,10 +52,10 @@ export function WatermarkStudio({
   const [activeTab, setActiveTab] = useState<'logo' | 'text'>('logo');
   const [isSaving, setIsSaving] = useState(false);
   const [availableLogos, setAvailableLogos] = useState<BrandLogoItem[]>([
-    { name: 'Jade', filename: 'Jade.png', url: '/logos/Jade.png' },
-    { name: 'DoctorShield', filename: 'doctorshield.png', url: '/logos/doctorshield.png' },
-    { name: 'JA Assure', filename: 'ja.png', url: '/logos/ja.png' },
-    { name: 'Jaguar', filename: 'jaguar.png', url: '/logos/jaguar.png' }
+    { id: 'jade', name: 'Jade', filename: 'Jade.png', file: 'Jade.png', url: '/logo/Jade.png', src: '/logo/Jade.png' },
+    { id: 'doctorshield', name: 'DoctorShield', filename: 'doctorshield.png', file: 'doctorshield.png', url: '/logo/doctorshield.png', src: '/logo/doctorshield.png' },
+    { id: 'ja', name: 'JA Assure', filename: 'ja.png', file: 'ja.png', url: '/logo/ja.png', src: '/logo/ja.png' },
+    { id: 'jaguar', name: 'Jaguar', filename: 'jaguar.png', file: 'jaguar.png', url: '/logo/jaguar.png', src: '/logo/jaguar.png' }
   ]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,11 +95,11 @@ export function WatermarkStudio({
   // Initialize primary logo from brandId
   useEffect(() => {
     const brandMap: Record<string, string> = {
-      jade: '/logos/Jade.png',
-      doctorshield: '/logos/doctorshield.png',
-      jaguar: '/logos/jaguar.png'
+      jade: '/logo/Jade.png',
+      doctorshield: '/logo/doctorshield.png',
+      jaguar: '/logo/jaguar.png'
     };
-    const targetUrl = brandMap[brandId] || '/logos/ja.png';
+    const targetUrl = brandMap[brandId] || '/logo/ja.png';
     const logoName = brandId.charAt(0).toUpperCase() + brandId.slice(1);
     setPresetLogo(targetUrl, logoName);
   }, [brandId, setPresetLogo]);
@@ -136,15 +136,23 @@ export function WatermarkStudio({
 
   const handleSelectLogoForActive = (logoItem: BrandLogoItem) => {
     if (!activeLogo) return;
+    const targetUrl =
+      logoItem.url ||
+      logoItem.src ||
+      `/logo/${logoItem.filename || logoItem.file || 'ja.png'}`;
     updateLogo(activeLogo.id, {
-      logoPath: logoItem.url,
+      logoPath: targetUrl,
       name: logoItem.name
     });
   };
 
   const handleAddNewLogo = (logoItem: BrandLogoItem) => {
+    const targetUrl =
+      logoItem.url ||
+      logoItem.src ||
+      `/logo/${logoItem.filename || logoItem.file || 'ja.png'}`;
     addLogo({
-      logoPath: logoItem.url,
+      logoPath: targetUrl,
       name: logoItem.name,
       anchor: 'top-left',
       scale: 65,
@@ -162,16 +170,19 @@ export function WatermarkStudio({
     setIsSaving(true);
     try {
       const watermarkConfig = {
-        logos: logos.map((l) => ({
-          id: l.id,
-          logo_path: l.logoPath,
-          name: l.name,
-          anchor: l.anchor,
-          scale: l.scale,
-          opacity: l.opacity,
-          x: l.x,
-          y: l.y
-        })),
+        logos: logos.map((l) => {
+          const fallbackPath = l.name ? `/logo/${l.name.toLowerCase().replace(/\s+/g, '')}.png` : '/logo/ja.png';
+          return {
+            id: l.id,
+            logo_path: l.logoPath || fallbackPath,
+            name: l.name,
+            anchor: l.anchor,
+            scale: l.scale,
+            opacity: l.opacity,
+            x: l.x,
+            y: l.y
+          };
+        }),
         custom_text: textEnabled ? textConfig.text : null,
         primary_anchor: activeLogo?.anchor || 'bottom-right',
         primary_scale: activeLogo?.scale || 80,
@@ -182,10 +193,14 @@ export function WatermarkStudio({
         // Render 1:1 Canvas and get dataURL
         const compResult = await compositeImage(activeMediaUrl);
 
+        const primaryLogoPath =
+          activeLogo?.logoPath ||
+          (activeLogo?.name ? `/logo/${activeLogo.name.toLowerCase().replace(/\s+/g, '')}.png` : '/logo/ja.png');
+
         const updated = await applyCampaignWatermark(campaignId, {
           media_type: 'image',
           parent_media_id: activeMediaItem.id,
-          logo_preset: activeLogo?.logoPath,
+          logo_preset: primaryLogoPath,
           logo_anchor: activeLogo?.anchor || 'bottom-right',
           logo_scale: activeLogo?.scale || 80,
           logo_opacity: activeLogo?.opacity || 90,
@@ -369,11 +384,11 @@ export function WatermarkStudio({
                       {/* Add Another Logo dropdown / button */}
                       <div className='flex items-center gap-1'>
                         {availableLogos
-                          .filter((al) => !logos.some((l) => l.logoPath === al.url))
+                          .filter((al) => !logos.some((l) => l.logoPath === al.url || l.logoPath === al.src))
                           .slice(0, 2)
                           .map((al) => (
                             <Button
-                              key={al.url}
+                              key={al.url || al.src || al.name}
                               type='button'
                               size='sm'
                               variant='outline'
@@ -432,10 +447,14 @@ export function WatermarkStudio({
                         </Label>
                         <div className='grid grid-cols-2 sm:grid-cols-4 gap-2'>
                           {availableLogos.map((preset) => {
-                            const isSelected = activeLogo.logoPath === preset.url;
+                            const isSelected =
+                              activeLogo.logoPath === preset.url ||
+                              activeLogo.logoPath === preset.src ||
+                              activeLogo.name?.toLowerCase() === preset.name.toLowerCase();
+                            const logoSrc = preset.url || preset.src || `/logo/${preset.filename || preset.file || 'ja.png'}`;
                             return (
                               <button
-                                key={preset.url}
+                                key={preset.url || preset.src || preset.name}
                                 type='button'
                                 onClick={() => handleSelectLogoForActive(preset)}
                                 className={`flex items-center gap-2 p-2 rounded-lg border text-left cursor-pointer transition-all ${
@@ -446,7 +465,7 @@ export function WatermarkStudio({
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={preset.url}
+                                  src={logoSrc}
                                   alt={preset.name}
                                   className='size-7 object-contain'
                                 />

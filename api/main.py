@@ -48,11 +48,12 @@ storage_path.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(storage_path)), name="media")
 app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
 
-logos_path = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
-if not logos_path.exists():
-    logos_path = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
-if logos_path.exists():
-    app.mount("/logos", StaticFiles(directory=str(logos_path)), name="logos")
+logo_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
+if not logo_dir.exists():
+    logo_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
+if logo_dir.exists():
+    app.mount("/logo", StaticFiles(directory=str(logo_dir)), name="logo")
+    app.mount("/logos", StaticFiles(directory=str(logo_dir)), name="logos")
 
 
 @app.get("/api/health", tags=["health"])
@@ -67,10 +68,10 @@ def health() -> dict[str, object]:
 
 @app.get("/api/logos", tags=["logos"])
 def list_logos() -> list[dict[str, str]]:
-    """Return available brand logos discovered in web/public/logos/."""
-    logos_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
+    """Return available brand logos discovered in web/public/logo/."""
+    logos_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
     if not logos_dir.exists():
-        logos_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
+        logos_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
     if not logos_dir.exists():
         return []
 
@@ -90,11 +91,14 @@ def list_logos() -> list[dict[str, str]]:
             if base in seen:
                 continue
             seen.add(base)
+            name = name_map.get(base, base.title())
             res.append({
                 "id": base,
-                "name": name_map.get(base, base.title()),
+                "name": name,
                 "file": f.name,
-                "src": f"/logos/{f.name}",
+                "filename": f.name,
+                "src": f"/logo/{f.name}",
+                "url": f"/logo/{f.name}",
             })
     return res
 

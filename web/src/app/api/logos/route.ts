@@ -6,7 +6,9 @@ export interface LogoItem {
   id: string;
   name: string;
   file: string;
+  filename: string;
   src: string;
+  url: string;
 }
 
 const BRAND_NAME_MAP: Record<string, string> = {
@@ -20,12 +22,12 @@ const BRAND_NAME_MAP: Record<string, string> = {
 
 export async function GET() {
   try {
-    const logosDir = path.join(process.cwd(), 'public', 'logos');
+    const logoDir = path.join(process.cwd(), 'public', 'logo');
     
-    // Ensure directory exists, fallback to public/logo if not
-    let dirToRead = logosDir;
-    if (!fs.existsSync(logosDir)) {
-      const fallbackDir = path.join(process.cwd(), 'public', 'logo');
+    // Read from public/logo first, fallback to public/logos if not present
+    let dirToRead = logoDir;
+    if (!fs.existsSync(logoDir)) {
+      const fallbackDir = path.join(process.cwd(), 'public', 'logos');
       if (fs.existsSync(fallbackDir)) {
         dirToRead = fallbackDir;
       } else {
@@ -53,7 +55,9 @@ export async function GET() {
         id: baseName,
         name,
         file,
-        src: `/logos/${file}`
+        filename: file,
+        src: `/logo/${file}`,
+        url: `/logo/${file}`
       });
     }
 
@@ -73,10 +77,10 @@ export async function GET() {
     console.error('Failed to list logos:', error);
     return NextResponse.json(
       [
-        { id: 'jade', name: 'Jade', file: 'Jade.png', src: '/logos/Jade.png' },
-        { id: 'doctorshield', name: 'DoctorShield', file: 'doctorshield.png', src: '/logos/doctorshield.png' },
-        { id: 'jaguar', name: 'Jaguar Transit', file: 'jaguar.png', src: '/logos/jaguar.png' },
-        { id: 'ja', name: 'JA Assure', file: 'ja.png', src: '/logos/ja.png' }
+        { id: 'jade', name: 'Jade', file: 'Jade.png', filename: 'Jade.png', src: '/logo/Jade.png', url: '/logo/Jade.png' },
+        { id: 'doctorshield', name: 'DoctorShield', file: 'doctorshield.png', filename: 'doctorshield.png', src: '/logo/doctorshield.png', url: '/logo/doctorshield.png' },
+        { id: 'jaguar', name: 'Jaguar Transit', file: 'jaguar.png', filename: 'jaguar.png', src: '/logo/jaguar.png', url: '/logo/jaguar.png' },
+        { id: 'ja', name: 'JA Assure', file: 'ja.png', filename: 'ja.png', src: '/logo/ja.png', url: '/logo/ja.png' }
       ]
     );
   }

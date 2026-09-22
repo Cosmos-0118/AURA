@@ -647,25 +647,41 @@ export async function assistantChat(
 }
 
 export async function getBrandLogos(): Promise<BrandLogoItem[]> {
+  const normalize = (items: any[]): BrandLogoItem[] =>
+    items.map((d: any) => {
+      const file = d.file || d.filename || '';
+      const fallbackUrl = file ? `/logo/${file}` : '/logo/ja.png';
+      return {
+        id: d.id || (d.name ? d.name.toLowerCase().replace(/\s+/g, '') : 'logo'),
+        name: d.name || 'Brand Logo',
+        filename: file,
+        file: file,
+        url: d.url || d.src || fallbackUrl,
+        src: d.src || d.url || fallbackUrl
+      };
+    });
+
   try {
     const res = await fetch('/api/logos');
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data) && data.length > 0) return normalize(data);
     }
   } catch {
     // fallback to direct API
   }
   try {
-    return await request<BrandLogoItem[]>('/logos');
+    const data = await request<any[]>('/logos');
+    if (Array.isArray(data) && data.length > 0) return normalize(data);
   } catch {
-    return [
-      { name: 'Jade', filename: 'Jade.png', url: '/logos/Jade.png' },
-      { name: 'DoctorShield', filename: 'doctorshield.png', url: '/logos/doctorshield.png' },
-      { name: 'JA Assure', filename: 'ja.png', url: '/logos/ja.png' },
-      { name: 'Jaguar', filename: 'jaguar.png', url: '/logos/jaguar.png' }
-    ];
+    // fallback to static list
   }
+  return [
+    { id: 'jade', name: 'Jade', filename: 'Jade.png', file: 'Jade.png', url: '/logo/Jade.png', src: '/logo/Jade.png' },
+    { id: 'doctorshield', name: 'DoctorShield', filename: 'doctorshield.png', file: 'doctorshield.png', url: '/logo/doctorshield.png', src: '/logo/doctorshield.png' },
+    { id: 'ja', name: 'JA Assure', filename: 'ja.png', file: 'ja.png', url: '/logo/ja.png', src: '/logo/ja.png' },
+    { id: 'jaguar', name: 'Jaguar Transit', filename: 'jaguar.png', file: 'jaguar.png', url: '/logo/jaguar.png', src: '/logo/jaguar.png' }
+  ];
 }
 
 

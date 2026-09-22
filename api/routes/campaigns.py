@@ -681,7 +681,7 @@ def apply_campaign_watermark(campaign_id: str, body: ApplyWatermarkRequest) -> C
             mime_type=res["mime_type"],
             file_size=res["file_size"],
             parent_media_id=str(parent["id"]),
-            logo_path=body.logo_preset or (logos_payload[0]["logo_path"] if logos_payload else None),
+            logo_path=body.logo_preset or (logos_payload[0].get("logo_path") if logos_payload else None) or "/logo/ja.png",
             logo_position=body.logo_anchor,
             logo_scale=body.logo_scale,
             logo_opacity=body.logo_opacity,
