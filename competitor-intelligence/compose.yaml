@@ -1,6 +1,7 @@
 services:
   intelligence:
     build: .
+    restart: unless-stopped
     ports:
       - "8787:8787"
     environment:
@@ -15,14 +16,42 @@ services:
     depends_on:
       - changedetection
 
+  worker:
+    build: .
+    command: ["python", "-m", "competitor_intelligence", "worker"]
+    restart: unless-stopped
+    environment:
+      INTEL_HOST: 0.0.0.0
+      INTEL_PORT: 8787
+      INTEL_DB_PATH: /app/data/intelligence.db
+      INTEL_SCAN_INTERVAL: ${INTEL_SCAN_INTERVAL:-900}
+      INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
+      SEARXNG_URL: ${SEARXNG_URL:-}
+    volumes:
+      - intelligence-data:/app/data
+      - ./config:/app/config:ro
+    depends_on:
+      - intelligence
+
   changedetection:
     image: dgtlmoon/changedetection.io:latest
+    restart: unless-stopped
     ports:
       - "${CHANGEDETECTION_PORT:-5001}:5000"
     environment:
       BASE_URL: ${CHANGEDETECTION_BASE_URL:-http://localhost:5001}
+      PLAYWRIGHT_DRIVER_URL: ws://browser-chrome:3000
     volumes:
       - changedetection-data:/datastore
+    depends_on:
+      - browser-chrome
+
+  browser-chrome:
+    image: dgtlmoon/sockpuppetbrowser:latest
+    hostname: browser-chrome
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
 
   searxng:
     image: searxng/searxng:latest

@@ -20,6 +20,8 @@ class CollectedContent:
     source: str
     title: str | None = None
     url: str | None = None
+    source_key: str | None = None
+    market: str | None = None
 
 
 @dataclass(slots=True)

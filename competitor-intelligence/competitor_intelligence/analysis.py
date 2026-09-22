@@ -29,9 +29,11 @@ def meaningful_change(previous: str, current: str) -> bool:
     new = normalize_content(current)
     if old == new:
         return False
+    if price_values(old) != price_values(new) and (price_values(old) or price_values(new)):
+        return True
     ratio = SequenceMatcher(None, old, new).ratio()
-    changed_tokens = set(new.lower().split()) - set(old.lower().split())
-    return ratio < 0.995 and (len(changed_tokens) >= 3 or len(new) - len(old) > 40)
+    changed_tokens = set(new.lower().split()) ^ set(old.lower().split())
+    return ratio < 0.995 and (len(changed_tokens) >= 3 or abs(len(new) - len(old)) > 40)
 
 
 def price_values(text: str) -> list[str]:
@@ -80,7 +82,7 @@ def classify_change(competitor: Competitor, previous: str, current: str, source:
         impact = "medium"
         summary = f"Market coverage language changed for {competitor.name}."
         previous_value = current_value = None
-    elif source in {"linkedin", "youtube", "rss"}:
+    elif source in {"linkedin", "youtube", "rss", "rsshub", "news"}:
         change_type = "social_post"
         impact = "low"
         summary = f"A new public content signal appeared for {competitor.name}."
@@ -103,13 +105,25 @@ def classify_change(competitor: Competitor, previous: str, current: str, source:
     }
 
 
-def new_snapshot(competitor_id: str, content: str, source: str, scraped_at: str, summary: str | None) -> Snapshot:
+def new_snapshot(
+    competitor_id: str,
+    content: str,
+    source: str,
+    source_key: str,
+    source_url: str | None,
+    market: str | None,
+    scraped_at: str,
+    summary: str | None,
+) -> Snapshot:
     return Snapshot(
         id=new_id("snapshot"),
         competitor_id=competitor_id,
         content_hash=content_hash(content),
         content=normalize_content(content),
         source=source,
+        source_key=source_key,
+        source_url=source_url,
+        market=market,
         scraped_at=scraped_at,
         change_summary=summary,
     )

@@ -30,6 +30,9 @@ class Snapshot:
     content_hash: str
     content: str
     source: str
+    source_key: str
+    source_url: str | None
+    market: str | None
     scraped_at: str
     change_summary: str | None = None
 
@@ -49,6 +52,7 @@ class ChangeEvent:
     change_type: str
     impact: str
     source: str
+    source_url: str | None
     summary: str
     previous_value: str | None
     current_value: str | None

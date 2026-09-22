@@ -25,8 +25,11 @@ COMPETITORS_PATH = Path(
 )
 FEEDS_PATH = Path(os.getenv("INTEL_FEEDS", str(ROOT / "config" / "feeds.json")))
 REQUEST_TIMEOUT = env_int("INTEL_REQUEST_TIMEOUT", 20)
+SCAN_INTERVAL = env_int("INTEL_SCAN_INTERVAL", 900)
 SEARXNG_URL = os.getenv("SEARXNG_URL", "").rstrip("/")
 WEBHOOK_TOKEN = os.getenv("INTEL_WEBHOOK_TOKEN", "")
+CHANGEDETECTION_API_URL = os.getenv("CHANGEDETECTION_API_URL", "http://changedetection:5000").rstrip("/")
+CHANGEDETECTION_API_KEY = os.getenv("CHANGEDETECTION_API_KEY", "")
 
 
 def load_competitors(path: Path = COMPETITORS_PATH) -> list[Competitor]:
