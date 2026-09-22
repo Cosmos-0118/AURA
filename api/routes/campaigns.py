@@ -4,7 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 try:
     from ..db import get_db, reset_campaign_data, transaction
@@ -133,6 +133,25 @@ class ApplyWatermarkRequest(BaseModel):
     image_data: str | None = None
     logos: list[WatermarkLogoItem] = []
     watermark_config: dict[str, Any] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_logos_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "logos" in data and isinstance(data["logos"], list):
+            for item in data["logos"]:
+                if isinstance(item, dict) and not item.get("logo_path"):
+                    name = str(item.get("name") or "").lower().replace(" ", "").replace("-", "")
+                    if "assure" in name or name == "ja":
+                        item["logo_path"] = "/logo/ja.png"
+                    elif "doctor" in name:
+                        item["logo_path"] = "/logo/doctorshield.png"
+                    elif "jaguar" in name:
+                        item["logo_path"] = "/logo/jaguar.png"
+                    elif "jade" in name:
+                        item["logo_path"] = "/logo/Jade.png"
+                    else:
+                        item["logo_path"] = item.get("url") or item.get("src") or item.get("file") or "/logo/ja.png"
+        return data
 
 
 
