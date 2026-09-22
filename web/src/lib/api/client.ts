@@ -430,6 +430,42 @@ export async function generateCampaignVideo(
   );
 }
 
+export async function applyCampaignWatermark(
+  id: string,
+  options: {
+    media_type: 'image' | 'video';
+    parent_media_id?: string | null;
+    logo_preset?: string | null;
+    logo_anchor?: string;
+    logo_scale?: number;
+    logo_opacity?: number;
+    custom_text?: string | null;
+    image_data?: string | null;
+  }
+): Promise<CampaignMediaItem> {
+  return await request<CampaignMediaItem>(
+    `/api/campaigns/${encodeURIComponent(id)}/apply-watermark`,
+    jsonBody(options)
+  );
+}
+
+export async function uploadWatermarkedMedia(
+  id: string,
+  formData: FormData
+): Promise<CampaignMediaItem> {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const url = `${apiBase}/api/campaigns/${encodeURIComponent(id)}/upload-watermarked-media`;
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Upload failed: ${errorText}`);
+  }
+  return await res.json();
+}
+
 export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
   const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
   try {

@@ -174,6 +174,13 @@ export type CampaignMediaItem = {
   provider: string;
   model: string;
   status: string;
+  media_stage?: "original" | "final";
+  watermarked?: boolean;
+  logo_path?: string | null;
+  logo_position?: string | null;
+  logo_scale?: number | null;
+  logo_opacity?: number | null;
+  parent_media_id?: string | null;
 };
 
 export type StudioCampaignDetail = {

@@ -22,3 +22,6 @@ __pycache__/
 /storage/*.db
 /storage/campaigns/
 /storage/*.mp4
+
+# Reference repos
+/AURA2/

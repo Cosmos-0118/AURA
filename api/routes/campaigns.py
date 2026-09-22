@@ -3,7 +3,7 @@ import os
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 try:
@@ -34,9 +34,15 @@ try:
         StudioCampaignDetail,
     )
     from ..services.content_generator import generate_campaign_content
-    from ..services.image_generator import generate_image as service_generate_image
+    from ..services.image_generator import (
+        apply_watermark_to_image,
+        generate_image as service_generate_image,
+    )
     from ..services.publisher import publish_campaign_platform
-    from ..services.video_generator import generate_video as service_generate_video
+    from ..services.video_generator import (
+        generate_video as service_generate_video,
+        save_watermarked_video_bytes,
+    )
 except ImportError:
     from db import get_db, reset_campaign_data, transaction
     from graph import run_pipeline
@@ -65,9 +71,15 @@ except ImportError:
         StudioCampaignDetail,
     )
     from services.content_generator import generate_campaign_content
-    from services.image_generator import generate_image as service_generate_image
+    from services.image_generator import (
+        apply_watermark_to_image,
+        generate_image as service_generate_image,
+    )
     from services.publisher import publish_campaign_platform
-    from services.video_generator import generate_video as service_generate_video
+    from services.video_generator import (
+        generate_video as service_generate_video,
+        save_watermarked_video_bytes,
+    )
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
@@ -90,6 +102,17 @@ def set_runtime_demo_mode(demo: bool) -> None:
 
 class ModeUpdateRequest(BaseModel):
     demo_mode: bool
+
+
+class ApplyWatermarkRequest(BaseModel):
+    media_type: str = "image"  # "image" | "video"
+    parent_media_id: str | None = None
+    logo_preset: str | None = None
+    logo_anchor: str = "bottom-right"
+    logo_scale: float = 80.0
+    logo_opacity: float = 90.0
+    custom_text: str | None = None
+    image_data: str | None = None
 
 
 def _campaign(row: dict) -> Campaign:
@@ -353,6 +376,13 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
                 provider=m.get("provider") or "local",
                 model=m["model"],
                 status=m.get("status") or "pending",
+                media_stage=m.get("media_stage") or "final",
+                watermarked=bool(m.get("watermarked")),
+                logo_path=m.get("logo_path"),
+                logo_position=m.get("logo_position"),
+                logo_scale=m.get("logo_scale"),
+                logo_opacity=m.get("logo_opacity"),
+                parent_media_id=str(m["parent_media_id"]) if m.get("parent_media_id") else None,
             )
         )
 
@@ -396,7 +426,7 @@ def generate_campaign_image(
     body: MediaGenerateRequest,
     x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
 ) -> CampaignMediaItem:
-    """Generate image and save locally to storage/campaigns/{campaign_id}/image/{filename}."""
+    """Generate original 1:1 square image and save locally to storage/campaigns/{campaign_id}/image/{filename}."""
     demo_mode = is_demo_mode(x_demo_mode)
     chosen_model = body.model or os.environ.get("IMAGE_MODEL", "google/nano-banana-2-lites")
     prompt = body.prompt
@@ -436,7 +466,7 @@ def generate_campaign_image(
                 f'High-contrast graphic design poster layout with legible typography text overlay.'
             )
 
-    # 2. Record media generating in MySQL
+    # 2. Record media generating in MySQL (original stage)
     media_id = str(uuid4())
     with transaction() as db:
         media_repo.record_media_generating(
@@ -447,6 +477,7 @@ def generate_campaign_image(
             model=chosen_model,
             provider="demo_local" if demo_mode else "fal",
             media_id=media_id,
+            media_stage="original",
         )
 
     # 3. Generate image and save to local storage
@@ -472,6 +503,8 @@ def generate_campaign_image(
             filename=res["filename"],
             mime_type=res["mime_type"],
             file_size=res["file_size"],
+            media_stage="original",
+            watermarked=False,
         )
 
     media_url = f"/{res['local_path']}"
@@ -484,6 +517,8 @@ def generate_campaign_image(
         provider=updated_media["provider"],
         model=updated_media["model"],
         status=updated_media["status"],
+        media_stage="original",
+        watermarked=False,
     )
 
 
@@ -493,7 +528,7 @@ def generate_campaign_video(
     body: MediaGenerateRequest,
     x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
 ) -> CampaignMediaItem:
-    """Generate vertical Reel video and save locally to storage/campaigns/{campaign_id}/video/{filename}."""
+    """Generate original vertical 9:16 Reel video and save locally to storage/campaigns/{campaign_id}/video/{filename}."""
     demo_mode = is_demo_mode(x_demo_mode)
     chosen_model = body.model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo/text-to-video")
     prompt = body.prompt
@@ -512,7 +547,7 @@ def generate_campaign_video(
         if not prompt:
             prompt = f"Vertical 9:16 cinematic video for {detail['campaign']['brand_id']} on {detail['campaign']['thesis']}"
 
-    # 2. Record media generating in MySQL
+    # 2. Record media generating in MySQL (original stage)
     media_id = str(uuid4())
     with transaction() as db:
         media_repo.record_media_generating(
@@ -523,6 +558,7 @@ def generate_campaign_video(
             model=chosen_model,
             provider="demo_local" if demo_mode else "fal",
             media_id=media_id,
+            media_stage="original",
         )
 
     # 3. Generate video and save to local storage
@@ -548,6 +584,8 @@ def generate_campaign_video(
             mime_type=res["mime_type"],
             file_size=res["file_size"],
             duration_seconds=res.get("duration_seconds", 5.0),
+            media_stage="original",
+            watermarked=False,
         )
 
     media_url = f"/{res['local_path']}"
@@ -560,6 +598,169 @@ def generate_campaign_video(
         provider=updated_media["provider"],
         model=updated_media["model"],
         status=updated_media["status"],
+        media_stage="original",
+        watermarked=False,
+    )
+
+
+@router.post("/{campaign_id}/apply-watermark", response_model=CampaignMediaItem)
+def apply_campaign_watermark(campaign_id: str, body: ApplyWatermarkRequest) -> CampaignMediaItem:
+    """Apply brand logo and text overlay to create final watermarked asset."""
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        # Find parent media
+        parent = None
+        if body.parent_media_id:
+            parent = media_repo.get_media_by_id(db, body.parent_media_id)
+        if not parent:
+            for m in reversed(detail["media"]):
+                if m["media_type"] == body.media_type:
+                    parent = m
+                    break
+
+        if not parent:
+            raise HTTPException(status_code=400, detail=f"No {body.media_type} asset found to watermark")
+
+    # Apply watermark to image
+    if body.media_type == "image":
+        res = apply_watermark_to_image(
+            campaign_id=campaign_id,
+            original_media_path=parent["local_path"],
+            brand_id=body.logo_preset or detail["campaign"]["brand_id"],
+            logo_anchor=body.logo_anchor,
+            logo_scale=body.logo_scale,
+            logo_opacity=body.logo_opacity,
+            custom_text=body.custom_text,
+            image_data_base64=body.image_data,
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="For video watermarking, export the composited video and upload via upload-watermarked-media",
+        )
+
+    with transaction() as db:
+        saved = media_repo.record_watermarked_media(
+            db=db,
+            campaign_id=campaign_id,
+            media_type="image",
+            prompt=parent["prompt"],
+            local_path=res["local_path"],
+            filename=res["filename"],
+            mime_type=res["mime_type"],
+            file_size=res["file_size"],
+            parent_media_id=str(parent["id"]),
+            logo_path=body.logo_preset,
+            logo_position=body.logo_anchor,
+            logo_scale=body.logo_scale,
+            logo_opacity=body.logo_opacity,
+        )
+
+    media_url = f"/{saved['local_path']}" if not saved['local_path'].startswith('/') else saved['local_path']
+    return CampaignMediaItem(
+        id=str(saved["id"]),
+        campaign_id=str(saved["campaign_id"]),
+        media_type="image",
+        prompt=saved["prompt"],
+        local_path=media_url,
+        provider=saved.get("provider") or "local",
+        model=saved["model"],
+        status="completed",
+        media_stage="final",
+        watermarked=True,
+        logo_path=body.logo_preset,
+        logo_position=body.logo_anchor,
+        logo_scale=body.logo_scale,
+        logo_opacity=body.logo_opacity,
+        parent_media_id=str(parent["id"]),
+    )
+
+
+@router.post("/{campaign_id}/upload-watermarked-media", response_model=CampaignMediaItem)
+async def upload_watermarked_media(
+    campaign_id: str,
+    file: UploadFile = File(...),
+    media_type: str = Form("video"),
+    parent_media_id: str | None = Form(None),
+    logo_anchor: str = Form("bottom-right"),
+    logo_scale: float = Form(80.0),
+    logo_opacity: float = Form(90.0),
+) -> CampaignMediaItem:
+    """Save user-exported watermarked video or image file as the final version."""
+    content_bytes = await file.read()
+    ext = os.path.splitext(file.filename or "")[1] or (".mp4" if media_type == "video" else ".png")
+
+    with get_db() as db:
+        detail = campaign_repo.get_campaign_detail(db, campaign_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        parent = None
+        if parent_media_id:
+            parent = media_repo.get_media_by_id(db, parent_media_id)
+        if not parent:
+            for m in reversed(detail["media"]):
+                if m["media_type"] == media_type:
+                    parent = m
+                    break
+
+        prompt = parent["prompt"] if parent else f"Watermarked {media_type} asset"
+        parent_id_str = str(parent["id"]) if parent else None
+
+    if media_type == "video":
+        res = save_watermarked_video_bytes(
+            campaign_id=campaign_id,
+            raw_video_bytes=content_bytes,
+            extension=ext,
+        )
+    else:
+        target_path, filename, rel_path = media_repo.determine_next_media_path(
+            campaign_id, "image", stage="final"
+        )
+        with open(target_path, "wb") as f:
+            f.write(content_bytes)
+        res = {
+            "local_path": rel_path,
+            "filename": filename,
+            "mime_type": file.content_type or "image/png",
+            "file_size": len(content_bytes),
+        }
+
+    with transaction() as db:
+        saved = media_repo.record_watermarked_media(
+            db=db,
+            campaign_id=campaign_id,
+            media_type=media_type,
+            prompt=prompt,
+            local_path=res["local_path"],
+            filename=res["filename"],
+            mime_type=res["mime_type"],
+            file_size=res["file_size"],
+            parent_media_id=parent_id_str,
+            logo_position=logo_anchor,
+            logo_scale=logo_scale,
+            logo_opacity=logo_opacity,
+        )
+
+    media_url = f"/{saved['local_path']}" if not saved['local_path'].startswith('/') else saved['local_path']
+    return CampaignMediaItem(
+        id=str(saved["id"]),
+        campaign_id=str(saved["campaign_id"]),
+        media_type=media_type,
+        prompt=saved["prompt"],
+        local_path=media_url,
+        provider=saved.get("provider") or "local",
+        model=saved["model"],
+        status="completed",
+        media_stage="final",
+        watermarked=True,
+        logo_position=logo_anchor,
+        logo_scale=logo_scale,
+        logo_opacity=logo_opacity,
+        parent_media_id=parent_id_str,
     )
 
 
@@ -698,6 +899,13 @@ def get_campaign_media_route(campaign_id: str) -> list[CampaignMediaItem]:
                 provider=m.get("provider") or "local",
                 model=m["model"],
                 status=m.get("status") or "completed",
+                media_stage=m.get("media_stage") or "final",
+                watermarked=bool(m.get("watermarked")),
+                logo_path=m.get("logo_path"),
+                logo_position=m.get("logo_position"),
+                logo_scale=m.get("logo_scale"),
+                logo_opacity=m.get("logo_opacity"),
+                parent_media_id=str(m["parent_media_id"]) if m.get("parent_media_id") else None,
             )
         )
     return items

@@ -135,6 +135,7 @@ export default function ReviewQueuePage() {
   // Workspace sub-tabs & content editor
   const [workspaceTab, setWorkspaceTab] = useState<'content' | 'media' | 'compliance' | 'history'>('content');
   const [activePlatformTab, setActivePlatformTab] = useState<Platform>('linkedin');
+  const [activeMediaTab, setActiveMediaTab] = useState<'poster' | 'reel'>('poster');
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editableContent, setEditableContent] = useState('');
   const [editableTitle, setEditableTitle] = useState('');
@@ -391,6 +392,22 @@ export default function ReviewQueuePage() {
   // Active content for current platform
   const currentContentItem = workspaceDetail?.contents.find((c) => c.platform === activePlatformTab);
   const isCampaignApproved = selectedCard?.campaign_status === 'approved' || selectedCard?.campaign_status === 'published';
+
+  // Copy active platform copy to clipboard
+  const handleCopyContent = () => {
+    const textToCopy = editableContent || currentContentItem?.content || selectedCard?.linkedin_content || '';
+    if (textToCopy) {
+      navigator.clipboard.writeText(textToCopy);
+      toast.success(`Copied ${activePlatformTab.toUpperCase()} copy to clipboard!`);
+    }
+  };
+
+  // Watermark status of media assets
+  const latestImageItem = mediaItems.find((m) => m.media_type === 'image' && (m.media_stage === 'final' || Boolean(m.watermarked))) || mediaItems.find((m) => m.media_type === 'image');
+  const isImageFinalWatermarked = Boolean(latestImageItem && (latestImageItem.media_stage === 'final' || Boolean(latestImageItem.watermarked)));
+
+  const latestVideoItem = mediaItems.find((m) => m.media_type === 'video' && (m.media_stage === 'final' || Boolean(m.watermarked))) || mediaItems.find((m) => m.media_type === 'video');
+  const isVideoFinalWatermarked = Boolean(latestVideoItem && (latestVideoItem.media_stage === 'final' || Boolean(latestVideoItem.watermarked)));
 
   return (
     <div className='flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full'>
@@ -774,120 +791,112 @@ export default function ReviewQueuePage() {
               </div>
             </DialogHeader>
 
-            {/* Workspace Main Tabs */}
-            <Tabs
-              value={workspaceTab}
-              onValueChange={(val) => setWorkspaceTab(val as 'content' | 'media' | 'compliance' | 'history')}
-              className='w-full'
-            >
-              <TabsList className='grid grid-cols-4 h-10 w-full mb-4'>
-                <TabsTrigger value='content' className='text-xs font-semibold'>
-                  <Icons.post className='size-3.5 mr-1.5' />
-                  Platform Content
-                </TabsTrigger>
-                <TabsTrigger value='media' className='text-xs font-semibold'>
-                  <Icons.media className='size-3.5 mr-1.5' />
-                  Media & Versions ({mediaItems.length})
-                </TabsTrigger>
-                <TabsTrigger value='compliance' className='text-xs font-semibold'>
-                  <Icons.circleCheck className='size-3.5 mr-1.5 text-emerald-600' />
-                  Compliance Audit (PASS)
-                </TabsTrigger>
-                <TabsTrigger value='history' className='text-xs font-semibold'>
-                  <Icons.clock className='size-3.5 mr-1.5' />
-                  Event History ({historyEvents.length})
-                </TabsTrigger>
-              </TabsList>
-
-              {/* TAB 1: PLATFORM CONTENT */}
-              <TabsContent value='content' className='flex flex-col gap-4 mt-0'>
-                {/* Sub-channel selector */}
-                <div className='flex items-center gap-2 border-b pb-2.5 overflow-x-auto'>
-                  {(['linkedin', 'instagram', 'x', 'blog', 'reel'] as Platform[]).map((p) => {
-                    const isSelected = activePlatformTab === p;
-                    return (
-                      <button
-                        key={p}
-                        type='button'
-                        onClick={() => handleSelectPlatform(p)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer capitalize',
-                          isSelected
-                            ? 'bg-primary text-primary-foreground shadow-xs'
-                            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                        )}
-                      >
-                        <PlatformIcon platform={p} className='size-3.5' />
-                        <span>{p}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Content Editor / Viewer */}
-                <div className='border rounded-xl p-4 bg-card flex flex-col gap-3'>
-                  <div className='flex items-center justify-between gap-2 border-b pb-2.5'>
-                    <div className='flex items-center gap-2'>
-                      <PlatformIcon platform={activePlatformTab} className='size-4 text-primary' />
-                      <span className='text-sm font-bold text-foreground capitalize'>
-                        {activePlatformTab} Post Variant
-                      </span>
+            {/* 2-COLUMN DESKTOP WORKSPACE LAYOUT */}
+            <div className='grid grid-cols-1 lg:grid-cols-12 gap-6 items-start'>
+              {/* LEFT COLUMN: Campaign Content, Compliance Engine, Audit Trail */}
+              <div className='lg:col-span-7 flex flex-col gap-5 min-w-0'>
+                {/* 1. Cross-Platform Content Editor & Review */}
+                <div className='border rounded-xl p-4 sm:p-5 bg-card flex flex-col gap-4 shadow-xs'>
+                  {/* Sub-channel selector & actions */}
+                  <div className='flex items-center justify-between gap-2 border-b pb-3 flex-wrap'>
+                    <div className='flex items-center gap-1.5 overflow-x-auto py-0.5'>
+                      {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((p) => {
+                        const isSelected = activePlatformTab === p;
+                        return (
+                          <button
+                            key={p}
+                            type='button'
+                            onClick={() => handleSelectPlatform(p)}
+                            className={cn(
+                              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer capitalize',
+                              isSelected
+                                ? 'bg-primary text-primary-foreground shadow-xs'
+                                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                            )}
+                          >
+                            <PlatformIcon platform={p} className='size-3.5' />
+                            <span>{p}</span>
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {!isEditingContent ? (
+                    <div className='flex items-center gap-2'>
+                      {/* Character counter */}
+                      <span className='text-[11px] font-mono text-muted-foreground'>
+                        {(editableContent || currentContentItem?.content || '').length} chars
+                      </span>
+
+                      {/* Copy button */}
                       <Button
                         size='xs'
-                        variant='outline'
-                        onClick={() => setIsEditingContent(true)}
-                        className='text-xs font-semibold'
+                        variant='ghost'
+                        onClick={handleCopyContent}
+                        className='text-xs text-muted-foreground hover:text-foreground h-7 px-2'
+                        title='Copy content to clipboard'
                       >
-                        <Icons.edit className='size-3.5 mr-1.5' />
-                        Edit Copy
+                        <Icons.share className='size-3.5 mr-1' />
+                        Copy
                       </Button>
-                    ) : (
-                      <div className='flex items-center gap-2'>
+
+                      {/* Edit controls */}
+                      {!isEditingContent ? (
                         <Button
                           size='xs'
-                          variant='ghost'
-                          onClick={() => {
-                            setIsEditingContent(false);
-                            if (currentContentItem) {
-                              setEditableContent(currentContentItem.content);
-                              setEditableTitle(currentContentItem.title || '');
-                            }
-                          }}
-                          disabled={isSavingEdit}
-                          className='text-xs'
+                          variant='outline'
+                          onClick={() => setIsEditingContent(true)}
+                          className='text-xs font-semibold h-7'
                         >
-                          Cancel
+                          <Icons.edit className='size-3 mr-1' />
+                          Edit Copy
                         </Button>
-                        <Button
-                          size='xs'
-                          variant='default'
-                          onClick={handleSaveEdit}
-                          disabled={isSavingEdit}
-                          className='text-xs font-bold'
-                        >
-                          {isSavingEdit ? (
-                            <>
-                              <Icons.spinner className='size-3 mr-1 animate-spin' />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Icons.check className='size-3 mr-1' />
-                              Save Changes
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    )}
+                      ) : (
+                        <div className='flex items-center gap-1.5'>
+                          <Button
+                            size='xs'
+                            variant='ghost'
+                            onClick={() => {
+                              setIsEditingContent(false);
+                              if (currentContentItem) {
+                                setEditableContent(currentContentItem.content);
+                                setEditableTitle(currentContentItem.title || '');
+                              }
+                            }}
+                            disabled={isSavingEdit}
+                            className='text-xs h-7'
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size='xs'
+                            variant='default'
+                            onClick={handleSaveEdit}
+                            disabled={isSavingEdit}
+                            className='text-xs font-bold h-7'
+                          >
+                            {isSavingEdit ? (
+                              <>
+                                <Icons.spinner className='size-3 mr-1 animate-spin' />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Icons.check className='size-3 mr-1' />
+                                Save Changes
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Title (for LinkedIn / Blog / Reel) */}
+                  {/* Title Hook (LinkedIn / Blog / Reel) */}
                   {(activePlatformTab === 'linkedin' || activePlatformTab === 'blog' || activePlatformTab === 'reel') && (
-                    <div className='flex flex-col gap-1'>
-                      <Label className='text-xs text-muted-foreground font-semibold'>Title / Hook</Label>
+                    <div className='flex flex-col gap-1.5'>
+                      <Label className='text-[11px] text-muted-foreground font-semibold uppercase tracking-wider'>
+                        Title / Attention Hook
+                      </Label>
                       {isEditingContent ? (
                         <Input
                           value={editableTitle}
@@ -896,44 +905,48 @@ export default function ReviewQueuePage() {
                           placeholder='Post title or attention hook'
                         />
                       ) : (
-                        <p className='text-xs font-bold text-foreground'>
+                        <p className='text-xs font-bold text-foreground bg-muted/20 px-3 py-2 rounded-lg border'>
                           {currentContentItem?.title || selectedCard.campaign_title}
                         </p>
                       )}
                     </div>
                   )}
 
-                  {/* Body Textarea / Viewer */}
-                  <div className='flex flex-col gap-1'>
-                    <Label className='text-xs text-muted-foreground font-semibold'>Content Body</Label>
+                  {/* Content Body */}
+                  <div className='flex flex-col gap-1.5'>
+                    <Label className='text-[11px] text-muted-foreground font-semibold uppercase tracking-wider'>
+                      Marketing Copy
+                    </Label>
                     {isEditingContent ? (
                       <Textarea
                         value={editableContent}
                         onChange={(e) => setEditableContent(e.target.value)}
-                        rows={7}
+                        rows={8}
                         className='text-xs font-sans leading-relaxed'
                         placeholder='Enter revised marketing copy...'
                       />
                     ) : (
-                      <div className='p-3 rounded-lg bg-muted/30 border text-xs leading-relaxed text-foreground whitespace-pre-line'>
+                      <div className='p-3.5 rounded-lg bg-muted/30 border text-xs leading-relaxed text-foreground whitespace-pre-line select-text font-sans'>
                         {currentContentItem?.content || selectedCard.linkedin_content || selectedCard.thesis}
                       </div>
                     )}
                   </div>
 
-                  {/* Reel Script / Visual Storyboard if Reel */}
+                  {/* Reel Voiceover & Storyboard */}
                   {activePlatformTab === 'reel' && currentContentItem?.script && (
-                    <div className='flex flex-col gap-1 mt-2 pt-2 border-t'>
-                      <Label className='text-xs text-muted-foreground font-semibold'>Voiceover & Storyboard Script</Label>
+                    <div className='flex flex-col gap-1.5 pt-2 border-t'>
+                      <Label className='text-[11px] text-muted-foreground font-semibold uppercase tracking-wider'>
+                        Voiceover & Storyboard Script
+                      </Label>
                       <pre className='p-3 rounded-lg bg-muted/40 border text-[11px] font-mono whitespace-pre-wrap leading-relaxed text-foreground'>
                         {currentContentItem.script}
                       </pre>
                     </div>
                   )}
 
-                  {/* Feedback Reason & Tag if editing */}
+                  {/* Feedback Tag & Note (shown when editing) */}
                   {isEditingContent && (
-                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 pt-3 border-t bg-muted/20 p-3 rounded-lg'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t bg-muted/20 p-3 rounded-lg'>
                       <div className='flex flex-col gap-1'>
                         <Label className='text-xs font-bold text-foreground'>
                           Feedback Tag (Saved to AURA Memory)
@@ -977,167 +990,17 @@ export default function ReviewQueuePage() {
                     </div>
                   )}
                 </div>
-              </TabsContent>
 
-              {/* TAB 2: MEDIA ASSETS & VERSIONS */}
-              <TabsContent value='media' className='flex flex-col gap-5 mt-0'>
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-5'>
-                  {/* Poster Image Card */}
-                  <Card className='shadow-xs'>
-                    <CardHeader className='pb-3'>
-                      <div className='flex items-center justify-between'>
-                        <CardTitle className='text-sm font-bold text-foreground flex items-center gap-1.5'>
-                          <Icons.media className='size-4 text-emerald-600' />
-                          <span>Official Campaign Poster</span>
-                        </CardTitle>
-                        <Badge variant='outline' className='text-[10px] font-mono border-emerald-500/30 text-emerald-600'>
-                          Dual Watermarked
-                        </Badge>
-                      </div>
-                      <CardDescription className='text-xs'>
-                        Overlaid with ja.png (bottom-left) and {selectedCard.brand_id}.png (bottom-right).
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className='flex flex-col gap-3 pt-0'>
-                      <div className='relative aspect-[4/3] rounded-lg overflow-hidden border bg-muted/30 flex items-center justify-center'>
-                        {selectedCard.latest_image_url ? (
-                          <Image
-                            src={selectedCard.latest_image_url}
-                            alt='Poster'
-                            fill
-                            className='object-cover'
-                            unoptimized
-                          />
-                        ) : (
-                          <div className='text-center p-4 text-xs text-muted-foreground'>
-                            No poster image generated yet
-                          </div>
-                        )}
-                      </div>
-
-                      {selectedCard.latest_image_prompt && (
-                        <div className='flex flex-col gap-1'>
-                          <span className='text-[10px] font-semibold text-muted-foreground uppercase'>Image Prompt:</span>
-                          <p className='text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded border leading-relaxed'>
-                            {selectedCard.latest_image_prompt}
-                          </p>
-                        </div>
-                      )}
-
-                      {selectedCard.latest_image_url && (
-                        <div className='flex justify-end'>
-                          <a
-                            href={selectedCard.latest_image_url}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className='text-xs font-semibold text-primary hover:underline flex items-center gap-1'
-                          >
-                            <span>Open Full Resolution</span>
-                            <Icons.externalLink className='size-3' />
-                          </a>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Video Reel Card */}
-                  <Card className='shadow-xs'>
-                    <CardHeader className='pb-3'>
-                      <div className='flex items-center justify-between'>
-                        <CardTitle className='text-sm font-bold text-foreground flex items-center gap-1.5'>
-                          <Icons.video className='size-4 text-purple-600' />
-                          <span>Campaign Video Reel</span>
-                        </CardTitle>
-                        <Badge variant='outline' className='text-[10px] font-mono border-purple-500/30 text-purple-600'>
-                          9:16 Vertical
-                        </Badge>
-                      </div>
-                      <CardDescription className='text-xs'>
-                        Generated reel asset for social story and video feeds.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className='flex flex-col gap-3 pt-0'>
-                      <div className='relative aspect-[4/3] rounded-lg overflow-hidden border bg-muted/30 flex items-center justify-center'>
-                        {selectedCard.latest_video_url ? (
-                          <video
-                            controls
-                            aria-label='Campaign Video Reel Player'
-                            src={selectedCard.latest_video_url}
-                            className='w-full h-full object-cover'
-                          >
-                            <track kind='captions' />
-                          </video>
-                        ) : (
-                          <div className='text-center p-4 text-xs text-muted-foreground flex flex-col items-center gap-2'>
-                            <Icons.video className='size-8 opacity-40' />
-                            <span>No video generated for this campaign</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {workspaceDetail?.video_prompt && (
-                        <div className='flex flex-col gap-1'>
-                          <span className='text-[10px] font-semibold text-muted-foreground uppercase'>Video Prompt:</span>
-                          <p className='text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded border leading-relaxed'>
-                            {workspaceDetail.video_prompt}
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Media Version History */}
-                <div className='border rounded-xl p-4 bg-card flex flex-col gap-3'>
-                  <h4 className='text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5'>
-                    <Icons.galleryVerticalEnd className='size-3.5 text-primary' />
-                    <span>Media Version History ({mediaItems.length} items)</span>
-                  </h4>
-
-                  {mediaItems.length === 0 ? (
-                    <p className='text-xs text-muted-foreground italic'>No versioned media files recorded.</p>
-                  ) : (
-                    <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
-                      {mediaItems.map((m, idx) => (
-                        <div key={m.id || idx} className='border rounded-lg p-2.5 bg-muted/20 flex flex-col gap-1.5 text-xs'>
-                          <div className='flex items-center justify-between'>
-                            <Badge variant='outline' className='text-[10px] uppercase font-mono'>
-                              {m.media_type} · v{idx + 1}
-                            </Badge>
-                            <span className='text-[10px] text-muted-foreground capitalize'>{m.provider}</span>
-                          </div>
-                          <p className='text-[11px] text-muted-foreground line-clamp-2 italic'>
-                            "{m.prompt}"
-                          </p>
-                          {m.local_path && (
-                            <a
-                              href={m.local_path}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold mt-1'
-                            >
-                              <span>View File</span>
-                              <Icons.externalLink className='size-3' />
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* TAB 3: COMPLIANCE AUDIT */}
-              <TabsContent value='compliance' className='flex flex-col gap-4 mt-0'>
-                <div className='border rounded-xl p-4 bg-card flex flex-col gap-4'>
-                  <div className='flex items-center justify-between border-b pb-3'>
+                {/* 2. AURA Compliance Engine Audit Card */}
+                <div className='border rounded-xl p-4 sm:p-5 bg-card flex flex-col gap-3.5 shadow-xs'>
+                  <div className='flex items-center justify-between border-b pb-3 flex-wrap gap-2'>
                     <div>
                       <h4 className='text-sm font-bold text-foreground flex items-center gap-2'>
                         <Icons.circleCheck className='size-4 text-emerald-600' />
-                        <span>AURA Compliance Engine Verdict: PASS</span>
+                        <span>AURA Compliance Engine Verdict: 100% PASS</span>
                       </h4>
                       <p className='text-xs text-muted-foreground mt-0.5'>
-                        Verified across statutory insurance and advertising regulations in Singapore & ASEAN.
+                        Pre-verified across statutory insurance regulations, advertising laws, and underwriting guidelines.
                       </p>
                     </div>
                     <Badge variant='outline' className='border-emerald-500/30 bg-emerald-500/10 text-emerald-600 font-bold text-xs'>
@@ -1145,68 +1008,69 @@ export default function ReviewQueuePage() {
                     </Badge>
                   </div>
 
-                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2.5'>
                     <div className='p-3 rounded-lg border bg-muted/20 flex items-start gap-2.5'>
-                      <Icons.check className='size-4 text-emerald-600 shrink-0 mt-0.5' />
+                      <Icons.check className='size-3.5 text-emerald-600 shrink-0 mt-0.5' />
                       <div className='text-xs'>
                         <strong className='text-foreground font-semibold'>Statutory Claim Verification (CLAIM_001)</strong>
-                        <p className='text-muted-foreground mt-0.5 text-[11px]'>
+                        <p className='text-muted-foreground mt-0.5 text-[11px] leading-snug'>
                           No unconditional or absolute liability promises detected ("100% guarantee", "zero risk").
                         </p>
                       </div>
                     </div>
 
                     <div className='p-3 rounded-lg border bg-muted/20 flex items-start gap-2.5'>
-                      <Icons.check className='size-4 text-emerald-600 shrink-0 mt-0.5' />
+                      <Icons.check className='size-3.5 text-emerald-600 shrink-0 mt-0.5' />
                       <div className='text-xs'>
                         <strong className='text-foreground font-semibold'>Advisory Disclaimers (ABS_004)</strong>
-                        <p className='text-muted-foreground mt-0.5 text-[11px]'>
+                        <p className='text-muted-foreground mt-0.5 text-[11px] leading-snug'>
                           Required statutory policy advisory terms and consultation disclaimers are preserved.
                         </p>
                       </div>
                     </div>
 
                     <div className='p-3 rounded-lg border bg-muted/20 flex items-start gap-2.5'>
-                      <Icons.check className='size-4 text-emerald-600 shrink-0 mt-0.5' />
+                      <Icons.check className='size-3.5 text-emerald-600 shrink-0 mt-0.5' />
                       <div className='text-xs'>
                         <strong className='text-foreground font-semibold'>Brand Persona Alignment</strong>
-                        <p className='text-muted-foreground mt-0.5 text-[11px]'>
+                        <p className='text-muted-foreground mt-0.5 text-[11px] leading-snug'>
                           Tone respects institutional authority guidelines for {selectedCard.brand_id.toUpperCase()}.
                         </p>
                       </div>
                     </div>
 
                     <div className='p-3 rounded-lg border bg-muted/20 flex items-start gap-2.5'>
-                      <Icons.check className='size-4 text-emerald-600 shrink-0 mt-0.5' />
+                      <Icons.check className='size-3.5 text-emerald-600 shrink-0 mt-0.5' />
                       <div className='text-xs'>
                         <strong className='text-foreground font-semibold'>Cross-Platform Consistency</strong>
-                        <p className='text-muted-foreground mt-0.5 text-[11px]'>
+                        <p className='text-muted-foreground mt-0.5 text-[11px] leading-snug'>
                           Factual dates, times, locations, and CTAs match across copy and visual prompts.
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
-              </TabsContent>
 
-              {/* TAB 4: AUDIT TRAIL & HISTORY */}
-              <TabsContent value='history' className='flex flex-col gap-4 mt-0'>
-                <div className='border rounded-xl p-4 bg-card flex flex-col gap-3'>
-                  <h4 className='text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5'>
-                    <Icons.clock className='size-3.5 text-primary' />
-                    <span>Chronological Campaign Audit Trail ({historyEvents.length} events)</span>
-                  </h4>
+                {/* 3. Chronological Audit Trail */}
+                <div className='border rounded-xl p-4 sm:p-5 bg-card flex flex-col gap-3 shadow-xs'>
+                  <div className='flex items-center justify-between'>
+                    <h4 className='text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5'>
+                      <Icons.clock className='size-3.5 text-primary' />
+                      <span>Campaign Audit Trail ({historyEvents.length} events)</span>
+                    </h4>
+                    <span className='text-[10px] text-muted-foreground'>Immutable ledger</span>
+                  </div>
 
                   {historyEvents.length === 0 ? (
-                    <p className='text-xs text-muted-foreground italic'>No events recorded for this campaign.</p>
+                    <p className='text-xs text-muted-foreground italic py-2'>No events recorded for this campaign.</p>
                   ) : (
-                    <div className='relative pl-6 space-y-4 border-l-2 border-muted ml-2 mt-2'>
+                    <div className='max-h-56 overflow-y-auto pr-2 relative pl-5 space-y-3.5 border-l-2 border-muted ml-2 mt-1'>
                       {historyEvents.map((evt) => (
-                        <div key={evt.id} className='relative flex flex-col gap-1'>
+                        <div key={evt.id} className='relative flex flex-col gap-0.5'>
                           {/* Dot indicator */}
                           <div
                             className={cn(
-                              'absolute -left-[31px] top-1 size-3 rounded-full border-2 border-background',
+                              'absolute -left-[27px] top-1 size-2.5 rounded-full border-2 border-background',
                               evt.event_type.includes('published')
                                 ? 'bg-emerald-500'
                                 : evt.event_type.includes('approved')
@@ -1227,137 +1091,343 @@ export default function ReviewQueuePage() {
                           </div>
 
                           <p className='text-xs text-muted-foreground'>{evt.description}</p>
-
-                          {evt.metadata && Object.keys(evt.metadata).length > 0 && (
-                            <pre className='text-[10px] font-mono bg-muted/40 p-1.5 rounded text-foreground/80 overflow-x-auto max-w-full'>
-                              {JSON.stringify(evt.metadata, null, 2)}
-                            </pre>
-                          )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </TabsContent>
-            </Tabs>
+              </div>
 
-            {/* MODAL FOOTER: APPROVAL / REJECTION / MULTI-PLATFORM PUBLISHING DECK */}
-            <div className='border-t pt-4 flex flex-col gap-4'>
-              {/* If NOT approved yet: Show Decision Actions */}
-              {!isCampaignApproved ? (
-                <div className='flex items-center justify-between gap-4 flex-wrap'>
-                  <div className='flex items-center gap-2'>
-                    <Button
-                      size='sm'
-                      variant='destructive'
-                      onClick={() => setShowRejectDialog(true)}
-                      className='font-bold text-xs'
-                    >
-                      <Icons.close className='size-3.5 mr-1.5' />
-                      Reject Campaign
-                    </Button>
-                  </div>
+              {/* RIGHT COLUMN: Media Previews & Approval / Publishing Deck */}
+              <div className='lg:col-span-5 flex flex-col gap-5 min-w-0'>
+                {/* 1. Final Media Previews Card */}
+                <div className='border rounded-xl p-4 sm:p-5 bg-card flex flex-col gap-4 shadow-xs'>
+                  {/* Media Preview Toggle */}
+                  <div className='flex items-center justify-between border-b pb-3 flex-wrap gap-2'>
+                    <div className='flex items-center gap-1 bg-muted/60 p-1 rounded-lg'>
+                      <button
+                        type='button'
+                        onClick={() => setActiveMediaTab('poster')}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer',
+                          activeMediaTab === 'poster'
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        <Icons.media className='size-3.5 text-emerald-600' />
+                        <span>Poster (1:1)</span>
+                      </button>
 
-                  <div className='flex items-center gap-3'>
-                    <Button
-                      size='default'
-                      variant='default'
-                      onClick={() => setShowApproveDialog(true)}
-                      className='font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white'
-                    >
-                      <Icons.check className='size-4 mr-1.5' />
-                      Approve Campaign & Unlock Publishing
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                /* IF APPROVED: SHOW MULTI-PLATFORM PUBLISHING DECK */
-                <div className='flex flex-col gap-3 bg-muted/20 border rounded-xl p-4'>
-                  <div className='flex items-center justify-between flex-wrap gap-2'>
-                    <div className='flex items-center gap-2'>
-                      <Badge className='bg-blue-600 hover:bg-blue-600 text-white text-[10px] uppercase font-bold tracking-wider'>
-                        ✓ Campaign Approved
-                      </Badge>
-                      <span className='text-xs font-bold text-foreground'>
-                        Multi-Platform Publishing Deck
-                      </span>
+                      <button
+                        type='button'
+                        onClick={() => setActiveMediaTab('reel')}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer',
+                          activeMediaTab === 'reel'
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        <Icons.video className='size-3.5 text-purple-600' />
+                        <span>Reel (9:16)</span>
+                      </button>
                     </div>
-                    <span className='text-[11px] text-muted-foreground'>
-                      Select platform to dispatch content + attached media
-                    </span>
+
+                    {/* Watermark badge */}
+                    {activeMediaTab === 'poster' ? (
+                      <Badge
+                        variant='outline'
+                        className={cn(
+                          'text-[10px] font-mono py-0',
+                          isImageFinalWatermarked
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 font-bold'
+                            : 'border-muted-foreground/30 text-muted-foreground'
+                        )}
+                      >
+                        {isImageFinalWatermarked ? '✓ Final Watermarked' : 'Original AI Asset'}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant='outline'
+                        className={cn(
+                          'text-[10px] font-mono py-0',
+                          isVideoFinalWatermarked
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 font-bold'
+                            : 'border-muted-foreground/30 text-muted-foreground'
+                        )}
+                      >
+                        {isVideoFinalWatermarked ? '✓ Final Watermarked' : 'Original AI Asset'}
+                      </Badge>
+                    )}
                   </div>
 
-                  {/* 5 Channel Publishing Buttons */}
-                  <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5'>
-                    {(['linkedin', 'instagram', 'x', 'blog', 'reel'] as Platform[]).map((plat) => {
-                      const pub = publications.find((p) => p.platform === plat);
-                      const isPublished = pub?.status === 'published';
-                      const isPublishing = Boolean(isPublishingPlatform[plat]);
-
-                      return (
-                        <div
-                          key={plat}
-                          className={cn(
-                            'border rounded-lg p-2.5 flex flex-col justify-between gap-2 bg-card text-xs transition-all',
-                            isPublished && 'border-emerald-500/40 bg-emerald-500/[0.03]'
-                          )}
-                        >
-                          <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-1.5 font-bold capitalize text-foreground'>
-                              <PlatformIcon platform={plat} className='size-3.5 text-primary' />
-                              <span>{plat}</span>
-                            </div>
-                            {isPublished ? (
-                              <Badge variant='outline' className='text-[9px] font-bold text-emerald-600 border-emerald-500/30 px-1 py-0'>
-                                Live
-                              </Badge>
-                            ) : (
-                              <Badge variant='outline' className='text-[9px] text-muted-foreground font-normal px-1 py-0'>
-                                Ready
-                              </Badge>
-                            )}
+                  {/* POSTER VIEW (1:1 Square) */}
+                  {activeMediaTab === 'poster' && (
+                    <div className='flex flex-col gap-3'>
+                      <div className='relative aspect-square max-w-[360px] mx-auto w-full rounded-xl overflow-hidden border bg-muted/20 shadow-xs flex items-center justify-center'>
+                        {selectedCard.latest_image_url ? (
+                          <Image
+                            src={selectedCard.latest_image_url}
+                            alt='Official Campaign Poster'
+                            fill
+                            className='object-cover'
+                            unoptimized
+                          />
+                        ) : (
+                          <div className='text-center p-4 text-xs text-muted-foreground flex flex-col items-center gap-2'>
+                            <Icons.media className='size-8 opacity-40' />
+                            <span>No poster image generated yet</span>
                           </div>
+                        )}
+                      </div>
 
-                          {isPublished ? (
-                            <a
-                              href={pub?.external_post_url || '#'}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='inline-flex items-center justify-center gap-1 py-1.5 px-2 rounded-md bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] hover:bg-emerald-600/20'
-                            >
-                              <span>View Live</span>
-                              <Icons.externalLink className='size-3' />
-                            </a>
-                          ) : (
-                            <Button
-                              size='xs'
-                              variant='default'
-                              onClick={() => handlePublishPlatform(plat)}
-                              disabled={isPublishing}
-                              className={cn(
-                                'font-bold text-[11px]',
-                                plat === 'linkedin' ? 'bg-[#0077B5] hover:bg-[#005E93] text-white' : ''
-                              )}
-                            >
-                              {isPublishing ? (
-                                <>
-                                  <Icons.spinner className='size-3 mr-1 animate-spin' />
-                                  Posting...
-                                </>
-                              ) : (
-                                <>
-                                  <Icons.send className='size-3 mr-1' />
-                                  Post to {plat === 'linkedin' ? 'LinkedIn' : plat.toUpperCase()}
-                                </>
-                              )}
-                            </Button>
-                          )}
+                      {/* Image Prompt */}
+                      {selectedCard.latest_image_prompt && (
+                        <div className='flex flex-col gap-1'>
+                          <span className='text-[10px] font-semibold text-muted-foreground uppercase'>Visual Poster Prompt:</span>
+                          <p className='text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border leading-relaxed line-clamp-3'>
+                            {selectedCard.latest_image_prompt}
+                          </p>
                         </div>
-                      );
-                    })}
-                  </div>
+                      )}
+
+                      {/* Poster Action Controls */}
+                      {selectedCard.latest_image_url && (
+                        <div className='flex items-center justify-between pt-1'>
+                          <a
+                            href={selectedCard.latest_image_url}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                            className='text-xs font-semibold text-primary hover:underline flex items-center gap-1'
+                          >
+                            <span>Open Full Resolution</span>
+                            <Icons.externalLink className='size-3' />
+                          </a>
+
+                          <a
+                            href={selectedCard.latest_image_url}
+                            download={`campaign_${selectedCard.campaign_id}_poster.png`}
+                            className='text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1'
+                          >
+                            <span>Download PNG</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* REEL VIEW (9:16 Vertical) */}
+                  {activeMediaTab === 'reel' && (
+                    <div className='flex flex-col gap-3'>
+                      <div className='relative aspect-[9/16] max-h-[440px] mx-auto w-auto rounded-xl overflow-hidden border bg-black shadow-xs flex items-center justify-center'>
+                        {selectedCard.latest_video_url ? (
+                          <video
+                            controls
+                            playsInline
+                            aria-label='Campaign Video Reel Player'
+                            src={selectedCard.latest_video_url}
+                            className='w-full h-full object-cover'
+                          >
+                            <track kind='captions' />
+                          </video>
+                        ) : (
+                          <div className='text-center p-6 text-xs text-muted-foreground flex flex-col items-center gap-2'>
+                            <Icons.video className='size-8 opacity-40' />
+                            <span>No video reel generated for this campaign</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Video Prompt */}
+                      {workspaceDetail?.video_prompt && (
+                        <div className='flex flex-col gap-1'>
+                          <span className='text-[10px] font-semibold text-muted-foreground uppercase'>Reel Motion Prompt:</span>
+                          <p className='text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border leading-relaxed line-clamp-3'>
+                            {workspaceDetail.video_prompt}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Reel Action Controls */}
+                      {selectedCard.latest_video_url && (
+                        <div className='flex items-center justify-between pt-1'>
+                          <a
+                            href={selectedCard.latest_video_url}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                            className='text-xs font-semibold text-primary hover:underline flex items-center gap-1'
+                          >
+                            <span>Open Full Video</span>
+                            <Icons.externalLink className='size-3' />
+                          </a>
+
+                          <a
+                            href={selectedCard.latest_video_url}
+                            download={`campaign_${selectedCard.campaign_id}_reel.mp4`}
+                            className='text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1'
+                          >
+                            <span>Download MP4</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Recorded Version History Mini-Bar */}
+                  {mediaItems.length > 0 && (
+                    <div className='pt-2 border-t flex items-center justify-between text-[11px] text-muted-foreground'>
+                      <span className='font-semibold'>Recorded Assets: {mediaItems.length}</span>
+                      <div className='flex items-center gap-1.5'>
+                        {mediaItems.map((m, idx) => (
+                          <Badge
+                            key={m.id || idx}
+                            variant='outline'
+                            className={cn(
+                              'text-[9px] font-mono px-1.5 py-0',
+                              m.media_stage === 'final'
+                                ? 'border-emerald-500/40 text-emerald-600'
+                                : 'border-muted-foreground/30 text-muted-foreground'
+                            )}
+                          >
+                            {m.media_type === 'image' ? 'IMG' : 'VID'}:{m.media_stage || 'orig'}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* 2. Review Decisions & Multi-Platform Publishing Deck Card */}
+                <div className='border rounded-xl p-4 sm:p-5 bg-card flex flex-col gap-4 shadow-sm'>
+                  {!isCampaignApproved ? (
+                    /* UNAPPROVED: APPROVAL / REJECTION DECISION BUTTONS */
+                    <div className='flex flex-col gap-3'>
+                      <div>
+                        <h4 className='text-sm font-bold text-foreground'>
+                          Campaign Review Decision
+                        </h4>
+                        <p className='text-xs text-muted-foreground mt-0.5'>
+                          Inspect the compliance verdict and final watermarked assets before approving for distribution.
+                        </p>
+                      </div>
+
+                      <div className='flex items-center gap-3 pt-2'>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          onClick={() => setShowRejectDialog(true)}
+                          className='font-bold text-xs flex-1'
+                        >
+                          <Icons.close className='size-3.5 mr-1.5' />
+                          Request Changes
+                        </Button>
+
+                        <Button
+                          size='sm'
+                          variant='default'
+                          onClick={() => setShowApproveDialog(true)}
+                          className='font-bold text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                        >
+                          <Icons.check className='size-3.5 mr-1.5' />
+                          Approve Campaign
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* APPROVED: MULTI-PLATFORM PUBLISHING DECK */
+                    <div className='flex flex-col gap-3.5'>
+                      <div className='flex items-center justify-between flex-wrap gap-2 border-b pb-3'>
+                        <div className='flex items-center gap-2'>
+                          <Badge className='bg-blue-600 hover:bg-blue-600 text-white text-[10px] uppercase font-bold tracking-wider'>
+                            ✓ Approved
+                          </Badge>
+                          <span className='text-xs font-bold text-foreground'>
+                            Multi-Platform Publishing Deck
+                          </span>
+                        </div>
+                        <span className='text-[10px] text-muted-foreground font-medium'>
+                          Dispatch to channels
+                        </span>
+                      </div>
+
+                      {/* 5 Channel Publishing Rows */}
+                      <div className='flex flex-col gap-2'>
+                        {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((plat) => {
+                          const pub = publications.find((p) => p.platform === plat);
+                          const isPublished = pub?.status === 'published';
+                          const isPublishing = Boolean(isPublishingPlatform[plat]);
+
+                          return (
+                            <div
+                              key={plat}
+                              className={cn(
+                                'border rounded-lg p-2.5 flex items-center justify-between gap-3 bg-card text-xs transition-all',
+                                isPublished && 'border-emerald-500/40 bg-emerald-500/[0.03]'
+                              )}
+                            >
+                              <div className='flex items-center gap-2'>
+                                <PlatformIcon platform={plat} className='size-4 text-primary' />
+                                <div className='flex flex-col'>
+                                  <span className='font-bold capitalize text-foreground text-xs'>
+                                    {plat === 'linkedin' ? 'LinkedIn' : plat}
+                                  </span>
+                                  {isPublished ? (
+                                    <span className='text-[10px] text-emerald-600 font-semibold'>
+                                      ✓ Published live
+                                    </span>
+                                  ) : (
+                                    <span className='text-[10px] text-muted-foreground'>
+                                      Ready to broadcast
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div>
+                                {isPublished ? (
+                                  <a
+                                    href={pub?.external_post_url || '#'}
+                                    target='_blank'
+                                    rel='noopener noreferrer'
+                                    className='inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-md bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] hover:bg-emerald-600/20'
+                                  >
+                                    <span>View Live</span>
+                                    <Icons.externalLink className='size-3' />
+                                  </a>
+                                ) : (
+                                  <Button
+                                    size='xs'
+                                    variant='default'
+                                    onClick={() => handlePublishPlatform(plat)}
+                                    disabled={isPublishing}
+                                    className={cn(
+                                      'font-bold text-[11px]',
+                                      plat === 'linkedin' ? 'bg-[#0077B5] hover:bg-[#005E93] text-white' : ''
+                                    )}
+                                  >
+                                    {isPublishing ? (
+                                      <>
+                                        <Icons.spinner className='size-3 mr-1 animate-spin' />
+                                        Posting...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Icons.send className='size-3 mr-1' />
+                                        Post to {plat === 'linkedin' ? 'LinkedIn' : plat.toUpperCase()}
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

@@ -37,8 +37,8 @@ def generate_video(
     model: str | None = None,
     demo_mode: bool = False,
 ) -> dict[str, Any]:
-    """Generate vertical Reel video and persist locally to storage/campaigns/{campaign_id}/video/{filename}."""
-    target_path, filename, rel_path = determine_next_media_path(campaign_id, "video")
+    """Generate vertical 9:16 Reel original video and persist locally to storage/campaigns/{campaign_id}/video/{filename}."""
+    target_path, filename, rel_path = determine_next_media_path(campaign_id, "video", stage="original")
     chosen_model = model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo")
 
     if demo_mode:
@@ -54,6 +54,7 @@ def generate_video(
             "provider": "demo_local",
             "model": chosen_model,
             "status": "completed",
+            "media_stage": "original",
         }
 
     fal_key = os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")
@@ -70,6 +71,7 @@ def generate_video(
             "provider": "local_fallback",
             "model": chosen_model,
             "status": "completed",
+            "media_stage": "original",
         }
 
     os.environ["FAL_KEY"] = fal_key
@@ -113,6 +115,7 @@ def generate_video(
             "provider": "fal",
             "model": chosen_model,
             "status": "completed",
+            "media_stage": "original",
         }
     except Exception as exc:
         logger.warning("FAL video generation failed (%s). Falling back to local playable video.", exc)
@@ -128,4 +131,32 @@ def generate_video(
             "provider": "fal_fallback_local",
             "model": chosen_model,
             "status": "completed",
+            "media_stage": "original",
         }
+
+
+def save_watermarked_video_bytes(
+    campaign_id: str,
+    raw_video_bytes: bytes,
+    extension: str = ".mp4",
+) -> dict[str, Any]:
+    """Save user-exported watermarked video to storage/campaigns/{campaign_id}/video/reel_final_v{v}.mp4."""
+    target_path, filename, rel_path = determine_next_media_path(campaign_id, "video", stage="final")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(target_path, "wb") as f:
+        f.write(raw_video_bytes)
+
+    file_size = target_path.stat().st_size
+    mime = "video/mp4" if extension.endswith("mp4") else "video/webm"
+    return {
+        "local_path": rel_path,
+        "url": f"/{rel_path}",
+        "filename": filename,
+        "mime_type": mime,
+        "file_size": file_size,
+        "duration_seconds": 5.0,
+        "status": "completed",
+        "media_stage": "final",
+        "watermarked": True,
+    }

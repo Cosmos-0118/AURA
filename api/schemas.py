@@ -209,6 +209,13 @@ class CampaignMediaItem(BaseModel):
     provider: str = "local"
     model: str
     status: str = "pending"
+    media_stage: str = "final"
+    watermarked: bool = False
+    logo_path: str | None = None
+    logo_position: str | None = None
+    logo_scale: float | None = None
+    logo_opacity: float | None = None
+    parent_media_id: str | None = None
 
 
 class CampaignFacts(BaseModel):

@@ -156,6 +156,13 @@ def init_sqlite_db(conn: sqlite3.Connection):
           provider TEXT NOT NULL DEFAULT 'local',
           model TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending',
+          media_stage TEXT NOT NULL DEFAULT 'final',
+          watermarked INTEGER NOT NULL DEFAULT 0,
+          logo_path TEXT,
+          logo_position TEXT,
+          logo_scale REAL DEFAULT 100.0,
+          logo_opacity REAL DEFAULT 100.0,
+          parent_media_id TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -273,6 +280,21 @@ def init_sqlite_db(conn: sqlite3.Connection):
         conn.commit()
     except Exception:
         pass
+
+    for col_def in [
+        ("media_stage", "TEXT DEFAULT 'final'"),
+        ("watermarked", "INTEGER DEFAULT 0"),
+        ("logo_path", "TEXT"),
+        ("logo_position", "TEXT"),
+        ("logo_scale", "REAL DEFAULT 100.0"),
+        ("logo_opacity", "REAL DEFAULT 100.0"),
+        ("parent_media_id", "TEXT"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE campaign_media ADD COLUMN {col_def[0]} {col_def[1]}")
+            conn.commit()
+        except Exception:
+            pass
 
     # Seed initial brands if empty
     cursor.execute("SELECT COUNT(*) FROM brands")
@@ -392,6 +414,22 @@ def get_db() -> Generator[Any, None, None]:
                 raw_conn.commit()
             except Exception:
                 pass
+            for col_sql in [
+                "ALTER TABLE campaign_media ADD COLUMN media_stage VARCHAR(32) DEFAULT 'final'",
+                "ALTER TABLE campaign_media ADD COLUMN watermarked TINYINT(1) DEFAULT 0",
+                "ALTER TABLE campaign_media ADD COLUMN logo_path VARCHAR(512)",
+                "ALTER TABLE campaign_media ADD COLUMN logo_position VARCHAR(64)",
+                "ALTER TABLE campaign_media ADD COLUMN logo_scale FLOAT DEFAULT 100.0",
+                "ALTER TABLE campaign_media ADD COLUMN logo_opacity FLOAT DEFAULT 100.0",
+                "ALTER TABLE campaign_media ADD COLUMN parent_media_id VARCHAR(64)",
+            ]:
+                try:
+                    with raw_conn.cursor() as cur:
+                        cur.execute(col_sql)
+                    raw_conn.commit()
+                except Exception:
+                    pass
+
             wrapper = MySQLConnectionWrapper(raw_conn)
             try:
                 yield wrapper

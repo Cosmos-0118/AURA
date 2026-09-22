@@ -3,20 +3,22 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { useAuraStore, auraStore } from '@/lib/demo/store';
+import { useAuraStore } from '@/lib/demo/store';
 import { DEMO_BRANDS } from '@/lib/demo/brands';
 import {
   generateStudioCampaign,
   getStudioCampaign,
   generateCampaignImage,
   generateCampaignVideo,
+  editCampaignContent,
   submitCampaign
 } from '@/lib/api/client';
 import type {
   BrandId,
   Platform,
   Language,
-  StudioCampaignDetail
+  StudioCampaignDetail,
+  CampaignMediaItem
 } from '@/lib/api/types';
 import { BrandBadge } from '@/components/aura/common';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -29,23 +31,41 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Icons } from '@/components/icons';
 import { useApiMode } from '@/context/api-mode-context';
 import { ApiModeToggle } from '@/components/layout/api-mode-toggle';
+import { WatermarkStudio } from '@/components/aura/watermark/watermark-studio';
 import { cn } from '@/lib/utils';
 
 const STAGED_PIPELINE_STEPS = [
-  'Ingesting Brand Voice & Learned Lessons Memory',
-  'Analyzing Topic & Platform Constraints',
+  'Ingesting Brand Voice & Underwriting Rules',
+  'Analyzing Factual Event & Subject Constraints',
   'Groq LLM Multi-Platform Content Generation',
-  'Synthesizing AI Media Prompts & Snapshot Packages',
-  'Persisting Static Snapshot to MySQL / Local Storage'
+  'Synthesizing 1:1 Poster & 9:16 Video Prompts',
+  'Persisting Static Campaign Snapshot to Database'
 ];
 
-const PLATFORM_INFO: Record<Platform, { label: string; desc: string }> = {
-  linkedin: { label: 'LinkedIn', desc: 'Longform authority post & carousels' },
-  x: { label: 'X (Twitter)', desc: 'Concise hook & thread (<280 chars)' },
-  instagram: { label: 'Instagram', desc: 'Visual concept, caption & hashtags' },
-  blog: { label: 'Blog / Article', desc: 'Structured SEO thought-leadership draft' },
-  reel: { label: 'Reel (Video)', desc: '9:16 vertical storyboard & voiceover' }
+const PLATFORM_INFO: Record<Platform, { label: string; desc: string; icon: string }> = {
+  linkedin: { label: 'LinkedIn', desc: 'Longform authoritative industry post', icon: 'post' },
+  x: { label: 'X (Twitter)', desc: 'Concise punchy hook & thread (<280 chars)', icon: 'post' },
+  instagram: { label: 'Instagram', desc: 'Editorial caption & targeted hashtags', icon: 'post' },
+  blog: { label: 'Blog / Article', desc: 'Comprehensive SEO thought-leadership article', icon: 'post' },
+  reel: { label: 'Reel (Video)', desc: '9:16 vertical scene-by-scene storyboard', icon: 'video' }
 };
+
+const OBJECTIVES = [
+  'Awareness',
+  'Education',
+  'Lead Generation',
+  'Thought Leadership',
+  'Engagement',
+  'Product Awareness'
+];
+
+const LANGUAGES: { code: Language; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'ms', label: 'Bahasa Melayu' },
+  { code: 'id', label: 'Bahasa Indonesia' },
+  { code: 'th', label: 'Thai' },
+  { code: 'zh', label: 'Traditional Chinese' }
+];
 
 function handleCopy(text: string, label: string) {
   navigator.clipboard.writeText(text);
@@ -53,21 +73,23 @@ function handleCopy(text: string, label: string) {
 }
 
 function StudioContent() {
-
   const router = useRouter();
   const searchParams = useSearchParams();
   const campaignIdFromQuery = searchParams.get('id');
 
   const store = useAuraStore();
-
-  // Mode Info from Global API Mode Context
   const { isRealApi, modeInfo, backendStatus } = useApiMode();
 
-  // Form State
+  // Workflow Stepper State: 1 = Setup, 2 = Generation, 3 = Media & Review
+  const [currentWorkflowStep, setCurrentWorkflowStep] = useState<1 | 2 | 3>(1);
+
+  // Step 1: Configuration Form State
   const [brandId, setBrandId] = useState<BrandId>('jade');
   const [objective, setObjective] = useState('Awareness');
   const [language, setLanguage] = useState<Language>('en');
-  const [thesis, setThesis] = useState('How jewellery businesses can eliminate transit custody risk during regional exhibitions');
+  const [thesis, setThesis] = useState(
+    'How jewellery businesses can eliminate transit custody risk during regional exhibitions'
+  );
   const [targetAudience, setTargetAudience] = useState(
     'Jewellers, fine-art businesses, luxury asset businesses, and high-value asset owners.'
   );
@@ -79,22 +101,26 @@ function StudioContent() {
     'reel'
   ]);
 
-  // Generation & Active Snapshot State
+  // Step 2 & 3: Generation & Snapshot State
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [campaignSnapshot, setCampaignSnapshot] = useState<StudioCampaignDetail | null>(null);
   const [activePlatformTab, setActivePlatformTab] = useState<Platform>('linkedin');
+
+  // Inline editing state for platform content
+  const [editingContentMap, setEditingContentMap] = useState<Record<string, string>>({});
+  const [editingTitleMap, setEditingTitleMap] = useState<Record<string, string>>({});
+  const [isSavingContent, setIsSavingContent] = useState(false);
 
   // Media Generation Loaders
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [editableImagePrompt, setEditableImagePrompt] = useState('');
   const [editableVideoPrompt, setEditableVideoPrompt] = useState('');
-  const [showPromptsAccordion, setShowPromptsAccordion] = useState(false);
   const [mediaTimestamp, setMediaTimestamp] = useState<number>(Date.now());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Load existing campaign snapshot from URL id
   useEffect(() => {
     if (campaignIdFromQuery) {
       getStudioCampaign(campaignIdFromQuery)
@@ -106,14 +132,32 @@ function StudioContent() {
           setThesis(detail.thesis);
           if (detail.image_prompt) setEditableImagePrompt(detail.image_prompt);
           if (detail.video_prompt) setEditableVideoPrompt(detail.video_prompt);
+
+          // Populate editable content maps
+          const contentMap: Record<string, string> = {};
+          const titleMap: Record<string, string> = {};
+          detail.contents.forEach((c) => {
+            contentMap[c.platform] = c.content;
+            if (c.title) titleMap[c.platform] = c.title;
+          });
+          setEditingContentMap(contentMap);
+          setEditingTitleMap(titleMap);
+
+          // If final media is already generated, start on Step 3, otherwise Step 2
+          const hasFinal = detail.media?.some((m) => m.watermarked || m.media_stage === 'final');
+          if (hasFinal) {
+            setCurrentWorkflowStep(3);
+          } else {
+            setCurrentWorkflowStep(2);
+          }
         })
-        .catch(() => {
-          // If not found in API, check if existing in current state or reset
+        .catch((err) => {
+          console.warn('Could not load campaign from URL query:', err);
         });
     }
   }, [campaignIdFromQuery]);
 
-  // Update audience when brand changes
+  // Brand selection helper
   const handleBrandSelect = (id: BrandId) => {
     setBrandId(id);
     if (id === 'jade') {
@@ -144,7 +188,6 @@ function StudioContent() {
     setIsGenerating(true);
     setCurrentStepIndex(0);
 
-    // Staged step visual ticker
     const interval = setInterval(() => {
       setCurrentStepIndex((prev) => (prev < STAGED_PIPELINE_STEPS.length - 1 ? prev + 1 : prev));
     }, 450);
@@ -163,8 +206,19 @@ function StudioContent() {
       setCampaignSnapshot(result);
       if (result.image_prompt) setEditableImagePrompt(result.image_prompt);
       if (result.video_prompt) setEditableVideoPrompt(result.video_prompt);
+
+      const contentMap: Record<string, string> = {};
+      const titleMap: Record<string, string> = {};
+      result.contents.forEach((c) => {
+        contentMap[c.platform] = c.content;
+        if (c.title) titleMap[c.platform] = c.title;
+      });
+      setEditingContentMap(contentMap);
+      setEditingTitleMap(titleMap);
+
       router.push(`/dashboard/studio?id=${result.id}`);
-      toast.success('Campaign package generated and saved to snapshot database!');
+      setCurrentWorkflowStep(2);
+      toast.success('Campaign package generated and saved to MySQL snapshot!');
     } catch (err: unknown) {
       clearInterval(interval);
       const msg = err instanceof Error ? err.message : String(err);
@@ -174,26 +228,46 @@ function StudioContent() {
     }
   };
 
-  // Generate / Regenerate Image
+  // Save edits to platform content
+  const handleSavePlatformContent = async (platform: Platform) => {
+    if (!campaignSnapshot) return;
+    const newContent = editingContentMap[platform];
+    const newTitle = editingTitleMap[platform];
+    setIsSavingContent(true);
+    try {
+      await editCampaignContent(campaignSnapshot.id, {
+        platform,
+        new_content: newContent,
+        new_title: newTitle,
+        tag: 'OTHER',
+        note: 'Direct editorial refinement in Campaign Studio'
+      });
+      // Refresh snapshot
+      const updated = await getStudioCampaign(campaignSnapshot.id);
+      setCampaignSnapshot(updated);
+      toast.success(`Saved changes for ${PLATFORM_INFO[platform].label}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to save content: ${msg}`);
+    } finally {
+      setIsSavingContent(false);
+    }
+  };
+
+  // Generate / Regenerate Image Poster (1:1 Original)
   const handleGenerateImage = async () => {
     if (!campaignSnapshot) return;
     setIsGeneratingImage(true);
     try {
-      const updatedMedia = await generateCampaignImage(
+      const newMedia = await generateCampaignImage(
         campaignSnapshot.id,
         editableImagePrompt || campaignSnapshot.image_prompt || undefined
       );
-
-      setCampaignSnapshot((prev) => {
-        if (!prev) return null;
-        const otherMedia = prev.media.filter((m) => m.id !== updatedMedia.id && m.media_type !== 'image');
-        return {
-          ...prev,
-          media: [...otherMedia, updatedMedia]
-        };
-      });
       setMediaTimestamp(Date.now());
-      toast.success('Campaign poster asset generated and stored locally in storage/campaigns!');
+      // Refresh snapshot
+      const updated = await getStudioCampaign(campaignSnapshot.id);
+      setCampaignSnapshot(updated);
+      toast.success(`Square 1:1 poster generated (${newMedia.local_path})`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Image generation failed: ${msg}`);
@@ -202,26 +276,20 @@ function StudioContent() {
     }
   };
 
-  // Generate / Regenerate Video
+  // Generate / Regenerate Video Reel (9:16 Original)
   const handleGenerateVideo = async () => {
     if (!campaignSnapshot) return;
     setIsGeneratingVideo(true);
     try {
-      const updatedMedia = await generateCampaignVideo(
+      const newMedia = await generateCampaignVideo(
         campaignSnapshot.id,
         editableVideoPrompt || campaignSnapshot.video_prompt || undefined
       );
-
-      setCampaignSnapshot((prev) => {
-        if (!prev) return null;
-        const otherMedia = prev.media.filter((m) => m.id !== updatedMedia.id && m.media_type !== 'video');
-        return {
-          ...prev,
-          media: [...otherMedia, updatedMedia]
-        };
-      });
       setMediaTimestamp(Date.now());
-      toast.success('Reel video asset generated and stored locally in storage/campaigns!');
+      // Refresh snapshot
+      const updated = await getStudioCampaign(campaignSnapshot.id);
+      setCampaignSnapshot(updated);
+      toast.success(`Vertical 9:16 reel generated (${newMedia.local_path})`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Video generation failed: ${msg}`);
@@ -230,42 +298,38 @@ function StudioContent() {
     }
   };
 
-  // Submit for Verification
+  // Callback when watermark is applied and saved in Step 3
+  const handleWatermarkSaved = async (savedItem: CampaignMediaItem) => {
+    setMediaTimestamp(Date.now());
+    if (campaignSnapshot) {
+      const updated = await getStudioCampaign(campaignSnapshot.id);
+      setCampaignSnapshot(updated);
+    }
+  };
+
+  // Submit to Review Queue
   const handleSubmitReview = async () => {
-    if (!campaignSnapshot || isSubmitting) return;
+    if (!campaignSnapshot) return;
     setIsSubmitting(true);
-    setSubmitError(null);
     try {
       const result = await submitCampaign(campaignSnapshot.id);
-      const updatedCampaign: StudioCampaignDetail = {
-        ...campaignSnapshot,
-        status: 'pending_review'
-      };
-      setCampaignSnapshot(updatedCampaign);
-      auraStore.addStudioCampaignPackage(updatedCampaign);
-      toast.success(result.message || 'Campaign submitted for human verification!');
-      setTimeout(() => {
-        router.push('/dashboard/review');
-      }, 1200);
+      toast.success(result.message || 'Campaign successfully enqueued for review!');
+      router.push('/dashboard/review');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setSubmitError(msg);
       toast.error(`Submission failed: ${msg}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Reset to create new campaign
   const handleStartNew = () => {
     setCampaignSnapshot(null);
+    setCurrentWorkflowStep(1);
     router.push('/dashboard/studio');
   };
 
-  // Active brand lessons
-  const brandLessons = store.lessons.filter((l) => l.brand_id === brandId);
-
-  // Helper to reliably construct absolute media URLs that bypass port differences
+  // Helper to construct absolute media URLs
   const resolveMediaUrl = (path?: string | null) => {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
@@ -277,9 +341,18 @@ function StudioContent() {
     return `${apiBase}${cleanPath}${separator}t=${mediaTimestamp}`;
   };
 
-  // Media items from current snapshot (guarantee latest generated version)
-  const imageMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'image').slice(-1)[0];
-  const videoMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'video').slice(-1)[0];
+  // Separate Original and Final media items
+  const allImageMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'image') || [];
+  const allVideoMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'video') || [];
+
+  const originalImage = allImageMedia.find((m) => m.media_stage === 'original') || allImageMedia[0];
+  const finalImage = allImageMedia.find((m) => m.media_stage === 'final' || m.watermarked);
+
+  const originalVideo = allVideoMedia.find((m) => m.media_stage === 'original') || allVideoMedia[0];
+  const finalVideo = allVideoMedia.find((m) => m.media_stage === 'final' || m.watermarked);
+
+  const hasMediaGenerated = Boolean(originalImage || originalVideo);
+  const hasWatermarkedMedia = Boolean(finalImage || finalVideo);
 
   return (
     <div className='flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full'>
@@ -289,13 +362,13 @@ function StudioContent() {
           <div className='flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest'>
             <span>AURA Operations</span>
             <span>•</span>
-            <span className='text-primary'>Creative Engine</span>
+            <span className='text-primary'>Campaign Studio</span>
           </div>
           <h1 className='text-3xl font-bold tracking-tight text-foreground mt-1'>
             Campaign Studio
           </h1>
           <p className='text-sm text-muted-foreground mt-0.5'>
-            Turn one marketing thesis into a complete, compliance-checked content & media package.
+            3-Step Workflow: Configure &rarr; Multi-Channel Generation &rarr; Branded Watermarking &amp; Review.
           </p>
         </div>
 
@@ -303,27 +376,93 @@ function StudioContent() {
           <ApiModeToggle variant='studio' />
 
           {campaignSnapshot && (
-            <Button size='sm' variant='outline' onClick={handleStartNew}>
-              <Icons.add className='size-4 mr-1.5' />
+            <Button size='sm' variant='outline' onClick={handleStartNew} className='text-xs'>
+              <Icons.add className='size-3.5 mr-1.5' />
               New Campaign
             </Button>
           )}
         </div>
       </div>
 
-      {/* GENERATION IN PROGRESS OVERLAY / CARD */}
+      {/* 3-STEP WORKFLOW STEPPER */}
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-3 p-1.5 bg-muted/40 rounded-xl border'>
+        {[
+          {
+            step: 1 as const,
+            title: 'STEP 1: Campaign Setup',
+            desc: 'Portfolio, objective, language, channels & thesis',
+            enabled: true,
+            done: Boolean(campaignSnapshot)
+          },
+          {
+            step: 2 as const,
+            title: 'STEP 2: Content Generation',
+            desc: 'Multi-platform copy & 1:1 / 9:16 AI media prompts',
+            enabled: Boolean(campaignSnapshot),
+            done: hasMediaGenerated
+          },
+          {
+            step: 3 as const,
+            title: 'STEP 3: Media & Review',
+            desc: 'Brand watermark overlay & review queue signoff',
+            enabled: Boolean(campaignSnapshot),
+            done: hasWatermarkedMedia
+          }
+        ].map((item) => {
+          const isCurrent = currentWorkflowStep === item.step;
+          return (
+            <button
+              key={item.step}
+              type='button'
+              disabled={!item.enabled && !campaignSnapshot}
+              onClick={() => {
+                if (item.enabled || campaignSnapshot) {
+                  setCurrentWorkflowStep(item.step);
+                }
+              }}
+              className={cn(
+                'flex items-center gap-3 p-3 rounded-lg text-left transition-all',
+                isCurrent
+                  ? 'bg-card border shadow-xs font-bold text-primary ring-1 ring-primary/30'
+                  : item.done
+                  ? 'bg-emerald-500/5 hover:bg-card border-transparent text-foreground cursor-pointer'
+                  : item.enabled
+                  ? 'hover:bg-card border-transparent text-muted-foreground cursor-pointer'
+                  : 'opacity-40 cursor-not-allowed text-muted-foreground'
+              )}
+            >
+              <div
+                className={cn(
+                  'size-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors',
+                  isCurrent
+                    ? 'bg-primary text-primary-foreground'
+                    : item.done
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {item.done && !isCurrent ? <Icons.check className='size-4' /> : item.step}
+              </div>
+              <div className='flex flex-col min-w-0'>
+                <span className='text-xs font-bold truncate leading-tight'>{item.title}</span>
+                <span className='text-[10px] text-muted-foreground truncate'>{item.desc}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* GENERATION IN PROGRESS TICKER */}
       {isGenerating && (
-        <Card className='shadow-lg border-primary/30 bg-primary/[0.02] p-8 text-center flex flex-col items-center justify-center min-h-[440px]'>
+        <Card className='shadow-lg border-primary/30 bg-primary/[0.02] p-8 text-center flex flex-col items-center justify-center min-h-[420px]'>
           <div className='h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 animate-pulse'>
             <Icons.sparkles className='size-7' />
           </div>
           <h2 className='text-xl font-bold text-foreground'>
-            {isRealApi ? 'AURA Live AI Engine is Generating' : 'AURA Mock Simulator is Generating'}
+            {isRealApi ? 'AURA Groq Live AI is Generating' : 'AURA Mock Engine is Generating'}
           </h2>
           <p className='text-xs text-muted-foreground max-w-md mt-1 mb-6'>
-            {isRealApi
-              ? `Executing live prompts on Groq (${modeInfo?.groq_model || 'openai/gpt-oss-20b'}) and synthesizing multi-platform compliance-checked marketing package.`
-              : 'Synthesizing brand underwriting guidelines, historical reviewer feedback, and regulatory compliance rules using simulated mock templates.'}
+            Executing underwriting parameters, negative guidance constraints, and multi-platform media prompts.
           </p>
 
           <div className='flex flex-col gap-3 text-left w-full max-w-lg'>
@@ -358,1198 +497,701 @@ function StudioContent() {
         </Card>
       )}
 
-      {/* MAIN VIEW: CONFIGURATION OR WORKSPACE */}
-      {!isGenerating && !campaignSnapshot && (
-        /* Configuration Form */
-        <div className='grid grid-cols-1 lg:grid-cols-12 gap-8'>
-          <div className='lg:col-span-8 flex flex-col gap-6'>
-            {/* Step 1: Brand Selection */}
-            <Card className='shadow-xs'>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-bold text-foreground'>
-                    1. Select Underwriting Portfolio
-                  </CardTitle>
-                  <span className='text-xs text-muted-foreground'>Step 1 of 3</span>
-                </div>
-                <CardDescription className='text-xs'>
-                  Choose the JA Assure specialized insurance brand for tailored voice and statutory boundaries.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col gap-3'>
-                <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
-                  {(['jade', 'doctorshield', 'jaguar'] as BrandId[]).map((bId) => {
-                    const isSelected = brandId === bId;
-                    const b = DEMO_BRANDS[bId];
-                    const count = store.lessons.filter((l) => l.brand_id === bId).length;
-                    return (
-                      <button
-                        key={bId}
-                        type='button'
-                        onClick={() => handleBrandSelect(bId)}
-                        className={`flex flex-col text-left p-4 rounded-xl border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 ring-2 ring-primary/40'
-                            : 'border-muted hover:border-foreground/30 bg-card'
-                        }`}
-                      >
-                        <div className='flex items-center justify-between'>
-                          <BrandBadge brandId={bId} />
-                          <Badge variant='secondary' className='text-[10px] font-mono'>
-                            {count} Rules Active
-                          </Badge>
-                        </div>
-                        <h4 className='font-bold text-sm text-foreground mt-2.5'>{b.name}</h4>
-                        <p className='text-[11px] text-muted-foreground line-clamp-2 mt-1 leading-snug'>
-                          {b.tagline}
-                        </p>
-                        <div className='mt-3 pt-2.5 border-t text-[10px] text-muted-foreground flex flex-col gap-1'>
-                          <span><strong>Tone:</strong> {b.tone.slice(0, 2).join(', ')}</span>
-                          <span className='line-clamp-1'><strong>Target:</strong> {b.audience}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Step 2: Campaign Parameters */}
-            <Card className='shadow-xs'>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-bold text-foreground'>
-                    2. Campaign Thesis & Target Audience
-                  </CardTitle>
-                  <span className='text-xs text-muted-foreground'>Step 2 of 3</span>
-                </div>
-                <CardDescription className='text-xs'>
-                  The core subject or risk mitigation perspective you want to educate your market on.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col gap-4 text-xs'>
-                <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='thesis' className='font-bold text-foreground'>
-                    Campaign Thesis / Core Working Angle <span className='text-destructive'>*</span>
-                  </Label>
-                  <Textarea
-                    id='thesis'
-                    value={thesis}
-                    onChange={(e) => setThesis(e.target.value)}
-                    placeholder='e.g. How jewellery ateliers can eliminate transit custody risk during regional exhibitions'
-                    rows={3}
-                    className='text-xs leading-relaxed font-sans'
-                  />
-                </div>
-
-                <div className='flex flex-col gap-1.5'>
-                  <Label htmlFor='audience' className='font-bold text-foreground'>
-                    Refined Target Audience
-                  </Label>
-                  <Input
-                    id='audience'
-                    value={targetAudience}
-                    onChange={(e) => setTargetAudience(e.target.value)}
-                    placeholder='Describe the exact profile or industry role'
-                    className='text-xs'
-                  />
-                </div>
-
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                  <div className='flex flex-col gap-1.5'>
-                    <Label className='font-bold text-foreground'>Primary Objective</Label>
-                    <select
-                      value={objective}
-                      onChange={(e) => setObjective(e.target.value)}
-                      className='h-9 rounded-md border bg-background px-3 py-1 text-xs shadow-xs focus:ring-1 focus:ring-primary'
-                    >
-                      <option value='Awareness'>Brand & Portfolio Awareness</option>
-                      <option value='Education'>Risk Education & Exposure Audit</option>
-                      <option value='Lead Generation'>Qualified B2B Lead Acquisition</option>
-                      <option value='Authority & Trust'>Institutional Authority & Trust</option>
-                      <option value='Retention'>Client Policy Renewal & Retention</option>
-                    </select>
-                  </div>
-
-                  <div className='flex flex-col gap-1.5'>
-                    <Label className='font-bold text-foreground'>Target Market Language</Label>
-                    <select
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value as Language)}
-                      className='h-9 rounded-md border bg-background px-3 py-1 text-xs shadow-xs focus:ring-1 focus:ring-primary'
-                    >
-                      <option value='en'>English (Singapore & Regional ASEAN)</option>
-                      <option value='ms'>Bahasa Melayu (Malaysia)</option>
-                      <option value='id'>Bahasa Indonesia (Indonesia)</option>
-                      <option value='th'>Thai (Thailand)</option>
-                      <option value='zh'>Traditional Chinese (Hong Kong & Taiwan)</option>
-                    </select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Step 3: Platform Selection */}
-            <Card className='shadow-xs'>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-bold text-foreground'>
-                    3. Target Delivery Channels
-                  </CardTitle>
-                  <span className='text-xs text-muted-foreground'>Step 3 of 3</span>
-                </div>
-                <CardDescription className='text-xs'>
-                  Select which platforms to generate dedicated content and creative prompts for.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col gap-3'>
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5'>
-                  {(['linkedin', 'x', 'instagram', 'blog', 'reel'] as Platform[]).map((p) => {
-                    const isSelected = selectedPlatforms.includes(p);
-                    const info = PLATFORM_INFO[p];
-                    return (
-                      <button
-                        key={p}
-                        type='button'
-                        onClick={() => togglePlatform(p)}
-                        className={`flex flex-col text-left p-3 rounded-lg border text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-primary bg-primary/10 text-foreground font-semibold'
-                            : 'border-muted bg-card text-muted-foreground hover:bg-muted/30'
-                        }`}
-                      >
-                        <div className='flex items-center justify-between'>
-                          <span className='capitalize font-bold'>{info.label}</span>
-                          {isSelected ? (
-                            <Icons.circleCheck className='size-4 text-primary shrink-0' />
-                          ) : (
-                            <span className='size-4 rounded-full border border-muted-foreground/30' />
-                          )}
-                        </div>
-                        <span className='text-[11px] text-muted-foreground font-normal mt-1 leading-tight'>
-                          {info.desc}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Sidebar: Active Lessons & Generation CTA */}
-          <div className='lg:col-span-4 flex flex-col gap-5'>
-            {/* Active Learned Lessons Callout Banner */}
-            <Card className='border-purple-500/20 bg-purple-500/5 shadow-xs'>
-              <CardHeader className='pb-2'>
-                <div className='flex items-center gap-2'>
-                  <Icons.sparkles className='size-4 text-purple-600 dark:text-purple-400' />
-                  <CardTitle className='text-sm font-bold text-foreground'>
-                    AURA Memory Context
-                  </CardTitle>
-                </div>
-                <CardDescription className='text-xs text-muted-foreground'>
-                  Active learned rules for <strong>{DEMO_BRANDS[brandId].name}</strong> injected into Groq generator as negative guidance.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col gap-2.5 pt-1 text-xs'>
-                {brandLessons.length === 0 ? (
-                  <p className='text-muted-foreground italic text-xs'>
-                    No specific correction rules recorded yet. Reviewer feedback will automatically train this brand.
-                  </p>
-                ) : (
-                  brandLessons.map((l) => (
-                    <div
-                      key={l.id}
-                      className='rounded-md border border-purple-500/20 bg-background/80 p-2.5 text-[11px] flex flex-col gap-1'
+      {/* STEP 1: CAMPAIGN SETUP FORM */}
+      {!isGenerating && currentWorkflowStep === 1 && (
+        <div className='flex flex-col gap-6'>
+          {/* Brand Selection Card */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <div className='flex items-center justify-between'>
+                <CardTitle className='text-base font-bold text-foreground'>
+                  Select Brand Portfolio
+                </CardTitle>
+                <Badge variant='outline' className='text-xs'>
+                  Step 1 of 3
+                </Badge>
+              </div>
+              <CardDescription className='text-xs'>
+                Choose your JA Assure underwriting portfolio to load calibrated voice and boundaries.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-1 md:grid-cols-3 gap-3.5'>
+                {(['jade', 'doctorshield', 'jaguar'] as BrandId[]).map((bId) => {
+                  const isSelected = brandId === bId;
+                  const b = DEMO_BRANDS[bId];
+                  const count = store.lessons.filter((l) => l.brand_id === bId).length;
+                  return (
+                    <button
+                      key={bId}
+                      type='button'
+                      onClick={() => handleBrandSelect(bId)}
+                      className={`flex flex-col text-left p-4 rounded-xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-2 ring-primary/40 shadow-xs'
+                          : 'border-muted hover:border-foreground/30 bg-card'
+                      }`}
                     >
                       <div className='flex items-center justify-between'>
-                        <Badge variant='outline' className='text-[9px] font-bold text-purple-700 dark:text-purple-300'>
-                          {l.reason_tag}
+                        <BrandBadge brandId={bId} />
+                        <Badge variant='secondary' className='text-[10px] font-mono'>
+                          {count} Rules
                         </Badge>
-                        <span className='text-[10px] text-muted-foreground capitalize'>
-                          {l.platform || 'all platforms'}
-                        </span>
                       </div>
-                      <p className='text-foreground/90 font-medium leading-snug'>
-                        {l.note}
+                      <h4 className='font-bold text-sm text-foreground mt-2.5'>{b.name}</h4>
+                      <p className='text-[11px] text-muted-foreground line-clamp-2 mt-1 leading-snug'>
+                        {b.tagline}
                       </p>
-                    </div>
-                  ))
-                )}
-                <div className='text-[10px] text-muted-foreground mt-1'>
-                  🛡️ Prompts strictly forbid claims of "foolproof protection" or "guaranteed outcome" per JA Assure compliance.
+                      <div className='mt-3 pt-2.5 border-t text-[10px] text-muted-foreground flex flex-col gap-1'>
+                        <span><strong>Tone:</strong> {b.tone.slice(0, 2).join(', ')}</span>
+                        <span className='line-clamp-1'><strong>Target:</strong> {b.audience}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Objective & Language Grid */}
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+            {/* Objective Selector */}
+            <Card className='shadow-xs'>
+              <CardHeader className='pb-3'>
+                <CardTitle className='text-sm font-bold'>Campaign Objective</CardTitle>
+                <CardDescription className='text-xs'>
+                  Sets marketing intent and call-to-action framing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className='grid grid-cols-2 gap-2'>
+                  {OBJECTIVES.map((obj) => (
+                    <Button
+                      key={obj}
+                      type='button'
+                      variant={objective === obj ? 'default' : 'outline'}
+                      size='sm'
+                      onClick={() => setObjective(obj)}
+                      className='justify-start text-xs h-9'
+                    >
+                      {obj}
+                    </Button>
+                  ))}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Launch Card */}
-            <Card className='shadow-sm border-primary/20 bg-card'>
-              <CardContent className='p-6 flex flex-col gap-4'>
-                <div>
-                  <h4 className='text-base font-bold text-foreground'>Ready to generate?</h4>
-                  <p className='text-xs text-muted-foreground mt-1'>
-                    Produces {selectedPlatforms.length} cross-channel copy variants, image concept prompt, and 9:16 vertical video prompt.
-                  </p>
+            {/* Language Selector */}
+            <Card className='shadow-xs'>
+              <CardHeader className='pb-3'>
+                <CardTitle className='text-sm font-bold'>Target Language</CardTitle>
+                <CardDescription className='text-xs'>
+                  Localized idioms and regulatory tone per region.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className='grid grid-cols-2 gap-2'>
+                  {LANGUAGES.map((lang) => (
+                    <Button
+                      key={lang.code}
+                      type='button'
+                      variant={language === lang.code ? 'default' : 'outline'}
+                      size='sm'
+                      onClick={() => setLanguage(lang.code)}
+                      className='justify-start text-xs h-9'
+                    >
+                      {lang.label}
+                    </Button>
+                  ))}
                 </div>
-
-                <div className='flex flex-col gap-2 text-xs text-muted-foreground'>
-                  <div className='flex items-center justify-between'>
-                    <span>Brand:</span>
-                    <strong className='text-foreground capitalize'>{brandId}</strong>
-                  </div>
-                  <div className='flex items-center justify-between'>
-                    <span>Channels:</span>
-                    <strong className='text-foreground'>{selectedPlatforms.length} selected</strong>
-                  </div>
-                  <div className='flex items-center justify-between'>
-                    <span>Language:</span>
-                    <strong className='text-foreground'>{language.toUpperCase()}</strong>
-                  </div>
-                </div>
-
-                <div
-                  className={cn(
-                    'text-xs p-2.5 rounded-lg border flex items-center justify-between',
-                    isRealApi
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
-                  )}
-                >
-                  <div className='flex items-center gap-2'>
-                    <span
-                      className={cn(
-                        'size-2 rounded-full',
-                        isRealApi ? 'bg-emerald-500' : 'bg-amber-500'
-                      )}
-                    />
-                    <span className='font-semibold'>
-                      {isRealApi
-                        ? `Live AI: ${modeInfo?.groq_model || 'openai/gpt-oss-20b'}`
-                        : 'Mock Simulator Mode'}
-                    </span>
-                  </div>
-                  <span className='font-mono text-[10px] uppercase font-bold opacity-80'>
-                    {backendStatus === 'connected' ? 'Server Online' : 'Server Offline'}
-                  </span>
-                </div>
-
-                <Button
-                  onClick={handleGenerate}
-                  size='lg'
-                  className={cn(
-                    'w-full font-bold shadow-md mt-2 transition-all',
-                    isRealApi
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : ''
-                  )}
-                >
-                  <Icons.sparkles className='size-4 mr-2' />
-                  {isRealApi
-                    ? 'Generate with Real Groq AI'
-                    : 'Generate with Mock Simulator'}
-                </Button>
               </CardContent>
             </Card>
           </div>
+
+          {/* Platforms Selector */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-sm font-bold'>Target Platform Channels</CardTitle>
+              <CardDescription className='text-xs'>
+                Select the platforms for which copy and media prompts will be produced.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-2 sm:grid-cols-5 gap-3'>
+                {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((p) => {
+                  const isSelected = selectedPlatforms.includes(p);
+                  const info = PLATFORM_INFO[p];
+                  return (
+                    <button
+                      key={p}
+                      type='button'
+                      onClick={() => togglePlatform(p)}
+                      className={`flex flex-col p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 text-foreground'
+                          : 'border-muted hover:border-foreground/20 text-muted-foreground'
+                      }`}
+                    >
+                      <div className='flex items-center justify-between'>
+                        <span className='font-bold text-xs'>{info.label}</span>
+                        {isSelected ? (
+                          <Icons.circleCheck className='size-3.5 text-primary shrink-0' />
+                        ) : (
+                          <span className='size-3.5 rounded-full border border-muted-foreground/30' />
+                        )}
+                      </div>
+                      <span className='text-[10px] text-muted-foreground mt-1 line-clamp-2'>
+                        {info.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Thesis & Audience */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-base font-bold'>Campaign Working Angle &amp; Audience</CardTitle>
+              <CardDescription className='text-xs'>
+                Provide your core educational subject, event facts, and audience specification.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4 text-xs'>
+              <div className='space-y-1.5'>
+                <Label htmlFor='thesis' className='font-bold text-foreground'>
+                  Campaign Thesis / Core Working Angle <span className='text-destructive'>*</span>
+                </Label>
+                <Textarea
+                  id='thesis'
+                  value={thesis}
+                  onChange={(e) => setThesis(e.target.value)}
+                  placeholder='e.g. How jewellery ateliers can eliminate transit custody risk during regional exhibitions'
+                  rows={3}
+                  className='text-xs font-sans leading-relaxed'
+                />
+              </div>
+
+              <div className='space-y-1.5'>
+                <Label htmlFor='audience' className='font-bold text-foreground'>
+                  Target Audience (Optional)
+                </Label>
+                <Input
+                  id='audience'
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value)}
+                  placeholder='e.g. Jewellers, fine-art businesses, and luxury asset owners'
+                  className='text-xs'
+                />
+              </div>
+
+              <div className='pt-3 border-t flex justify-end'>
+                <Button
+                  size='lg'
+                  onClick={handleGenerate}
+                  className='font-bold gap-2 px-8'
+                >
+                  <span>Continue to Content Generation</span>
+                  <Icons.arrowRight className='size-4' />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* GENERATED CAMPAIGN WORKSPACE (Static Snapshot) */}
-      {!isGenerating && campaignSnapshot && (
+      {/* STEP 2: CONTENT GENERATION WORKSPACE */}
+      {!isGenerating && currentWorkflowStep === 2 && (
         <div className='flex flex-col gap-6'>
-          {/* Campaign Metadata Header Bar */}
-          <div className='rounded-xl border bg-card p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4'>
+          {/* Top Action Bar */}
+          <div className='rounded-xl border bg-card p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4'>
             <div>
               <div className='flex items-center gap-2'>
-                <BrandBadge brandId={campaignSnapshot.brand_id} />
-                <Badge
-                  variant='outline'
-                  className={
-                    campaignSnapshot.status === 'pending_review'
-                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
-                      : campaignSnapshot.status === 'approved'
-                      ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30'
-                      : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                  }
-                >
-                  {campaignSnapshot.status === 'pending_review'
-                    ? 'In Review Queue'
-                    : campaignSnapshot.status === 'approved'
-                    ? 'Approved'
-                    : 'Generated Snapshot'}
+                <BrandBadge brandId={campaignSnapshot?.brand_id || brandId} />
+                <Badge variant='outline' className='text-xs'>
+                  {campaignSnapshot?.objective || objective} · {campaignSnapshot?.language.toUpperCase() || language.toUpperCase()}
                 </Badge>
-                <span className='text-xs font-mono text-muted-foreground'>
-                  {campaignSnapshot.id}
-                </span>
+                <Badge variant='secondary' className='text-xs font-mono'>
+                  {campaignSnapshot ? campaignSnapshot.id : 'Draft'}
+                </Badge>
               </div>
-              <h2 className='text-xl font-bold text-foreground mt-2'>
-                {campaignSnapshot.thesis}
+              <h2 className='text-base font-bold text-foreground mt-1'>
+                {campaignSnapshot?.thesis || thesis}
               </h2>
-              <div className='flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1'>
-                <span>Objective: <strong>{campaignSnapshot.objective}</strong></span>
-                <span>•</span>
-                <span>Language: <strong>{campaignSnapshot.language.toUpperCase()}</strong></span>
-                <span>•</span>
-                <span>Platforms: <strong>{campaignSnapshot.platforms.join(', ')}</strong></span>
-                <span>•</span>
-                <span>Created: {new Date(campaignSnapshot.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-
-              {campaignSnapshot.campaign_facts && (
-                <div className='flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-border/40 text-[11px]'>
-                  <span className='font-semibold text-muted-foreground'>Campaign Facts:</span>
-                  {campaignSnapshot.campaign_facts.event_name && (
-                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
-                      📍 {campaignSnapshot.campaign_facts.event_name}
-                    </Badge>
-                  )}
-                  {campaignSnapshot.campaign_facts.date && (
-                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
-                      📅 {campaignSnapshot.campaign_facts.date}
-                    </Badge>
-                  )}
-                  {campaignSnapshot.campaign_facts.time && (
-                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
-                      ⏰ {campaignSnapshot.campaign_facts.time}
-                    </Badge>
-                  )}
-                  {campaignSnapshot.campaign_facts.location && (
-                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
-                      🏢 {campaignSnapshot.campaign_facts.location}
-                    </Badge>
-                  )}
-                  {campaignSnapshot.campaign_facts.price && (
-                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
-                      🎟️ {campaignSnapshot.campaign_facts.price}
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
 
-            <div className='flex items-center gap-3 shrink-0'>
+            <div className='flex items-center gap-2 shrink-0'>
               <Button
-                variant={campaignSnapshot.status === 'pending_review' ? 'secondary' : 'default'}
-                onClick={handleSubmitReview}
-                disabled={campaignSnapshot.status === 'pending_review' || isSubmitting}
-                size='default'
-                className='font-bold'
+                variant='outline'
+                size='sm'
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className='text-xs gap-1.5'
               >
-                {isSubmitting ? (
-                  <>
-                    <Icons.spinner className='size-4 mr-2 animate-spin' />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Icons.checks className='size-4 mr-2' />
-                    {campaignSnapshot.status === 'pending_review'
-                      ? 'Submitted to Review'
-                      : 'Submit for Verification'}
-                  </>
-                )}
+                <Icons.sparkles className='size-3.5' />
+                <span>{campaignSnapshot ? 'Regenerate Content' : 'Generate Campaign'}</span>
               </Button>
+
+              {hasMediaGenerated && (
+                <Button
+                  size='sm'
+                  onClick={() => setCurrentWorkflowStep(3)}
+                  className='text-xs font-bold gap-1.5'
+                >
+                  <span>Proceed to Step 3: Media &amp; Watermark</span>
+                  <Icons.arrowRight className='size-3.5' />
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* Submission Error Banner */}
-          {submitError && (
-            <div className='rounded-xl border border-destructive/30 bg-destructive/10 p-4 flex items-center justify-between gap-4 text-destructive'>
-              <div className='flex items-center gap-3'>
-                <Icons.alertCircle className='size-5 shrink-0 text-destructive' />
-                <div className='text-xs'>
-                  <strong className='font-bold text-destructive'>
-                    Campaign Submission Failed
-                  </strong>
-                  <p className='text-destructive/90 mt-0.5'>{submitError}</p>
-                </div>
+          {!campaignSnapshot ? (
+            <Card className='border-dashed p-10 text-center'>
+              <div className='flex flex-col items-center justify-center space-y-3 py-6'>
+                <Icons.sparkles className='size-10 text-primary animate-pulse' />
+                <h3 className='text-base font-bold'>Ready to Generate Campaign Content</h3>
+                <p className='text-xs text-muted-foreground max-w-sm'>
+                  Click &quot;Generate Campaign&quot; to synthesize cross-platform copy, 1:1 poster prompts, and 9:16 Reel prompts using calibrated underwriting guidelines.
+                </p>
+                <Button onClick={handleGenerate} className='font-bold mt-2 gap-2'>
+                  <Icons.sparkles className='size-4' />
+                  <span>Generate Campaign Now</span>
+                </Button>
               </div>
-              <Button
-                size='sm'
-                variant='ghost'
-                className='text-destructive hover:text-destructive hover:bg-destructive/20 text-xs'
-                onClick={() => setSubmitError(null)}
-              >
-                Dismiss
-              </Button>
-            </div>
-          )}
-
-          {/* Submission Notice Banner */}
-          {campaignSnapshot.status === 'pending_review' && (
-            <div className='rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center justify-between gap-4'>
-              <div className='flex items-center gap-3'>
-                <Icons.clock className='size-5 text-amber-600 dark:text-amber-400 shrink-0' />
-                <div className='text-xs'>
-                  <strong className='text-foreground font-bold'>
-                    Campaign Package Enqueued for Human Review
-                  </strong>
-                  <p className='text-muted-foreground mt-0.5'>
-                    All copy variants and media assets are locked in the Human-in-the-Loop Gateway. Nothing can publish without approval.
-                  </p>
-                </div>
-              </div>
-              <Button
-                size='sm'
-                variant='outline'
-                onClick={() => router.push('/dashboard/review')}
-              >
-                Open Review Queue
-                <Icons.arrowRight className='size-3.5 ml-1.5' />
-              </Button>
-
-            </div>
-          )}
-
-          {/* Main Two-Column Workspace */}
-          <div className='grid grid-cols-1 lg:grid-cols-12 gap-8'>
-            {/* Left Column: Platform Content Tabs & Previews */}
-            <div className='lg:col-span-7 flex flex-col gap-6'>
+            </Card>
+          ) : (
+            <>
+              {/* SECTION 1: FULL-WIDTH CROSS-PLATFORM CONTENT ASSETS */}
               <Card className='shadow-xs'>
                 <CardHeader className='pb-3 border-b'>
                   <div className='flex items-center justify-between'>
                     <div>
-                      <CardTitle className='text-base font-bold text-foreground'>
-                        Cross-Platform Content Assets
+                      <CardTitle className='text-base font-bold flex items-center gap-2'>
+                        <Icons.post className='size-4 text-primary' />
+                        <span>Cross-Platform Content Assets</span>
                       </CardTitle>
-                      <CardDescription className='text-xs'>
-                        Static campaign package snapshot. Refreshing does not re-invoke Groq.
+                      <CardDescription className='text-xs mt-0.5'>
+                        Verified copy tailored to platform constraints with editorial editing enabled.
                       </CardDescription>
                     </div>
+
+                    <Badge variant='outline' className='text-xs font-mono'>
+                      {campaignSnapshot.contents.length} Channels Generated
+                    </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className='pt-4 flex flex-col gap-4'>
-                  {/* Platform Tabs */}
+
+                <CardContent className='p-6'>
                   <Tabs
                     value={activePlatformTab}
                     onValueChange={(val) => setActivePlatformTab(val as Platform)}
                     className='w-full'
                   >
-                    <TabsList className='w-full grid grid-cols-5 h-10'>
-                      {campaignSnapshot.platforms.map((p) => (
-                        <TabsTrigger key={p} value={p} className='text-xs capitalize'>
-                          {p}
+                    <TabsList className='grid grid-cols-5 h-9 w-full mb-5'>
+                      {campaignSnapshot.contents.map((item) => (
+                        <TabsTrigger key={item.platform} value={item.platform} className='text-xs font-semibold capitalize'>
+                          {PLATFORM_INFO[item.platform]?.label || item.platform}
                         </TabsTrigger>
                       ))}
                     </TabsList>
 
-                    {/* LinkedIn Tab */}
-                    <TabsContent value='linkedin' className='mt-4 flex flex-col gap-4'>
-                      {(() => {
-                        const item = campaignSnapshot.contents.find((c) => c.platform === 'linkedin');
-                        if (!item) return <p className='text-xs text-muted-foreground'>No LinkedIn content generated.</p>;
-                        return (
-                          <div className='flex flex-col gap-4'>
-                            <div className='flex items-center justify-between'>
-                              <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                                Longform Authority Post
-                              </span>
-                              <Button
-                                size='xs'
-                                variant='outline'
-                                onClick={() => handleCopy(item.content, 'LinkedIn Post')}
-                              >
-                                <Icons.forms className='size-3.5 mr-1' />
-                                Copy Text
-                              </Button>
-                            </div>
-                            {item.title && (
-                              <h4 className='text-sm font-bold text-foreground'>{item.title}</h4>
-                            )}
-                            <div className='rounded-lg bg-muted/30 border p-4 text-xs font-sans whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto'>
-                              {item.content}
-                            </div>
-                            {item.hashtags.length > 0 && (
-                              <div className='flex flex-wrap gap-1.5'>
-                                {item.hashtags.map((h) => (
-                                  <Badge key={h} variant='secondary' className='text-[10px]'>
-                                    {h}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
+                    {campaignSnapshot.contents.map((item) => {
+                      const platformInfo = PLATFORM_INFO[item.platform];
+                      const currentText = editingContentMap[item.platform] ?? item.content;
+                      const currentTitle = editingTitleMap[item.platform] ?? (item.title || '');
 
-                            {/* Social Feed Preview Card */}
-                            <div className='mt-2 rounded-xl border bg-card p-4 shadow-sm text-xs'>
-                              <div className='flex items-center gap-2.5 mb-3'>
-                                <div className='h-9 w-9 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs'>
-                                  JA
-                                </div>
-                                <div>
-                                  <div className='font-bold text-foreground flex items-center gap-1.5'>
-                                    JA Assure · {DEMO_BRANDS[campaignSnapshot.brand_id].name}
-                                    <Badge variant='outline' className='text-[9px] py-0'>Promoted</Badge>
-                                  </div>
-                                  <div className='text-[10px] text-muted-foreground'>
-                                    Specialist Underwriting & Risk Advisory • 1d
-                                  </div>
-                                </div>
-                              </div>
-                              <p className='whitespace-pre-wrap leading-relaxed text-foreground/90 font-sans text-xs line-clamp-4'>
-                                {item.content}
-                              </p>
-                              <div className='mt-2 text-primary font-medium text-[11px]'>
-                                {item.hashtags.join(' ')}
-                              </div>
-                              <div className='mt-3 pt-2.5 border-t flex items-center justify-between text-[11px] text-muted-foreground'>
-                                <span>👍 84 endorsements</span>
-                                <span>16 comments</span>
-                              </div>
-                            </div>
+                      return (
+                        <TabsContent key={item.platform} value={item.platform} className='space-y-4 mt-0'>
+                          {/* Title / Headline (if applicable) */}
+                          <div className='space-y-1.5'>
+                            <Label className='text-xs font-bold text-foreground flex items-center justify-between'>
+                              <span>Headline / Post Title</span>
+                              <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
+                            </Label>
+                            <Input
+                              value={currentTitle}
+                              onChange={(e) =>
+                                setEditingTitleMap((prev) => ({ ...prev, [item.platform]: e.target.value }))
+                              }
+                              placeholder='Enter post title...'
+                              className='text-xs font-semibold'
+                            />
                           </div>
-                        );
-                      })()}
-                    </TabsContent>
 
-                    {/* X Tab */}
-                    <TabsContent value='x' className='mt-4 flex flex-col gap-4'>
-                      {(() => {
-                        const item = campaignSnapshot.contents.find((c) => c.platform === 'x');
-                        if (!item) return <p className='text-xs text-muted-foreground'>No X content generated.</p>;
-                        const charCount = item.content.length;
-                        const isValid = charCount <= 280;
-                        return (
-                          <div className='flex flex-col gap-4'>
-                            <div className='flex items-center justify-between'>
-                              <div className='flex items-center gap-2'>
-                                <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                                  Hook Post
-                                </span>
-                                <Badge
-                                  variant='outline'
-                                  className={`text-[10px] font-mono ${
-                                    isValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
-                                  }`}
+                          {/* Body Content */}
+                          <div className='space-y-1.5'>
+                            <div className='flex items-center justify-between text-xs'>
+                              <Label className='font-bold text-foreground'>
+                                {platformInfo?.label} Body Content
+                              </Label>
+                              <div className='flex items-center gap-3 text-muted-foreground'>
+                                <span>{currentText.length} characters</span>
+                                <button
+                                  type='button'
+                                  onClick={() => handleCopy(currentText, platformInfo?.label || item.platform)}
+                                  className='hover:text-foreground flex items-center gap-1 cursor-pointer'
                                 >
-                                  {charCount} / 280 characters
-                                </Badge>
+                                  <Icons.share className='size-3' />
+                                  <span>Copy</span>
+                                </button>
                               </div>
-                              <Button
-                                size='xs'
-                                variant='outline'
-                                onClick={() => handleCopy(item.content, 'X Post')}
-                              >
-                                <Icons.forms className='size-3.5 mr-1' />
-                                Copy
-                              </Button>
                             </div>
-                            <div className='rounded-lg bg-muted/30 border p-4 text-xs font-sans whitespace-pre-wrap leading-relaxed'>
-                              {item.content}
-                            </div>
-                            {item.hashtags.length > 0 && (
+                            <Textarea
+                              value={currentText}
+                              onChange={(e) =>
+                                setEditingContentMap((prev) => ({ ...prev, [item.platform]: e.target.value }))
+                              }
+                              rows={7}
+                              className='text-xs leading-relaxed font-sans'
+                            />
+                          </div>
+
+                          {/* Hashtags */}
+                          {item.hashtags && item.hashtags.length > 0 && (
+                            <div className='space-y-1.5'>
+                              <Label className='text-xs font-medium text-muted-foreground'>Hashtags</Label>
                               <div className='flex flex-wrap gap-1.5'>
-                                {item.hashtags.map((h) => (
-                                  <Badge key={h} variant='secondary' className='text-[10px]'>
-                                    {h}
+                                {item.hashtags.map((ht) => (
+                                  <Badge key={ht} variant='secondary' className='text-[11px] font-mono'>
+                                    {ht}
                                   </Badge>
                                 ))}
                               </div>
-                            )}
-
-                            {/* X Preview */}
-                            <div className='mt-2 rounded-xl border bg-card p-4 shadow-sm text-xs'>
-                              <div className='flex items-center gap-2 mb-2'>
-                                <div className='h-7 w-7 rounded-full bg-foreground text-background flex items-center justify-center font-bold text-[10px]'>
-                                  JA
-                                </div>
-                                <div>
-                                  <span className='font-bold text-foreground'>JA Assure Group</span>{' '}
-                                  <span className='text-muted-foreground text-[10px]'>@jaassure</span>
-                                </div>
-                              </div>
-                              <p className='text-xs leading-relaxed text-foreground/90 font-sans'>
-                                {item.content}
-                              </p>
-                              <div className='mt-2 text-primary text-[11px]'>{item.hashtags.join(' ')}</div>
                             </div>
-                          </div>
-                        );
-                      })()}
-                    </TabsContent>
+                          )}
 
-                    {/* Instagram Tab */}
-                    <TabsContent value='instagram' className='mt-4 flex flex-col gap-4'>
-                      {(() => {
-                        const item = campaignSnapshot.contents.find((c) => c.platform === 'instagram');
-                        if (!item) return <p className='text-xs text-muted-foreground'>No Instagram content generated.</p>;
-                        return (
-                          <div className='flex flex-col gap-4'>
-                            {/* Prominent Marketing Poster Display Card */}
-                            {imageMedia && imageMedia.local_path ? (
-                              <div className='rounded-xl border border-primary/20 bg-card p-4 flex flex-col gap-3 shadow-xs'>
-                                <div className='flex items-center justify-between'>
-                                  <div className='flex items-center gap-2'>
-                                    <Icons.media className='size-4 text-primary' />
-                                    <span className='text-xs font-bold text-foreground'>
-                                      Campaign Marketing Poster Asset
-                                    </span>
-                                    <Badge variant='outline' className='text-[10px] text-emerald-600 dark:text-emerald-400 font-mono'>
-                                      ✓ Local Stored
-                                    </Badge>
-                                  </div>
-                                  <div className='flex items-center gap-2'>
-                                    <Button
-                                      size='xs'
-                                      variant='outline'
-                                      onClick={() => window.open(resolveMediaUrl(imageMedia.local_path), '_blank')}
-                                    >
-                                      <Icons.externalLink className='size-3 mr-1' />
-                                      Full Size
-                                    </Button>
-                                    <Button
-                                      size='xs'
-                                      onClick={handleGenerateImage}
-                                      disabled={isGeneratingImage}
-                                    >
-                                      {isGeneratingImage ? (
-                                        <>
-                                          <Icons.spinner className='size-3 animate-spin mr-1' />
-                                          Regenerating...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Icons.sparkles className='size-3 mr-1' />
-                                          Regenerate Poster
-                                        </>
-                                      )}
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                <div className='relative rounded-lg overflow-hidden border bg-black/5 aspect-16/10 max-h-[380px] flex items-center justify-center'>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={resolveMediaUrl(imageMedia.local_path)}
-                                    alt='Campaign Marketing Poster'
-                                    className='w-full h-full object-contain'
-                                  />
-                                </div>
-                                <div className='flex items-center justify-between text-[11px] text-muted-foreground'>
-                                  <span className='font-mono truncate max-w-xs'>{imageMedia.local_path}</span>
-                                  <span className='font-medium text-foreground'>{imageMedia.model || 'Marketing Poster'}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className='rounded-xl border-2 border-dashed bg-muted/10 p-5 flex flex-col items-center justify-center text-center gap-2'>
-                                <div className='h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center'>
-                                  <Icons.media className='size-4.5' />
-                                </div>
-                                <div className='text-xs font-bold text-foreground'>Marketing Poster Not Generated Yet</div>
-                                <p className='text-[11px] text-muted-foreground max-w-md'>
-                                  Synthesize a commercial marketing poster with bold typography headline text matching this campaign.
-                                </p>
-                                <Button size='sm' onClick={handleGenerateImage} disabled={isGeneratingImage} className='mt-1'>
-                                  {isGeneratingImage ? (
-                                    <>
-                                      <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                                      Generating Poster...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Icons.sparkles className='size-3.5 mr-1.5' />
-                                      Generate Marketing Poster
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            )}
-
-                            {item.visual_concept && (
-                              <div className='rounded-lg border border-primary/20 bg-primary/5 p-3 flex flex-col gap-1 text-xs'>
-                                <span className='font-bold text-primary flex items-center gap-1.5'>
-                                  <Icons.media className='size-3.5' /> Visual Creative Concept
-                                </span>
-                                <p className='text-muted-foreground'>{item.visual_concept}</p>
-                              </div>
-                            )}
-
-                            <div className='flex items-center justify-between'>
-                              <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                                Post Caption
-                              </span>
-                              <Button
-                                size='xs'
-                                variant='outline'
-                                onClick={() => handleCopy(item.content, 'Instagram Caption')}
-                              >
-                                <Icons.forms className='size-3.5 mr-1' />
-                                Copy Caption
-                              </Button>
+                          {/* Script / Voiceover outline for Reel */}
+                          {item.script && (
+                            <div className='p-3.5 rounded-lg border bg-muted/20 text-xs space-y-1'>
+                              <span className='font-bold text-foreground'>🎙️ Voiceover / Narration Script</span>
+                              <p className='text-muted-foreground italic font-serif leading-relaxed'>{item.script}</p>
                             </div>
-                            <div className='rounded-lg bg-muted/30 border p-4 text-xs font-sans whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto'>
-                              {item.content}
-                            </div>
-                            {item.hashtags.length > 0 && (
-                              <div className='flex flex-wrap gap-1.5'>
-                                {item.hashtags.map((h) => (
-                                  <span key={h} className='text-[10px] text-primary font-medium'>
-                                    {h}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                          )}
 
-                            {/* Instagram Social Feed Mockup Preview Card */}
-                            <div className='mt-2 rounded-xl border bg-card p-4 shadow-sm text-xs'>
-                              <div className='flex items-center justify-between mb-3'>
-                                <div className='flex items-center gap-2.5'>
-                                  <div className='h-8 w-8 rounded-full bg-gradient-to-tr from-amber-500 to-primary text-white flex items-center justify-center font-bold text-[11px]'>
-                                    JA
-                                  </div>
-                                  <div>
-                                    <div className='font-bold text-foreground flex items-center gap-1.5'>
-                                      jaassure_group
-                                      <Badge variant='outline' className='text-[9px] py-0 text-primary border-primary/30'>Verified</Badge>
-                                    </div>
-                                    <div className='text-[10px] text-muted-foreground'>
-                                      Singapore · Sponsored
-                                    </div>
-                                  </div>
-                                </div>
-                                <Icons.dots className='size-4 text-muted-foreground' />
-                              </div>
-
-                              {/* Embedded Poster Image in Mockup */}
-                              {imageMedia && imageMedia.local_path && (
-                                <div className='relative rounded-lg overflow-hidden border bg-muted/30 aspect-16/10 mb-3'>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={resolveMediaUrl(imageMedia.local_path)}
-                                    alt='Instagram Feed Creative'
-                                    className='w-full h-full object-cover'
-                                  />
-                                </div>
+                          {/* Save Changes Button */}
+                          <div className='pt-2 flex justify-end'>
+                            <Button
+                              size='sm'
+                              onClick={() => handleSavePlatformContent(item.platform)}
+                              disabled={isSavingContent}
+                              className='text-xs font-bold gap-1.5'
+                            >
+                              {isSavingContent ? (
+                                <>
+                                  <Icons.spinner className='size-3.5 animate-spin' />
+                                  <span>Saving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Icons.check className='size-3.5' />
+                                  <span>Save Content Edits</span>
+                                </>
                               )}
-
-                              <p className='text-xs leading-relaxed text-foreground/90 font-sans line-clamp-3'>
-                                <span className='font-bold text-foreground mr-1.5'>jaassure_group</span>
-                                {item.content}
-                              </p>
-                              <div className='mt-1.5 text-primary text-[11px] font-medium'>
-                                {item.hashtags.join(' ')}
-                              </div>
-                            </div>
+                            </Button>
                           </div>
-                        );
-                      })()}
-                    </TabsContent>
-
-                    {/* Blog Tab */}
-                    <TabsContent value='blog' className='mt-4 flex flex-col gap-4'>
-                      {(() => {
-                        const item = campaignSnapshot.contents.find((c) => c.platform === 'blog');
-                        if (!item) return <p className='text-xs text-muted-foreground'>No Blog article generated.</p>;
-                        return (
-                          <div className='flex flex-col gap-4'>
-                            <div className='flex items-center justify-between'>
-                              <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                                SEO Thought-Leadership Article
-                              </span>
-                              <Button
-                                size='xs'
-                                variant='outline'
-                                onClick={() => handleCopy(item.content, 'Blog Article')}
-                              >
-                                <Icons.forms className='size-3.5 mr-1' />
-                                Copy Full Article
-                              </Button>
-                            </div>
-                            {item.title && (
-                              <h3 className='text-base font-bold text-foreground'>{item.title}</h3>
-                            )}
-                            <div className='rounded-lg bg-muted/30 border p-5 text-xs font-serif whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto'>
-                              {item.content}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </TabsContent>
-
-                    {/* Reel Tab */}
-                    <TabsContent value='reel' className='mt-4 flex flex-col gap-4'>
-                      {(() => {
-                        const item = campaignSnapshot.contents.find((c) => c.platform === 'reel');
-                        if (!item) return <p className='text-xs text-muted-foreground'>No Reel script generated.</p>;
-                        return (
-                          <div className='flex flex-col gap-4'>
-                            {/* Prominent Vertical Video Display Card */}
-                            {videoMedia && videoMedia.local_path ? (
-                              <div className='rounded-xl border border-purple-500/20 bg-card p-4 flex flex-col gap-3 shadow-xs'>
-                                <div className='flex items-center justify-between'>
-                                  <div className='flex items-center gap-2'>
-                                    <Icons.video className='size-4 text-purple-600 dark:text-purple-400' />
-                                    <span className='text-xs font-bold text-foreground'>
-                                      Rendered Reel Video Asset (9:16)
-                                    </span>
-                                    <Badge variant='outline' className='text-[10px] text-emerald-600 dark:text-emerald-400 font-mono'>
-                                      ✓ Local Stored
-                                    </Badge>
-                                  </div>
-                                  <div className='flex items-center gap-2'>
-                                    <Button
-                                      size='xs'
-                                      variant='outline'
-                                      onClick={() => window.open(resolveMediaUrl(videoMedia.local_path), '_blank')}
-                                    >
-                                      <Icons.externalLink className='size-3 mr-1' />
-                                      Open Video
-                                    </Button>
-                                    <Button
-                                      size='xs'
-                                      onClick={handleGenerateVideo}
-                                      disabled={isGeneratingVideo}
-                                    >
-                                      {isGeneratingVideo ? (
-                                        <>
-                                          <Icons.spinner className='size-3 animate-spin mr-1' />
-                                          Rendering...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Icons.sparkles className='size-3 mr-1' />
-                                          Regenerate Video
-                                        </>
-                                      )}
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                <div className='relative rounded-xl overflow-hidden border bg-black aspect-9/16 max-h-[420px] max-w-xs mx-auto flex items-center justify-center shadow-md w-full'>
-                                  <video
-                                    key={`reel-tab-player-${mediaTimestamp}`}
-                                    controls
-                                    playsInline
-                                    className='w-full h-full object-contain'
-                                    src={resolveMediaUrl(videoMedia.local_path)}
-                                  >
-                                    <track kind='captions' />
-                                    Your browser does not support HTML video playback.
-                                  </video>
-                                </div>
-                                <div className='flex items-center justify-between text-[11px] text-muted-foreground'>
-                                  <span className='font-mono truncate max-w-xs'>{videoMedia.local_path}</span>
-                                  <span className='font-medium text-foreground'>{videoMedia.model || 'Vertical Reel'}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className='rounded-xl border-2 border-dashed bg-muted/10 p-5 flex flex-col items-center justify-center text-center gap-2'>
-                                <div className='h-9 w-9 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center'>
-                                  <Icons.video className='size-4.5' />
-                                </div>
-                                <div className='text-xs font-bold text-foreground'>Vertical Video Not Rendered Yet</div>
-                                <p className='text-[11px] text-muted-foreground max-w-md'>
-                                  Generate a vertical 9:16 video matching this campaign's storyboard and voiceover script.
-                                </p>
-                                <Button size='sm' onClick={handleGenerateVideo} disabled={isGeneratingVideo} className='mt-1'>
-                                  {isGeneratingVideo ? (
-                                    <>
-                                      <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                                      Rendering Video...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Icons.sparkles className='size-3.5 mr-1.5' />
-                                      Generate Vertical Video
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            )}
-
-                            <div className='flex items-center justify-between'>
-                              <div className='flex items-center gap-2'>
-                                <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                                  Vertical Shortform Storyboard
-                                </span>
-                                <Badge variant='secondary' className='text-[10px]'>
-                                  Duration: 45s
-                                </Badge>
-                              </div>
-                              <Button
-                                size='xs'
-                                variant='outline'
-                                onClick={() => handleCopy(item.script || item.content, 'Reel Script')}
-                              >
-                                <Icons.forms className='size-3.5 mr-1' />
-                                Copy Script
-                              </Button>
-                            </div>
-
-                            {item.title && (
-                              <h4 className='text-sm font-bold text-foreground'>{item.title}</h4>
-                            )}
-
-                            {/* Voiceover block */}
-                            <div className='rounded-lg border bg-card p-3.5 flex flex-col gap-1.5 text-xs'>
-                              <span className='font-bold text-foreground flex items-center gap-1.5'>
-                                🎙️ Voiceover Narration Script
-                              </span>
-                              <p className='text-foreground/90 font-serif leading-relaxed italic'>
-                                "{item.script || item.content}"
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </TabsContent>
+                        </TabsContent>
+                      );
+                    })}
                   </Tabs>
                 </CardContent>
               </Card>
 
-              {/* Collapsible AI Media Prompts Accordion */}
-              <Card className='shadow-xs'>
-                <CardHeader className='py-3 px-5 border-b cursor-pointer' onClick={() => setShowPromptsAccordion(!showPromptsAccordion)}>
-                  <div className='flex items-center justify-between'>
-                    <div className='flex items-center gap-2'>
-                      <Icons.code className='size-4 text-primary' />
-                      <CardTitle className='text-xs font-bold text-foreground'>
-                        AI Media Generation Prompts
-                      </CardTitle>
-                    </div>
-                    <Button variant='ghost' size='xs'>
-                      {showPromptsAccordion ? 'Hide Prompts' : 'Show Prompts'}
-                      <Icons.chevronDown className={`size-3 ml-1 transition-transform ${showPromptsAccordion ? 'rotate-180' : ''}`} />
-                    </Button>
-                  </div>
-                </CardHeader>
-                {showPromptsAccordion && (
-                  <CardContent className='p-4 flex flex-col gap-4 text-xs'>
-                    <div className='flex flex-col gap-1.5'>
-                      <Label className='font-bold text-foreground flex items-center justify-between'>
-                        <span>Poster Image Prompt (with Text Overlay)</span>
-                        <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
-                      </Label>
-                      <Textarea
-                        value={editableImagePrompt}
-                        onChange={(e) => setEditableImagePrompt(e.target.value)}
-                        rows={3}
-                        className='text-xs font-mono'
-                      />
-                    </div>
+              {/* SECTION 2: FULL-WIDTH AI MEDIA GENERATION PROMPTS (1 x 2 DESKTOP LAYOUT) */}
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                {/* LEFT: SQUARE 1:1 POSTER CARD */}
+                <Card className='shadow-xs overflow-hidden flex flex-col justify-between'>
+                  <div>
+                    <CardHeader className='pb-3 border-b'>
+                      <div className='flex items-center justify-between'>
+                        <div className='flex items-center gap-2'>
+                          <Icons.media className='size-4 text-primary' />
+                          <CardTitle className='text-sm font-bold'>
+                            Square 1:1 Social Poster
+                          </CardTitle>
+                        </div>
+                        <Badge variant='outline' className='text-[10px] font-mono border-primary/30 text-primary'>
+                          1080×1080 · 1:1 Square
+                        </Badge>
+                      </div>
+                      <CardDescription className='text-xs'>
+                        Explicitly commands square composition, readable bold headline text, and factual event details.
+                      </CardDescription>
+                    </CardHeader>
 
-                    <div className='flex flex-col gap-1.5'>
-                      <Label className='font-bold text-foreground flex items-center justify-between'>
-                        <span>Video Prompt (FAL Minimax / Local)</span>
-                        <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
-                      </Label>
-                      <Textarea
-                        value={editableVideoPrompt}
-                        onChange={(e) => setEditableVideoPrompt(e.target.value)}
-                        rows={3}
-                        className='text-xs font-mono'
-                      />
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            </div>
-
-            {/* Right Column: Dedicated Media Generation Panel */}
-            <div className='lg:col-span-5 flex flex-col gap-6'>
-              {/* Image Generation Slot */}
-              <Card className='shadow-xs overflow-hidden'>
-                <CardHeader className='pb-3 border-b'>
-                  <div className='flex items-center justify-between'>
-                    <div className='flex items-center gap-2'>
-                      <Icons.media className='size-4 text-primary' />
-                      <CardTitle className='text-sm font-bold text-foreground'>
-                        Campaign Marketing Poster
-                      </CardTitle>
-                    </div>
-                    <Badge variant='outline' className='text-[10px] font-mono'>
-                      {imageMedia?.model || modeInfo?.image_model || 'google/nano-banana-2-lites'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className='p-4 flex flex-col gap-3'>
-                  {imageMedia && imageMedia.local_path ? (
-                    <div className='flex flex-col gap-3'>
-                      <div className='relative rounded-lg overflow-hidden border bg-muted/40 aspect-16/10 flex items-center justify-center'>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          key={`right-img-${mediaTimestamp}`}
-                          src={resolveMediaUrl(imageMedia.local_path)}
-                          alt='Campaign marketing poster creative render'
-                          className='w-full h-full object-cover'
+                    <CardContent className='p-4 space-y-4 text-xs'>
+                      <div className='space-y-1.5'>
+                        <Label className='font-bold text-foreground flex items-center justify-between'>
+                          <span>Poster Generation Prompt</span>
+                          <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
+                        </Label>
+                        <Textarea
+                          value={editableImagePrompt}
+                          onChange={(e) => setEditableImagePrompt(e.target.value)}
+                          rows={4}
+                          placeholder='Square 1:1 commercial advertising poster with bold headline typography text overlay...'
+                          className='text-xs font-mono leading-relaxed'
                         />
                       </div>
-                      <div className='flex items-center justify-between text-xs'>
-                        <span className='text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1'>
-                          <Icons.circleCheck className='size-3.5' /> Stored locally: ✓
-                        </span>
-                        <span className='text-[10px] font-mono text-muted-foreground truncate max-w-[200px]'>
-                          {imageMedia.local_path}
-                        </span>
-                      </div>
-                      <div className='flex items-center justify-between pt-2 border-t'>
-                        <Button
-                          size='xs'
-                          variant='outline'
-                          onClick={() => window.open(resolveMediaUrl(imageMedia.local_path), '_blank')}
-                        >
-                          <Icons.externalLink className='size-3 mr-1' />
-                          View Full Size
-                        </Button>
-                        <Button
-                          size='xs'
-                          onClick={handleGenerateImage}
-                          disabled={isGeneratingImage}
-                        >
-                          {isGeneratingImage ? (
-                            <>
-                              <Icons.spinner className='size-3 animate-spin mr-1' />
-                              Regenerating...
-                            </>
-                          ) : (
-                            'Regenerate Poster'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className='rounded-lg border-2 border-dashed p-6 text-center flex flex-col items-center justify-center min-h-[180px] bg-muted/10'>
-                      <div className='h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-2'>
-                        <Icons.media className='size-5' />
-                      </div>
-                      <h5 className='text-xs font-bold text-foreground'>No Poster Generated Yet</h5>
-                      <p className='text-[11px] text-muted-foreground max-w-xs mt-1 mb-3'>
-                        Synthesize a commercial marketing poster with bold typography headline text matching this campaign.
-                      </p>
-                      <Button
-                        size='sm'
-                        onClick={handleGenerateImage}
-                        disabled={isGeneratingImage}
-                      >
-                        {isGeneratingImage ? (
-                          <>
-                            <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                            Generating Poster...
-                          </>
-                        ) : (
-                          <>
-                            <Icons.sparkles className='size-3.5 mr-1.5' />
-                            Generate Marketing Poster
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
 
-              {/* Video Generation Slot */}
-              <Card className='shadow-xs overflow-hidden'>
-                <CardHeader className='pb-3 border-b'>
-                  <div className='flex items-center justify-between'>
-                    <div className='flex items-center gap-2'>
-                      <Icons.video className='size-4 text-purple-600 dark:text-purple-400' />
-                      <CardTitle className='text-sm font-bold text-foreground'>
-                        Reel Video Asset (9:16)
-                      </CardTitle>
-                    </div>
-                    <Badge variant='outline' className='text-[10px] font-mono'>
-                      {videoMedia?.model || modeInfo?.video_model || 'minimax/h3-max-turbo/text-to-video'}
-                    </Badge>
+                      {/* Original Preview if generated */}
+                      {originalImage?.local_path ? (
+                        <div className='space-y-2 border rounded-lg p-3 bg-muted/20'>
+                          <div className='flex items-center justify-between text-xs'>
+                            <span className='font-semibold text-foreground flex items-center gap-1.5'>
+                              <Icons.circleCheck className='size-3.5 text-emerald-600' />
+                              <span>Original Poster Generated</span>
+                            </span>
+                            <Badge variant='secondary' className='text-[10px] font-mono'>
+                              Original v1
+                            </Badge>
+                          </div>
+                          <div className='relative rounded-lg overflow-hidden border bg-black w-full max-w-[240px] aspect-square mx-auto'>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={resolveMediaUrl(originalImage.local_path)}
+                              alt='Generated Square Poster'
+                              className='w-full h-full object-contain'
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='border-2 border-dashed rounded-lg p-5 text-center bg-muted/10'>
+                          <Icons.media className='size-8 text-muted-foreground mx-auto mb-1.5' />
+                          <span className='font-bold text-xs text-foreground block'>Poster Not Yet Generated</span>
+                          <span className='text-[11px] text-muted-foreground block mt-0.5'>
+                            Click below to generate high-resolution 1:1 original poster.
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
                   </div>
-                </CardHeader>
-                <CardContent className='p-4 flex flex-col gap-3'>
-                  {videoMedia && videoMedia.local_path ? (
-                    <div className='flex flex-col gap-3'>
-                      <div className='relative rounded-lg overflow-hidden border bg-black/90 aspect-9/16 max-h-[380px] mx-auto flex items-center justify-center w-full'>
-                        <video
-                          key={`right-vid-${mediaTimestamp}`}
-                          controls
-                          playsInline
-                          className='w-full h-full object-contain'
-                          src={resolveMediaUrl(videoMedia.local_path)}
-                        >
-                          <track kind='captions' />
-                          Your browser does not support HTML video playback.
-                        </video>
-                      </div>
-                      <div className='flex items-center justify-between text-xs'>
-                        <span className='text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1'>
-                          <Icons.circleCheck className='size-3.5' /> Stored locally: ✓
-                        </span>
-                        <span className='text-[10px] font-mono text-muted-foreground truncate max-w-[200px]'>
-                          {videoMedia.local_path}
-                        </span>
-                      </div>
-                      <div className='flex items-center justify-between pt-2 border-t'>
-                        <Button
-                          size='xs'
-                          variant='outline'
-                          onClick={() => window.open(resolveMediaUrl(videoMedia.local_path), '_blank')}
-                        >
-                          <Icons.externalLink className='size-3 mr-1' />
-                          Open Video
-                        </Button>
-                        <Button
-                          size='xs'
-                          onClick={handleGenerateVideo}
-                          disabled={isGeneratingVideo}
-                        >
-                          {isGeneratingVideo ? (
-                            <>
-                              <Icons.spinner className='size-3 animate-spin mr-1' />
-                              Regenerating...
-                            </>
-                          ) : (
-                            'Regenerate Video'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className='rounded-lg border-2 border-dashed p-6 text-center flex flex-col items-center justify-center min-h-[180px] bg-muted/10'>
-                      <div className='h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-2'>
-                        <Icons.video className='size-5' />
-                      </div>
-                      <h5 className='text-xs font-bold text-foreground'>No Video Rendered Yet</h5>
-                      <p className='text-[11px] text-muted-foreground max-w-xs mt-1 mb-3'>
-                        Generate a 9:16 vertical shortform video using FAL MiniMax.
-                      </p>
-                      <Button
-                        size='sm'
-                        onClick={handleGenerateVideo}
-                        disabled={isGeneratingVideo}
-                      >
-                        {isGeneratingVideo ? (
-                          <>
-                            <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                            Rendering Video...
-                          </>
-                        ) : (
-                          <>
-                            <Icons.sparkles className='size-3.5 mr-1.5' />
-                            Generate Video
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
 
-              {/* Local Storage System Card */}
-              <div className='rounded-xl border bg-muted/30 p-4 flex items-start gap-3 text-xs'>
-                <Icons.info className='size-4 text-primary mt-0.5 shrink-0' />
-                <div className='flex flex-col gap-1 text-muted-foreground'>
-                  <strong className='text-foreground font-semibold'>
-                    Local File Storage & Database Verification
-                  </strong>
-                  <p className='text-[11px] leading-relaxed'>
-                    Every image and vertical reel is saved directly to{' '}
-                    <code className='bg-muted px-1 py-0.5 rounded font-mono text-[10px] text-foreground'>
-                      storage/campaigns/{campaignSnapshot.id}/
-                    </code>{' '}
-                    and registered in MySQL.
-                  </p>
-                </div>
+                  <div className='p-4 border-t bg-muted/10 flex items-center justify-between'>
+                    <Button
+                      size='sm'
+                      onClick={handleGenerateImage}
+                      disabled={isGeneratingImage}
+                      className='w-full font-bold text-xs gap-1.5'
+                    >
+                      {isGeneratingImage ? (
+                        <>
+                          <Icons.spinner className='size-3.5 animate-spin' />
+                          <span>Generating 1:1 Poster...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icons.sparkles className='size-3.5' />
+                          <span>{originalImage ? 'Regenerate Square Poster' : 'Generate 1:1 Square Poster'}</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </Card>
+
+                {/* RIGHT: VERTICAL 9:16 REEL CARD */}
+                <Card className='shadow-xs overflow-hidden flex flex-col justify-between'>
+                  <div>
+                    <CardHeader className='pb-3 border-b'>
+                      <div className='flex items-center justify-between'>
+                        <div className='flex items-center gap-2'>
+                          <Icons.video className='size-4 text-primary' />
+                          <CardTitle className='text-sm font-bold'>
+                            Vertical 9:16 Social Reel
+                          </CardTitle>
+                        </div>
+                        <Badge variant='outline' className='text-[10px] font-mono border-purple-500/30 text-purple-600 dark:text-purple-400'>
+                          768×1365 · 9:16 Vertical
+                        </Badge>
+                      </div>
+                      <CardDescription className='text-xs'>
+                        Explicitly commands 9:16 vertical video composition, visually coherent with poster theme.
+                      </CardDescription>
+                    </CardHeader>
+
+                    <CardContent className='p-4 space-y-4 text-xs'>
+                      <div className='space-y-1.5'>
+                        <Label className='font-bold text-foreground flex items-center justify-between'>
+                          <span>Reel Video Prompt</span>
+                          <span className='text-[10px] text-muted-foreground font-normal'>Editable</span>
+                        </Label>
+                        <Textarea
+                          value={editableVideoPrompt}
+                          onChange={(e) => setEditableVideoPrompt(e.target.value)}
+                          rows={4}
+                          placeholder='Vertical 9:16 cinematic video reel with smooth motion...'
+                          className='text-xs font-mono leading-relaxed'
+                        />
+                      </div>
+
+                      {/* Original Preview if generated */}
+                      {originalVideo?.local_path ? (
+                        <div className='space-y-2 border rounded-lg p-3 bg-muted/20'>
+                          <div className='flex items-center justify-between text-xs'>
+                            <span className='font-semibold text-foreground flex items-center gap-1.5'>
+                              <Icons.circleCheck className='size-3.5 text-emerald-600' />
+                              <span>Original Reel Generated</span>
+                            </span>
+                            <Badge variant='secondary' className='text-[10px] font-mono'>
+                              Original v1
+                            </Badge>
+                          </div>
+                          <div className='relative rounded-lg overflow-hidden border bg-black w-full max-w-[150px] aspect-[9/16] mx-auto'>
+                            <video
+                              src={resolveMediaUrl(originalVideo.local_path)}
+                              controls
+                              playsInline
+                              className='w-full h-full object-contain'
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='border-2 border-dashed rounded-lg p-5 text-center bg-muted/10'>
+                          <Icons.video className='size-8 text-muted-foreground mx-auto mb-1.5' />
+                          <span className='font-bold text-xs text-foreground block'>Reel Not Yet Generated</span>
+                          <span className='text-[11px] text-muted-foreground block mt-0.5'>
+                            Click below to generate vertical 9:16 Reel video.
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </div>
+
+                  <div className='p-4 border-t bg-muted/10 flex items-center justify-between'>
+                    <Button
+                      size='sm'
+                      onClick={handleGenerateVideo}
+                      disabled={isGeneratingVideo}
+                      className='w-full font-bold text-xs gap-1.5'
+                    >
+                      {isGeneratingVideo ? (
+                        <>
+                          <Icons.spinner className='size-3.5 animate-spin' />
+                          <span>Generating 9:16 Reel...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icons.sparkles className='size-3.5' />
+                          <span>{originalVideo ? 'Regenerate Vertical Reel' : 'Generate 9:16 Vertical Reel'}</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </Card>
               </div>
-            </div>
-          </div>
+
+              {/* Bottom Navigation CTA */}
+              <div className='flex items-center justify-between p-4 rounded-xl border bg-card'>
+                <div className='text-xs text-muted-foreground'>
+                  {hasMediaGenerated ? (
+                    <span className='text-emerald-600 font-semibold flex items-center gap-1'>
+                      <Icons.circleCheck className='size-4' />
+                      <span>Original media is ready! Proceed to Step 3 to customize and apply your brand watermark.</span>
+                    </span>
+                  ) : (
+                    <span>Generate at least one media asset (Poster or Reel) before proceeding to watermarking.</span>
+                  )}
+                </div>
+
+                <Button
+                  size='default'
+                  onClick={() => setCurrentWorkflowStep(3)}
+                  disabled={!hasMediaGenerated}
+                  className='font-bold gap-2'
+                >
+                  <span>Proceed to Step 3: Media &amp; Watermark</span>
+                  <Icons.arrowRight className='size-4' />
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* STEP 3: MEDIA & REVIEW WORKSPACE */}
+      {!isGenerating && currentWorkflowStep === 3 && campaignSnapshot && (
+        <div className='flex flex-col gap-6'>
+          {/* Watermark Studio Component */}
+          <WatermarkStudio
+            campaignId={campaignSnapshot.id}
+            brandId={campaignSnapshot.brand_id}
+            imageItem={finalImage || originalImage}
+            videoItem={finalVideo || originalVideo}
+            onWatermarkSaved={handleWatermarkSaved}
+          />
+
+          {/* Verification & Submission Box */}
+          <Card className='shadow-xs border-primary/20 bg-card'>
+            <CardHeader className='pb-3 border-b'>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <Icons.checks className='size-4 text-emerald-600' />
+                  <CardTitle className='text-base font-bold'>
+                    Submit for Verification &amp; Review Queue
+                  </CardTitle>
+                </div>
+                <Badge
+                  variant='outline'
+                  className={cn(
+                    'text-xs font-semibold',
+                    campaignSnapshot.status === 'pending_review'
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-600'
+                      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+                  )}
+                >
+                  {campaignSnapshot.status === 'pending_review' ? 'In Review Queue' : 'Ready for Submission'}
+                </Badge>
+              </div>
+              <CardDescription className='text-xs'>
+                Once submitted, the campaign enters the human-in-the-loop review gateway for statutory compliance verification before publishing.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className='p-5 flex flex-col sm:flex-row items-center justify-between gap-4'>
+              <div className='flex flex-col gap-1 text-xs text-muted-foreground'>
+                <span className='flex items-center gap-1.5 text-foreground font-semibold'>
+                  <Icons.circleCheck className='size-4 text-emerald-600' />
+                  <span>{campaignSnapshot.contents.length} Cross-Platform Copy Variants Ready</span>
+                </span>
+                <span className='flex items-center gap-1.5 text-foreground font-semibold'>
+                  <Icons.circleCheck className='size-4 text-emerald-600' />
+                  <span>
+                    {hasWatermarkedMedia
+                      ? 'Final Watermarked Assets Created (poster_final_v1.png / reel_final_v1.mp4)'
+                      : 'Original Media Ready (Watermark optional or applied above)'}
+                  </span>
+                </span>
+                <span className='flex items-center gap-1.5'>
+                  <Icons.circleCheck className='size-4 text-emerald-600' />
+                  <span>100% Underwriting Guidelines Pre-Audited</span>
+                </span>
+              </div>
+
+              <Button
+                size='lg'
+                onClick={handleSubmitReview}
+                disabled={campaignSnapshot.status === 'pending_review' || isSubmitting}
+                className='w-full sm:w-auto font-bold gap-2 min-w-[220px]'
+              >
+                {isSubmitting ? (
+                  <>
+                    <Icons.spinner className='size-4 animate-spin' />
+                    <span>Submitting...</span>
+                  </>
+                ) : campaignSnapshot.status === 'pending_review' ? (
+                  <>
+                    <Icons.circleCheck className='size-4' />
+                    <span>Enqueued in Review</span>
+                  </>
+                ) : (
+                  <>
+                    <Icons.checks className='size-4' />
+                    <span>Submit for Verification</span>
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
@@ -1558,13 +1200,7 @@ function StudioContent() {
 
 export default function StudioPage() {
   return (
-    <Suspense
-      fallback={
-        <div className='flex items-center justify-center min-h-[400px]'>
-          <Icons.spinner className='size-8 animate-spin text-primary' />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className='p-8 text-center text-xs text-muted-foreground'>Loading Campaign Studio...</div>}>
       <StudioContent />
     </Suspense>
   );

@@ -84,12 +84,12 @@ def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]
             elif isinstance(r["campaign_facts"], dict):
                 facts = r["campaign_facts"]
 
-        # 2. Latest Image
+        # 2. Latest Image (Prioritize final watermarked asset)
         img_row = db.execute(
             """
             SELECT * FROM campaign_media
             WHERE campaign_id = %s AND media_type = 'image' AND status = 'completed'
-            ORDER BY created_at DESC LIMIT 1
+            ORDER BY CASE WHEN media_stage = 'final' THEN 1 ELSE 0 END DESC, created_at DESC LIMIT 1
             """,
             (cid,),
         ).fetchone()
@@ -101,12 +101,12 @@ def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]
             latest_image_url = f"/{lp}" if not lp.startswith("/") else lp
             latest_image_prompt = img_row.get("prompt")
 
-        # 3. Video Asset check
+        # 3. Video Asset check (Prioritize final watermarked asset)
         vid_row = db.execute(
             """
             SELECT * FROM campaign_media
             WHERE campaign_id = %s AND media_type = 'video' AND status = 'completed'
-            ORDER BY created_at DESC LIMIT 1
+            ORDER BY CASE WHEN media_stage = 'final' THEN 1 ELSE 0 END DESC, created_at DESC LIMIT 1
             """,
             (cid,),
         ).fetchone()
