@@ -883,8 +883,7 @@ def edit_campaign_content_route(campaign_id: str, body: ReviewEditRequest):
 def publish_campaign_linkedin_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to LinkedIn via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "linkedin")
+        res = publish_to_platform(None, campaign_id, "linkedin")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -894,8 +893,7 @@ def publish_campaign_linkedin_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_instagram_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to Instagram via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "instagram")
+        res = publish_to_platform(None, campaign_id, "instagram")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -905,8 +903,7 @@ def publish_campaign_instagram_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_x_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to X via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "x")
+        res = publish_to_platform(None, campaign_id, "x")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -916,8 +913,7 @@ def publish_campaign_x_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_platform_route(campaign_id: str, platform: str) -> PublishResponse:
     """Publish approved campaign asset to specific platform (e.g. linkedin, instagram, x) via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, platform)
+        res = publish_to_platform(None, campaign_id, platform)
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
