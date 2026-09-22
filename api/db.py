@@ -788,6 +788,8 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
         "ALTER TABLE campaigns ADD COLUMN goal VARCHAR(255)",
         "ALTER TABLE campaigns ADD COLUMN platforms LONGTEXT NULL",
         "ALTER TABLE campaigns MODIFY COLUMN platforms LONGTEXT NULL",
+        "ALTER TABLE campaigns MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE review_queue MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending_review'",
         "ALTER TABLE campaigns ADD COLUMN error TEXT",
         "ALTER TABLE campaigns ADD COLUMN completed_at DATETIME NULL",
         "ALTER TABLE campaigns ADD COLUMN campaign_facts JSON",
