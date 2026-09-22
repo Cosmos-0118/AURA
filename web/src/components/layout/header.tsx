@@ -24,7 +24,8 @@ export default function Header() {
         <ThemeModeToggle />
         <div className='hidden sm:block'>
           <ThemeSelector />
-        </div>      </div>
+        </div>{' '}
+      </div>
     </header>
   );
 }

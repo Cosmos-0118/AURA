@@ -9,24 +9,23 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
+  CardTitle
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Icons } from '@/components/icons';
-import { IconCopy, IconDownload } from '@tabler/icons-react';
-import {
-  generateVideo,
-  getVideoConfig,
-  attachVideoToAsset,
-  listAssets,
-} from '@/lib/api/client';
+import { IconCopy, IconDownload, IconSparkles } from '@tabler/icons-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { BrandMarkerStudio } from './brand-marker-studio';
+import { VideoHistory } from './video-history';
+import { generateVideo, attachVideoToAsset, listAssets } from '@/lib/api/client';
 import type {
   VideoAspectRatio,
   VideoResolution,
   VideoGenerateResponse,
-  Asset,
+  VideoGenerationRecord,
+  Asset
 } from '@/lib/api/types';
 
 const PRESETS = {
@@ -34,20 +33,20 @@ const PRESETS = {
     name: 'Jade (Jewellers)',
     badge: 'Luxury / Specialist',
     prompt:
-      'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.',
+      'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.'
   },
   doctorshield: {
     name: 'DoctorShield (Clinics)',
     badge: 'Medical / Professional',
     prompt:
-      'A sunlit modern doctor consultation clinic, clean wooden desk with a stethoscope and medical journal, soft morning sunlight through large windows, calming professional healthcare ambiance, smooth cinematic pan.',
+      'A sunlit modern doctor consultation clinic, clean wooden desk with a stethoscope and medical journal, soft morning sunlight through large windows, calming professional healthcare ambiance, smooth cinematic pan.'
   },
   jaguar: {
     name: 'Jaguar Transit (Secured)',
     badge: 'Logistics / High-Tech',
     prompt:
-      'A heavy armored transit security vehicle departing a high-security airport vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.',
-  },
+      'A heavy armored transit security vehicle departing a high-security airport vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.'
+  }
 };
 
 export default function VideoStudio() {
@@ -62,6 +61,9 @@ export default function VideoStudio() {
   const [result, setResult] = useState<VideoGenerateResponse | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [attachStatus, setAttachStatus] = useState<string | null>(null);
+
+  // History: latest record for instant prepend in VideoHistory
+  const [latestRecord, setLatestRecord] = useState<VideoGenerationRecord | null>(null);
 
   // Load existing assets for attaching video
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function VideoStudio() {
     setLogs([
       'Initiating request for Minimax H3 Max Turbo...',
       'Verifying strict 5-second duration constraint...',
-      'Submitting job to Fal.ai pipeline...',
+      'Submitting job to Fal.ai pipeline...'
     ]);
     setAttachStatus(null);
 
@@ -95,7 +97,7 @@ export default function VideoStudio() {
         aspect_ratio: aspectRatio,
         resolution: resolution,
         prompt_expansion_mode: promptExpansion,
-        asset_id: selectedAssetId || null,
+        asset_id: selectedAssetId || null
       });
 
       setResult(response);
@@ -105,14 +107,51 @@ export default function VideoStudio() {
 
       if (response.status === 'COMPLETED') {
         setLogs((prev) => [...prev, 'Video generation successfully completed (5.0s MP4).']);
+        // Build a VideoGenerationRecord from the response for instant history prepend
+        setLatestRecord({
+          id: response.request_id ?? `local-${Date.now()}`,
+          brand_id: null,
+          asset_id: selectedAssetId || null,
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio,
+          resolution: resolution,
+          duration_secs: 5,
+          model: 'minimax/h3-max-turbo/text-to-video',
+          video_url: response.video?.url ?? null,
+          file_name: response.video?.file_name ?? null,
+          file_size: response.video?.file_size ?? null,
+          status: 'COMPLETED',
+          error_msg: null,
+          request_id: response.request_id ?? null,
+          created_at: new Date().toISOString()
+        });
       } else if (response.error) {
         setLogs((prev) => [...prev, `Error: ${response.error}`]);
+        // Also record failed generations in history
+        setLatestRecord({
+          id: response.request_id ?? `local-${Date.now()}`,
+          brand_id: null,
+          asset_id: selectedAssetId || null,
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio,
+          resolution: resolution,
+          duration_secs: 5,
+          model: 'minimax/h3-max-turbo/text-to-video',
+          video_url: null,
+          file_name: null,
+          file_size: null,
+          status: 'FAILED',
+          error_msg: response.error ?? null,
+          request_id: response.request_id ?? null,
+          created_at: new Date().toISOString()
+        });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to generate video';
       setResult({
         status: 'FAILED',
-        error: err?.message || 'Failed to generate video',
-        logs: [`Exception: ${err?.message || 'Connection error'}`],
+        error: errMsg,
+        logs: [`Exception: ${errMsg}`]
       });
     } finally {
       setIsGenerating(false);
@@ -125,11 +164,12 @@ export default function VideoStudio() {
     try {
       await attachVideoToAsset({
         asset_id: selectedAssetId,
-        video_url: result.video.url,
+        video_url: result.video.url
       });
       setAttachStatus('Attached successfully to asset!');
-    } catch (err: any) {
-      setAttachStatus(`Failed to attach: ${err.message}`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      setAttachStatus(`Failed to attach: ${errMsg}`);
     }
   };
 
@@ -153,7 +193,8 @@ export default function VideoStudio() {
               </Badge>
             </div>
             <p className='text-sm text-muted-foreground mt-1'>
-              Generate high-impact 5-second marketing video reels and product clips powered by Fal.ai.
+              Generate high-impact 5-second marketing video reels and product clips powered by
+              Fal.ai.
             </p>
           </div>
 
@@ -234,7 +275,8 @@ export default function VideoStudio() {
                       <option value=''>-- Select asset to copy script --</option>
                       {assets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          [{asset.brand_id.toUpperCase()} - {asset.platform}] {asset.title || asset.body.slice(0, 45)}...
+                          [{asset.brand_id.toUpperCase()} - {asset.platform}]{' '}
+                          {asset.title || asset.body.slice(0, 45)}...
                         </option>
                       ))}
                     </select>
@@ -247,7 +289,9 @@ export default function VideoStudio() {
             <Card>
               <CardHeader className='pb-3'>
                 <CardTitle className='text-base font-semibold'>Video Generation Settings</CardTitle>
-                <CardDescription>Configure aspect ratio and quality output parameters.</CardDescription>
+                <CardDescription>
+                  Configure aspect ratio and quality output parameters.
+                </CardDescription>
               </CardHeader>
               <CardContent className='space-y-5'>
                 {/* Aspect Ratio */}
@@ -324,7 +368,9 @@ export default function VideoStudio() {
                     <select
                       className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
                       value={promptExpansion}
-                      onChange={(e) => setPromptExpansion(e.target.value as any)}
+                      onChange={(e) =>
+                        setPromptExpansion(e.target.value as 'disabled' | 'balanced')
+                      }
                       disabled={isGenerating}
                     >
                       <option value='disabled'>Disabled (Exact prompt)</option>
@@ -358,139 +404,177 @@ export default function VideoStudio() {
 
           {/* Right: Video Output & Live Feed (5 Cols) */}
           <div className='space-y-6 lg:col-span-5'>
-            {/* Video Player Card */}
-            <Card className='overflow-hidden'>
-              <CardHeader className='pb-3'>
-                <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-semibold'>Video Output</CardTitle>
+            {/* Tabs for Video Preview and Brand Marker */}
+            <Tabs defaultValue='preview' className='w-full space-y-4'>
+              <TabsList className='grid w-full grid-cols-2'>
+                <TabsTrigger value='preview' className='gap-2 text-xs font-medium'>
+                  <Icons.video className='size-3.5' />
+                  <span>Video Preview</span>
+                </TabsTrigger>
+                <TabsTrigger value='brand' className='gap-2 text-xs font-medium relative'>
+                  <IconSparkles className='size-3.5' />
+                  <span>Brand Marker</span>
                   {result?.status === 'COMPLETED' && (
-                    <Badge variant='outline' className='border-emerald-500/40 text-emerald-600 bg-emerald-500/10'>
-                      5.0s Ready
-                    </Badge>
+                    <span className='size-2 rounded-full bg-emerald-500 animate-pulse' />
                   )}
-                </div>
-                <CardDescription>Preview the generated MP4 media.</CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-col items-center justify-center p-4 pt-0'>
-                {isGenerating ? (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 p-12 text-center w-full min-h-[320px]'>
-                    <Icons.spinner className='size-10 animate-spin text-primary mb-4' />
-                    <p className='font-semibold text-sm'>Rendering 5s Video with Fal.ai</p>
-                    <p className='text-xs text-muted-foreground mt-1 max-w-xs'>
-                      Model is performing diffusion denoising and temporal alignment...
-                    </p>
-                  </div>
-                ) : result?.video?.url ? (
-                  <div className='w-full space-y-3'>
-                    <div
-                      className={`relative mx-auto overflow-hidden rounded-lg bg-black shadow-lg ${
-                        aspectRatio === '9:16'
-                          ? 'max-w-[270px] aspect-[9/16]'
-                          : aspectRatio === '1:1'
-                          ? 'max-w-[340px] aspect-square'
-                          : 'w-full aspect-video'
-                      }`}
-                    >
-                      <video
-                        src={result.video.url}
-                        controls
-                        autoPlay
-                        loop
-                        playsInline
-                        className='h-full w-full object-contain'
-                      />
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab 1: Direct Video Preview */}
+              <TabsContent value='preview' className='mt-0 space-y-4'>
+                <Card className='overflow-hidden'>
+                  <CardHeader className='pb-3'>
+                    <div className='flex items-center justify-between'>
+                      <CardTitle className='text-base font-semibold'>Video Output</CardTitle>
+                      {result?.status === 'COMPLETED' && (
+                        <Badge
+                          variant='outline'
+                          className='border-emerald-500/40 text-emerald-600 bg-emerald-500/10'
+                        >
+                          5.0s Ready
+                        </Badge>
+                      )}
                     </div>
-
-                    <div className='flex flex-col gap-2 pt-2'>
-                      <div className='flex items-center justify-between text-xs text-muted-foreground'>
-                        <span>Duration: <strong>5.0 seconds</strong></span>
-                        <span>Format: <strong>MP4 ({resolution})</strong></span>
+                    <CardDescription>Preview the generated MP4 media.</CardDescription>
+                  </CardHeader>
+                  <CardContent className='flex flex-col items-center justify-center p-4 pt-0'>
+                    {isGenerating ? (
+                      <div className='flex flex-col items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 p-12 text-center w-full min-h-[320px]'>
+                        <Icons.spinner className='size-10 animate-spin text-primary mb-4' />
+                        <p className='font-semibold text-sm'>Rendering 5s Video with Fal.ai</p>
+                        <p className='text-xs text-muted-foreground mt-1 max-w-xs'>
+                          Model is performing diffusion denoising and temporal alignment...
+                        </p>
                       </div>
+                    ) : result?.video?.url ? (
+                      <div className='w-full space-y-3'>
+                        <div
+                          className={`relative mx-auto overflow-hidden rounded-lg bg-black shadow-lg ${
+                            aspectRatio === '9:16'
+                              ? 'max-w-[270px] aspect-[9/16]'
+                              : aspectRatio === '1:1'
+                                ? 'max-w-[340px] aspect-square'
+                                : 'w-full aspect-video'
+                          }`}
+                        >
+                          <video
+                            src={result.video.url}
+                            controls
+                            autoPlay
+                            loop
+                            playsInline
+                            className='h-full w-full object-contain'
+                          >
+                            <track kind='captions' />
+                          </video>
+                        </div>
 
-                      <div className='flex items-center gap-2'>
+                        <div className='flex flex-col gap-2 pt-2'>
+                          <div className='flex items-center justify-between text-xs text-muted-foreground'>
+                            <span>
+                              Duration: <strong>5.0 seconds</strong>
+                            </span>
+                            <span>
+                              Format: <strong>MP4 ({resolution})</strong>
+                            </span>
+                          </div>
+
+                          <div className='flex items-center gap-2'>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              className='flex-1 gap-1.5'
+                              onClick={copyUrl}
+                            >
+                              <IconCopy className='size-3.5' />
+                              Copy Video URL
+                            </Button>
+                            <a
+                              href={result.video.url}
+                              download={result.video.file_name || 'aura_reel_5s.mp4'}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='flex-1'
+                            >
+                              <Button size='sm' className='w-full gap-1.5'>
+                                <IconDownload className='size-3.5' />
+                                Download MP4
+                              </Button>
+                            </a>
+                          </div>
+
+                          {/* Attach to Asset section */}
+                          {assets.length > 0 && (
+                            <div className='rounded-md border p-3 bg-muted/20 space-y-2 mt-2'>
+                              <Label className='text-xs font-semibold'>
+                                Link to Campaign Asset
+                              </Label>
+                              <div className='flex gap-2'>
+                                <select
+                                  className='flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs'
+                                  value={selectedAssetId}
+                                  onChange={(e) => setSelectedAssetId(e.target.value)}
+                                >
+                                  <option value=''>-- Select target asset --</option>
+                                  {assets.map((asset) => (
+                                    <option key={asset.id} value={asset.id}>
+                                      [{asset.brand_id.toUpperCase()}]{' '}
+                                      {asset.title || asset.id.slice(0, 8)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  size='sm'
+                                  variant='secondary'
+                                  disabled={!selectedAssetId}
+                                  onClick={handleAttach}
+                                >
+                                  Attach
+                                </Button>
+                              </div>
+                              {attachStatus && (
+                                <p className='text-[11px] font-medium text-emerald-600 dark:text-emerald-400'>
+                                  {attachStatus}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : result?.error ? (
+                      <div className='flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center w-full min-h-[260px]'>
+                        <Icons.warning className='size-8 text-destructive mb-3' />
+                        <p className='font-semibold text-sm text-destructive'>Generation Failed</p>
+                        <p className='text-xs text-muted-foreground mt-1 max-w-sm'>
+                          {result.error}
+                        </p>
                         <Button
                           variant='outline'
                           size='sm'
-                          className='flex-1 gap-1.5'
-                          onClick={copyUrl}
+                          className='mt-4'
+                          onClick={handleGenerate}
                         >
-                          <IconCopy className='size-3.5' />
-                          Copy Video URL
+                          Retry Generation
                         </Button>
-                        <a
-                          href={result.video.url}
-                          download={result.video.file_name || 'aura_reel_5s.mp4'}
-                          target='_blank'
-                          rel='noopener noreferrer'
-                          className='flex-1'
-                        >
-                          <Button size='sm' className='w-full gap-1.5'>
-                            <IconDownload className='size-3.5' />
-                            Download MP4
-                          </Button>
-                        </a>
                       </div>
+                    ) : (
+                      <div className='flex flex-col items-center justify-center rounded-lg border border-dashed p-10 text-center w-full min-h-[300px] text-muted-foreground'>
+                        <Icons.video className='size-12 stroke-[1.2] mb-3 opacity-50' />
+                        <p className='text-sm font-medium'>No video generated yet</p>
+                        <p className='text-xs max-w-xs mt-1'>
+                          Select a brand preset or enter a scene prompt and click "Generate Video".
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-                      {/* Attach to Asset section */}
-                      {assets.length > 0 && (
-                        <div className='rounded-md border p-3 bg-muted/20 space-y-2 mt-2'>
-                          <Label className='text-xs font-semibold'>Link to Campaign Asset</Label>
-                          <div className='flex gap-2'>
-                            <select
-                              className='flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs'
-                              value={selectedAssetId}
-                              onChange={(e) => setSelectedAssetId(e.target.value)}
-                            >
-                              <option value=''>-- Select target asset --</option>
-                              {assets.map((asset) => (
-                                <option key={asset.id} value={asset.id}>
-                                  [{asset.brand_id.toUpperCase()}] {asset.title || asset.id.slice(0, 8)}
-                                </option>
-                              ))}
-                            </select>
-                            <Button
-                              size='sm'
-                              variant='secondary'
-                              disabled={!selectedAssetId}
-                              onClick={handleAttach}
-                            >
-                              Attach
-                            </Button>
-                          </div>
-                          {attachStatus && (
-                            <p className='text-[11px] font-medium text-emerald-600 dark:text-emerald-400'>
-                              {attachStatus}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : result?.error ? (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center w-full min-h-[260px]'>
-                    <Icons.warning className='size-8 text-destructive mb-3' />
-                    <p className='font-semibold text-sm text-destructive'>Generation Failed</p>
-                    <p className='text-xs text-muted-foreground mt-1 max-w-sm'>{result.error}</p>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='mt-4'
-                      onClick={handleGenerate}
-                    >
-                      Retry Generation
-                    </Button>
-                  </div>
-                ) : (
-                  <div className='flex flex-col items-center justify-center rounded-lg border border-dashed p-10 text-center w-full min-h-[300px] text-muted-foreground'>
-                    <Icons.video className='size-12 stroke-[1.2] mb-3 opacity-50' />
-                    <p className='text-sm font-medium'>No video generated yet</p>
-                    <p className='text-xs max-w-xs mt-1'>
-                      Select a brand preset or enter a scene prompt and click "Generate Video".
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              {/* Tab 2: Brand Marker Module */}
+              <TabsContent value='brand' className='mt-0 space-y-4'>
+                <BrandMarkerStudio videoResult={result} aspectRatio={aspectRatio} />
+              </TabsContent>
+            </Tabs>
 
             {/* Execution & Queue Logs */}
             <Card>
@@ -521,6 +605,18 @@ export default function VideoStudio() {
             </Card>
           </div>
         </div>
+
+        {/* Video Generation History — full-width section below the studio grid */}
+        <VideoHistory
+          latestRecord={latestRecord}
+          onOpenInBrandMarker={(_url) => {
+            // TODO: switch to Brand Marker tab and load this URL
+          }}
+          onRegenerate={(p) => {
+            setPrompt(p);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
       </div>
     </PageContainer>
   );

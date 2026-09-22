@@ -1,31 +1,25 @@
-export type BrandId = "jade" | "doctorshield" | "jaguar";
-export type Platform = "linkedin" | "instagram" | "x" | "blog" | "reel";
-export type ContentType =
-  | "post"
-  | "thread"
-  | "caption"
-  | "carousel"
-  | "article"
-  | "script";
+export type BrandId = 'jade' | 'doctorshield' | 'jaguar';
+export type Platform = 'linkedin' | 'instagram' | 'x' | 'blog' | 'reel';
+export type ContentType = 'post' | 'thread' | 'caption' | 'carousel' | 'article' | 'script';
 export type AssetStatus =
-  | "draft"
-  | "pending_review"
-  | "compliance_failed"
-  | "approved"
-  | "rejected"
-  | "scheduled"
-  | "published";
-export type CampaignStatus = "queued" | "running" | "completed" | "failed";
-export type ComplianceVerdict = "PASS" | "REVIEW" | "FAIL";
-export type Risk = "LOW" | "MEDIUM" | "HIGH";
+  | 'draft'
+  | 'pending_review'
+  | 'compliance_failed'
+  | 'approved'
+  | 'rejected'
+  | 'scheduled'
+  | 'published';
+export type CampaignStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type ComplianceVerdict = 'PASS' | 'REVIEW' | 'FAIL';
+export type Risk = 'LOW' | 'MEDIUM' | 'HIGH';
 export type ReasonTag =
-  | "TOO_SALESY"
-  | "WRONG_CTA"
-  | "UNSUPPORTED_CLAIM"
-  | "WRONG_BRAND_VOICE"
-  | "BAD_LOCALIZATION"
-  | "OTHER";
-export type Language = "en" | "ms" | "id" | "th" | "zh";
+  | 'TOO_SALESY'
+  | 'WRONG_CTA'
+  | 'UNSUPPORTED_CLAIM'
+  | 'WRONG_BRAND_VOICE'
+  | 'BAD_LOCALIZATION'
+  | 'OTHER';
+export type Language = 'en' | 'ms' | 'id' | 'th' | 'zh';
 
 export type Brand = {
   id: BrandId;
@@ -186,4 +180,22 @@ export type VideoConfig = {
   supported_aspect_ratios: VideoAspectRatio[];
   supported_resolutions: VideoResolution[];
   prompt_presets: Record<string, string>;
+};
+
+export type VideoGenerationRecord = {
+  id: string;
+  brand_id?: string | null;
+  asset_id?: string | null;
+  prompt: string;
+  aspect_ratio: string;
+  resolution: string;
+  duration_secs: number;
+  model: string;
+  video_url?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS';
+  error_msg?: string | null;
+  request_id?: string | null;
+  created_at: string; // ISO 8601
 };

@@ -210,3 +210,21 @@ class VideoGenerateResponse(BaseModel):
 class VideoAttachRequest(BaseModel):
     asset_id: str
     video_url: str
+
+
+class VideoGenerationRecord(BaseModel):
+    id: str
+    brand_id: str | None = None
+    asset_id: str | None = None
+    prompt: str
+    aspect_ratio: str
+    resolution: str
+    duration_secs: int
+    model: str
+    video_url: str | None = None
+    file_name: str | None = None
+    file_size: int | None = None
+    status: Literal["COMPLETED", "FAILED", "IN_PROGRESS"]
+    error_msg: str | None = None
+    request_id: str | None = None
+    created_at: datetime
