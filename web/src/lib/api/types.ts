@@ -171,3 +171,83 @@ export type Metrics = {
   assets_total: number;
   assets_pending: number;
 };
+
+export type VideoAspectRatio = '9:16' | '16:9' | '1:1' | '4:3' | '3:4' | '21:9';
+export type VideoResolution = '768P' | '1080P' | '480P';
+export type VideoPromptExpansion = 'disabled' | 'balanced' | 'quality';
+
+export type VideoGenerateRequest = {
+  prompt: string;
+  duration?: number; // Capped at max 5 seconds
+  aspect_ratio?: VideoAspectRatio;
+  resolution?: VideoResolution;
+  prompt_expansion_mode?: VideoPromptExpansion;
+  asset_id?: string | null;
+};
+
+export type VideoFile = {
+  file_name?: string | null;
+  url: string;
+  content_type: string;
+  file_size?: number | null;
+};
+
+export type VideoGenerateResponse = {
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'IN_QUEUE' | 'FAILED';
+  request_id?: string | null;
+  video?: VideoFile | null;
+  expanded_prompt?: string | null;
+  asset_id?: string | null;
+  error?: string | null;
+  logs: string[];
+};
+
+export type VideoAttachRequest = {
+  asset_id: string;
+  video_url: string;
+};
+
+export type BufferShareMode = 'shareNow' | 'addToQueue' | 'shareNext' | 'customScheduled';
+export type BufferInstagramType = 'post' | 'story' | 'reel';
+
+export type BufferStatus = {
+  configured: boolean;
+  endpoint: string;
+};
+
+export type BufferChannel = {
+  id: string;
+  name: string;
+  display_name: string;
+  service: string;
+  avatar: string;
+  is_queue_paused: boolean;
+  organization_id: string;
+  organization_name: string;
+};
+
+export type BufferPublishRequest = {
+  channel_id: string;
+  text: string;
+  mode?: BufferShareMode;
+  due_at?: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
+  instagram_type?: BufferInstagramType | null;
+};
+
+export type BufferPublishResult = {
+  ok: boolean;
+  post_id: string | null;
+  due_at: string | null;
+  message: string;
+};
+
+export type VideoConfig = {
+  model: string;
+  max_duration_seconds: number;
+  default_aspect_ratio: VideoAspectRatio;
+  supported_aspect_ratios: VideoAspectRatio[];
+  supported_resolutions: VideoResolution[];
+  prompt_presets: Record<string, string>;
+};

@@ -19,6 +19,18 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'Video Studio',
+        url: '/dashboard/video',
+        icon: 'video',
+        items: []
+      },
+      {
+        title: 'Publish',
+        url: '/dashboard/publish',
+        icon: 'send',
+        items: []
+      },
+      {
         title: 'Review Queue',
         url: '/dashboard/review',
         icon: 'checks',

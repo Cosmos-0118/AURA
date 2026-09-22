@@ -202,3 +202,39 @@ class Metrics(BaseModel):
     compliance_failure_rate: float
     assets_total: int
     assets_pending: int
+
+
+class VideoGenerateRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, description="Text prompt describing the video scene")
+    duration: int = Field(
+        default=5,
+        ge=1,
+        le=5,
+        description="Duration in seconds. Strictly enforced to a maximum of 5 seconds.",
+    )
+    aspect_ratio: Literal["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"] = "9:16"
+    resolution: Literal["768P", "1080P", "480P"] = "768P"
+    prompt_expansion_mode: Literal["disabled", "balanced", "quality"] = "disabled"
+    asset_id: str | None = None
+
+
+class VideoFile(BaseModel):
+    file_name: str | None = None
+    url: str
+    content_type: str = "video/mp4"
+    file_size: int | None = None
+
+
+class VideoGenerateResponse(BaseModel):
+    status: Literal["COMPLETED", "IN_PROGRESS", "IN_QUEUE", "FAILED"]
+    request_id: str | None = None
+    video: VideoFile | None = None
+    expanded_prompt: str | None = None
+    asset_id: str | None = None
+    error: str | None = None
+    logs: list[str] = Field(default_factory=list)
+
+
+class VideoAttachRequest(BaseModel):
+    asset_id: str
+    video_url: str

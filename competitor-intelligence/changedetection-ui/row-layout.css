@@ -1,0 +1,137 @@
+/* AURA watch-list layout: keep the utility columns stable and let the title
+   column absorb the remaining width. The selector is scoped to the watchlist
+   so other changedetection.io tables keep their upstream layout. */
+@media (min-width: 768px) {
+  body.blueprint-watchlist .watch-table {
+    table-layout: fixed;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th,
+  body.blueprint-watchlist .watch-table > tbody > tr > td {
+    box-sizing: border-box;
+    padding: 14px 12px;
+    vertical-align: middle;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th:first-child,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.checkbox-uuid {
+    width: 62px;
+    padding-left: 16px;
+    padding-right: 8px;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th#mute-pause,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.watch-controls {
+    width: 78px;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th:nth-child(3),
+  body.blueprint-watchlist .watch-table > tbody > tr > td.watch-processor {
+    width: 76px;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th#h-lastchecked,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.last-checked,
+  body.blueprint-watchlist .watch-table > thead > tr > th#h-lastchanged,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.last-changed {
+    width: 124px;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th.empty-cell,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons {
+    width: 286px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.title-col {
+    min-width: 0;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.title-col .grid-wrapper {
+    min-width: 0;
+    gap: 12px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.title-col .favicon {
+    display: grid;
+    place-items: center;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.title-col .watch-text-info {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.title-col .watch-title {
+    line-height: 1.35;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.watch-controls > div {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons > div {
+    min-height: 32px;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons .cdio-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    padding: 7px 10px;
+    line-height: 1.2;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr {
+    min-height: 64px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  body.blueprint-watchlist #watch-table-wrapper {
+    overflow-x: auto;
+  }
+
+  body.blueprint-watchlist .watch-table {
+    min-width: 980px;
+  }
+
+  body.blueprint-watchlist .watch-table:has(td.restock-and-price) {
+    min-width: 1120px;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th#h-lastchecked,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.last-checked,
+  body.blueprint-watchlist .watch-table > thead > tr > th#h-lastchanged,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.last-changed {
+    width: 104px;
+  }
+
+  body.blueprint-watchlist .watch-table > thead > tr > th.empty-cell,
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons {
+    width: 230px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons > div {
+    gap: 5px;
+  }
+
+  body.blueprint-watchlist .watch-table > tbody > tr > td.buttons .cdio-btn {
+    min-width: 0;
+    padding-inline: 7px;
+  }
+}
+
+@media (max-width: 767px) {
+  body.blueprint-watchlist .watch-table > tbody > tr {
+    row-gap: 10px;
+    padding: 16px;
+  }
+}
