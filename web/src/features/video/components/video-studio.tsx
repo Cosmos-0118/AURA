@@ -18,13 +18,13 @@ import { Icons } from '@/components/icons';
 import { IconCopy, IconDownload } from '@tabler/icons-react';
 import {
   generateVideo,
-  getVideoConfig,
   attachVideoToAsset,
   listAssets,
 } from '@/lib/api/client';
 import type {
   VideoAspectRatio,
   VideoResolution,
+  VideoPromptExpansion,
   VideoGenerateResponse,
   Asset,
 } from '@/lib/api/types';
@@ -54,7 +54,7 @@ export default function VideoStudio() {
   const [prompt, setPrompt] = useState(PRESETS.jade.prompt);
   const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>('9:16');
   const [resolution, setResolution] = useState<VideoResolution>('768P');
-  const [promptExpansion, setPromptExpansion] = useState<'disabled' | 'balanced'>('disabled');
+  const [promptExpansion, setPromptExpansion] = useState<VideoPromptExpansion>('disabled');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [assets, setAssets] = useState<Asset[]>([]);
 
@@ -108,11 +108,12 @@ export default function VideoStudio() {
       } else if (response.error) {
         setLogs((prev) => [...prev, `Error: ${response.error}`]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Connection error';
       setResult({
         status: 'FAILED',
-        error: err?.message || 'Failed to generate video',
-        logs: [`Exception: ${err?.message || 'Connection error'}`],
+        error: message || 'Failed to generate video',
+        logs: [`Exception: ${message}`],
       });
     } finally {
       setIsGenerating(false);
@@ -128,8 +129,9 @@ export default function VideoStudio() {
         video_url: result.video.url,
       });
       setAttachStatus('Attached successfully to asset!');
-    } catch (err: any) {
-      setAttachStatus(`Failed to attach: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Connection error';
+      setAttachStatus(`Failed to attach: ${message}`);
     }
   };
 
@@ -324,7 +326,7 @@ export default function VideoStudio() {
                     <select
                       className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
                       value={promptExpansion}
-                      onChange={(e) => setPromptExpansion(e.target.value as any)}
+                      onChange={(e) => setPromptExpansion(e.target.value as VideoPromptExpansion)}
                       disabled={isGenerating}
                     >
                       <option value='disabled'>Disabled (Exact prompt)</option>
@@ -397,8 +399,11 @@ export default function VideoStudio() {
                         autoPlay
                         loop
                         playsInline
+                        aria-label='Generated marketing video preview'
                         className='h-full w-full object-contain'
-                      />
+                      >
+                        <track kind='captions' />
+                      </video>
                     </div>
 
                     <div className='flex flex-col gap-2 pt-2'>
