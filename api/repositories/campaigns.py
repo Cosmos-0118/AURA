@@ -62,6 +62,9 @@ def save_generated_campaign_package(
     lessons_json = json.dumps(lessons_used) if lessons_used else None
 
     # Check if campaign exists; update or insert
+    campaign_facts_val = content_pkg.get("campaign_facts")
+    facts_json = json.dumps(campaign_facts_val) if campaign_facts_val else None
+
     existing = db.execute("SELECT id FROM campaigns WHERE id = %s", (campaign_id,)).fetchone()
     if existing:
         db.execute(
@@ -72,20 +75,22 @@ def save_generated_campaign_package(
                 status = 'generated',
                 generation_provider = %s,
                 generation_model = %s,
-                lessons_used = %s
+                lessons_used = %s,
+                campaign_facts = %s,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             """,
-            (title, provider, model, lessons_json, campaign_id),
+            (title, provider, model, lessons_json, facts_json, campaign_id),
         )
     else:
         db.execute(
             """
             INSERT INTO campaigns
-                (id, brand_id, title, objective, language, thesis, target_audience, status, generation_provider, generation_model, lessons_used)
+                (id, brand_id, title, objective, language, thesis, target_audience, status, generation_provider, generation_model, lessons_used, campaign_facts)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, 'generated', %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s, %s, 'generated', %s, %s, %s, %s)
             """,
-            (campaign_id, brand_id, title, objective, language, thesis, target_audience, provider, model, lessons_json),
+            (campaign_id, brand_id, title, objective, language, thesis, target_audience, provider, model, lessons_json, facts_json),
         )
 
     # Platforms to persist
@@ -239,9 +244,25 @@ def submit_for_verification(db: Any, campaign_id: str) -> dict[str, Any]:
     if not c_row:
         raise ValueError(f"Campaign {campaign_id} not found")
 
+    curr_status = c_row.get("status") or "draft"
+    if curr_status == "pending_review":
+        return {
+            "success": True,
+            "campaign_id": campaign_id,
+            "status": "pending_review",
+            "message": "Campaign is already enqueued for verification.",
+        }
+
+    valid_statuses = ["generated", "edited", "draft"]
+    if curr_status not in valid_statuses:
+        raise ValueError(
+            f"Campaign cannot be submitted for verification from current status '{curr_status}'. "
+            f"Allowed states: {', '.join(valid_statuses)}."
+        )
+
     # Update campaign status
     db.execute(
-        "UPDATE campaigns SET status = 'pending_review' WHERE id = %s",
+        "UPDATE campaigns SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
         (campaign_id,),
     )
 
@@ -254,11 +275,12 @@ def submit_for_verification(db: Any, campaign_id: str) -> dict[str, Any]:
         campaign_id=campaign_id,
         event_type="submitted_for_review",
         description="Campaign submitted for human verification in Review Queue",
-        metadata={"brand_id": c_row["brand_id"], "thesis": c_row["thesis"]},
+        metadata={"brand_id": c_row["brand_id"], "thesis": c_row.get("thesis")},
     )
 
     return {
+        "success": True,
+        "campaign_id": campaign_id,
         "status": "pending_review",
         "message": "Campaign submitted for verification.",
-        "campaign_id": campaign_id,
     }

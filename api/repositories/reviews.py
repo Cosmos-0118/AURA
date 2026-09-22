@@ -14,6 +14,21 @@ except ImportError:
 
 def enqueue_for_review(db: Any, campaign_id: str) -> str:
     """Insert or update campaign in review_queue."""
+    existing = db.execute(
+        "SELECT id FROM review_queue WHERE campaign_id = %s",
+        (campaign_id,),
+    ).fetchone()
+    if existing:
+        db.execute(
+            """
+            UPDATE review_queue
+            SET status = 'pending_review', reviewer_note = NULL, feedback_tag = NULL, reviewed_at = NULL
+            WHERE id = %s
+            """,
+            (existing["id"],),
+        )
+        return str(existing["id"])
+
     rq_id = str(uuid4())
     db.execute(
         """

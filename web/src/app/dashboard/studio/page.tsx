@@ -10,7 +10,7 @@ import {
   getStudioCampaign,
   generateCampaignImage,
   generateCampaignVideo,
-  submitCampaignForReview
+  submitCampaign
 } from '@/lib/api/client';
 import type {
   BrandId,
@@ -92,6 +92,8 @@ function StudioContent() {
   const [editableVideoPrompt, setEditableVideoPrompt] = useState('');
   const [showPromptsAccordion, setShowPromptsAccordion] = useState(false);
   const [mediaTimestamp, setMediaTimestamp] = useState<number>(Date.now());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (campaignIdFromQuery) {
@@ -230,15 +232,27 @@ function StudioContent() {
 
   // Submit for Verification
   const handleSubmitReview = async () => {
-    if (!campaignSnapshot) return;
+    if (!campaignSnapshot || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      const updated = await submitCampaignForReview(campaignSnapshot.id);
-      setCampaignSnapshot(updated);
-      auraStore.addStudioCampaignPackage(updated);
-      toast.success('Campaign submitted for human verification!');
+      const result = await submitCampaign(campaignSnapshot.id);
+      const updatedCampaign: StudioCampaignDetail = {
+        ...campaignSnapshot,
+        status: 'pending_review'
+      };
+      setCampaignSnapshot(updatedCampaign);
+      auraStore.addStudioCampaignPackage(updatedCampaign);
+      toast.success(result.message || 'Campaign submitted for human verification!');
+      setTimeout(() => {
+        router.push('/dashboard/review');
+      }, 1200);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      setSubmitError(msg);
       toast.error(`Submission failed: ${msg}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -681,23 +695,86 @@ function StudioContent() {
                 <span>•</span>
                 <span>Created: {new Date(campaignSnapshot.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
+
+              {campaignSnapshot.campaign_facts && (
+                <div className='flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-border/40 text-[11px]'>
+                  <span className='font-semibold text-muted-foreground'>Campaign Facts:</span>
+                  {campaignSnapshot.campaign_facts.event_name && (
+                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
+                      📍 {campaignSnapshot.campaign_facts.event_name}
+                    </Badge>
+                  )}
+                  {campaignSnapshot.campaign_facts.date && (
+                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
+                      📅 {campaignSnapshot.campaign_facts.date}
+                    </Badge>
+                  )}
+                  {campaignSnapshot.campaign_facts.time && (
+                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
+                      ⏰ {campaignSnapshot.campaign_facts.time}
+                    </Badge>
+                  )}
+                  {campaignSnapshot.campaign_facts.location && (
+                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
+                      🏢 {campaignSnapshot.campaign_facts.location}
+                    </Badge>
+                  )}
+                  {campaignSnapshot.campaign_facts.price && (
+                    <Badge variant='secondary' className='text-[10px] font-normal py-0'>
+                      🎟️ {campaignSnapshot.campaign_facts.price}
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className='flex items-center gap-3 shrink-0'>
               <Button
                 variant={campaignSnapshot.status === 'pending_review' ? 'secondary' : 'default'}
                 onClick={handleSubmitReview}
-                disabled={campaignSnapshot.status === 'pending_review'}
+                disabled={campaignSnapshot.status === 'pending_review' || isSubmitting}
                 size='default'
                 className='font-bold'
               >
-                <Icons.checks className='size-4 mr-2' />
-                {campaignSnapshot.status === 'pending_review'
-                  ? 'Submitted to Review'
-                  : 'Submit for Verification'}
+                {isSubmitting ? (
+                  <>
+                    <Icons.spinner className='size-4 mr-2 animate-spin' />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Icons.checks className='size-4 mr-2' />
+                    {campaignSnapshot.status === 'pending_review'
+                      ? 'Submitted to Review'
+                      : 'Submit for Verification'}
+                  </>
+                )}
               </Button>
             </div>
           </div>
+
+          {/* Submission Error Banner */}
+          {submitError && (
+            <div className='rounded-xl border border-destructive/30 bg-destructive/10 p-4 flex items-center justify-between gap-4 text-destructive'>
+              <div className='flex items-center gap-3'>
+                <Icons.alertCircle className='size-5 shrink-0 text-destructive' />
+                <div className='text-xs'>
+                  <strong className='font-bold text-destructive'>
+                    Campaign Submission Failed
+                  </strong>
+                  <p className='text-destructive/90 mt-0.5'>{submitError}</p>
+                </div>
+              </div>
+              <Button
+                size='sm'
+                variant='ghost'
+                className='text-destructive hover:text-destructive hover:bg-destructive/20 text-xs'
+                onClick={() => setSubmitError(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
 
           {/* Submission Notice Banner */}
           {campaignSnapshot.status === 'pending_review' && (

@@ -192,6 +192,24 @@ export type StudioCampaignDetail = {
   media: CampaignMediaItem[];
   image_prompt?: string | null;
   video_prompt?: string | null;
+  campaign_facts?: CampaignFacts | null;
+};
+
+export type CampaignFacts = {
+  event_name?: string | null;
+  date?: string | null;
+  time?: string | null;
+  location?: string | null;
+  price?: string | null;
+  cta?: string | null;
+  brand?: string | null;
+};
+
+export type CampaignSubmitResult = {
+  success: boolean;
+  campaign_id: string;
+  status: string;
+  message: string;
 };
 
 export type OperationalModeInfo = {

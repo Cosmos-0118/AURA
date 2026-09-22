@@ -127,6 +127,7 @@ def init_sqlite_db(conn: sqlite3.Connection):
           platforms TEXT NOT NULL DEFAULT '["linkedin"]',
           target_audience TEXT,
           status TEXT NOT NULL DEFAULT 'draft',
+          campaign_facts TEXT,
           error TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -252,6 +253,12 @@ def init_sqlite_db(conn: sqlite3.Connection):
     )
     conn.commit()
 
+    try:
+        cursor.execute("ALTER TABLE campaigns ADD COLUMN campaign_facts TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
     # Seed initial brands if empty
     cursor.execute("SELECT COUNT(*) FROM brands")
     if cursor.fetchone()[0] == 0:
@@ -339,6 +346,12 @@ def get_db() -> Generator[Any, None, None]:
             raw_conn = None
 
         if raw_conn is not None:
+            try:
+                with raw_conn.cursor() as cur:
+                    cur.execute("ALTER TABLE campaigns ADD COLUMN campaign_facts TEXT")
+                raw_conn.commit()
+            except Exception:
+                pass
             wrapper = MySQLConnectionWrapper(raw_conn)
             try:
                 yield wrapper

@@ -211,6 +211,16 @@ class CampaignMediaItem(BaseModel):
     status: str = "pending"
 
 
+class CampaignFacts(BaseModel):
+    event_name: str | None = None
+    date: str | None = None
+    time: str | None = None
+    location: str | None = None
+    price: str | None = None
+    cta: str | None = None
+    brand: str | None = None
+
+
 class StudioCampaignDetail(BaseModel):
     id: str
     brand_id: BrandId
@@ -227,9 +237,17 @@ class StudioCampaignDetail(BaseModel):
     media: list[CampaignMediaItem] = Field(default_factory=list)
     image_prompt: str | None = None
     video_prompt: str | None = None
+    campaign_facts: CampaignFacts | None = None
 
 
 class MediaGenerateRequest(BaseModel):
     prompt: str | None = None
     model: str | None = None
+
+
+class CampaignSubmitResult(BaseModel):
+    success: bool = True
+    campaign_id: str
+    status: str = "pending_review"
+    message: str
 

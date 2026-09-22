@@ -20,8 +20,10 @@ try:
         BrandId,
         Campaign,
         CampaignCreate,
+        CampaignFacts,
         CampaignMediaItem,
         CampaignPlatformContentItem,
+        CampaignSubmitResult,
         MediaGenerateRequest,
         StudioCampaignCreate,
         StudioCampaignDetail,
@@ -43,8 +45,10 @@ except ImportError:
         BrandId,
         Campaign,
         CampaignCreate,
+        CampaignFacts,
         CampaignMediaItem,
         CampaignPlatformContentItem,
+        CampaignSubmitResult,
         MediaGenerateRequest,
         StudioCampaignCreate,
         StudioCampaignDetail,
@@ -342,6 +346,18 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
 
     platforms_val = [c.platform for c in contents] or ["linkedin"]
 
+    raw_facts = c_row.get("campaign_facts")
+    facts_obj = None
+    if isinstance(raw_facts, str):
+        try:
+            facts_data = json.loads(raw_facts)
+            if isinstance(facts_data, dict):
+                facts_obj = CampaignFacts(**facts_data)
+        except Exception:
+            pass
+    elif isinstance(raw_facts, dict):
+        facts_obj = CampaignFacts(**raw_facts)
+
     return StudioCampaignDetail(
         id=str(c_row["id"]),
         brand_id=c_row["brand_id"],
@@ -358,6 +374,7 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
         media=media,
         image_prompt=img_prompt,
         video_prompt=vid_prompt,
+        campaign_facts=facts_obj,
     )
 
 
@@ -384,12 +401,26 @@ def generate_campaign_image(
                     prompt = c["image_generation_prompt"]
                     break
         if not prompt:
-            brand_title = detail["campaign"]["brand_id"].upper()
+            brand_id = detail["campaign"]["brand_id"]
+            brand_title = brand_id.upper()
             thesis = detail["campaign"]["thesis"]
+            raw_facts = detail["campaign"].get("campaign_facts")
+            facts_dict = {}
+            if isinstance(raw_facts, str):
+                try:
+                    facts_dict = json.loads(raw_facts)
+                except Exception:
+                    pass
+            elif isinstance(raw_facts, dict):
+                facts_dict = raw_facts
+
+            event_title = facts_dict.get("event_name") or f"COME TO {brand_title} · {thesis[:32].upper()}"
+            event_date = facts_dict.get("date") or "OCTOBER 2026"
+            event_loc = facts_dict.get("location") or "SINGAPORE"
             prompt = (
                 f'Commercial advertising poster with bold typography text overlay. '
-                f'Large prominent headline text overlay across the top reads: "COME TO {brand_title} · {thesis[:32].upper()}". '
-                f'Secondary sub-headline text overlay reads: "INSTITUTIONAL RISK PROTECTION · SINGAPORE". '
+                f'Large prominent headline text overlay across the top reads: "{event_title.upper()}". '
+                f'Secondary sub-headline text overlay reads: "{event_date.upper()} · {event_loc.upper()}". '
                 f'High-contrast graphic design poster layout with legible typography text overlay.'
             )
 
@@ -519,13 +550,14 @@ def generate_campaign_video(
     )
 
 
-@router.post("/{campaign_id}/submit-review")
-def submit_campaign_review(campaign_id: str):
+@router.post("/{campaign_id}/submit", response_model=CampaignSubmitResult)
+@router.post("/{campaign_id}/submit-review", response_model=CampaignSubmitResult)
+def submit_campaign_review(campaign_id: str) -> CampaignSubmitResult:
     """Transition campaign status from 'generated' to 'pending_review' and enqueue into review_queue."""
     try:
         with transaction() as db:
             result = campaign_repo.submit_for_verification(db, campaign_id)
-        return result
+        return CampaignSubmitResult(**result)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

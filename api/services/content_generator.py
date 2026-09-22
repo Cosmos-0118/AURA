@@ -98,10 +98,11 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Don't let policy exclusions blindside your atelier. Speak with Jade by JA Assure.",
         },
         "image_generation_prompt": (
-            "Commercial advertising poster with bold typography text overlay. "
-            "Large prominent headline text overlay across the top in elegant gold lettering reads: \"COME TO JADE · VAULT AUDIT 2026\". "
-            "Secondary sub-headline text overlay reads: \"INSTITUTIONAL JEWELLERY SECURITY · BESPOKE ADVISORY\". "
-            "High-contrast graphic design poster layout with clean typography text overlay on an editorial photograph of a high-security titanium vault with sparkling emeralds and diamond necklaces on dark velvet."
+            'Commercial advertising poster with bold typography text overlay for Jade by JA Assure. '
+            'Large prominent headline text overlay across the top reads: "JADE VAULT AUDIT 2026". '
+            'Secondary sub-headline text overlay reads: "OCT 15 | MARINA BAY SINGAPORE". '
+            'Third line text reads: "COMPLIMENTARY EXECUTIVE BRIEFING". '
+            'High-contrast luxury graphic design poster layout with clean typography text overlay on an editorial photograph of a high-security titanium vault with sparkling emeralds and diamond necklaces.'
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 shot of an armoured courier in elegant black uniform locking a biometric titanium transit case, "
@@ -111,6 +112,15 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
     "doctorshield": {
         "campaign_title": "Navigating Medico-Legal Bounds and Council Inquiry Protocols",
         "core_message": "Empathetic, calm, peer-guided professional protection for medical practitioners.",
+        "campaign_facts": {
+            "event_name": "Medical Council Inquiry Protocols Workshop",
+            "date": "Sep 24, 2026",
+            "time": "10:00 AM - 4:00 PM SGT",
+            "location": "Suntec Singapore Convention Centre",
+            "price": "Free Admission for Registered Clinicians",
+            "cta": "Register for Collegial Inquiry Guidance",
+            "brand": "DoctorShield by JA Assure",
+        },
         "linkedin": {
             "title": "Three Things Clinicians Should Know About Council Inquiries",
             "content": (
@@ -118,21 +128,23 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
                 "1. Early legal counsel preserves clinical documentation integrity and reduces procedural anxiety.\n"
                 "2. Disciplinary committees scrutinize peer-reviewed standards of clinical practice.\n"
                 "3. DoctorShield provides calm, experienced medico-legal guidance every step of the journey, ensuring your professional reputation is defended with diligence.\n\n"
+                "Join us on Sep 24 from 10:00 AM to 4:00 PM for a free, in-person workshop on Medical Council inquiry protocols at Suntec Singapore.\n\n"
                 "Your clinical focus belongs with your patients. Let our dedicated legal specialists support your practice."
             ),
             "hashtags": ["#DoctorShield", "#MedicalIndemnity", "#ClinicalGovernance", "#DoctorWellbeing"],
         },
         "x": {
             "content": (
-                "Facing a clinical dispute is emotionally taxing. Early medico-legal guidance is critical to protecting both practitioner and patient.\n\n"
-                "Read DoctorShield's practical inquiry response guide: jaassure.com/doctorshield"
+                "Facing a clinical dispute is emotionally taxing. Early medico-legal guidance is critical.\n\n"
+                "Free in-person workshop: Medical Council Inquiry Protocols on Sep 24 at Suntec Singapore.\n\n"
+                "Register now: jaassure.com/doctorshield"
             ),
             "hashtags": ["#HealthcareLaw", "#MedicalIndemnity"],
         },
         "instagram": {
             "caption": (
                 "Practicing medicine requires uncompromised focus. When legal or ethical questions arise, having experienced peer counsel brings peace of mind.\n\n"
-                "DoctorShield by JA Assure stands beside medical practitioners with collegial indemnity and proactive risk guidance."
+                "DoctorShield by JA Assure invites clinicians to our free in-person workshop on Medical Council Inquiry Protocols, Sep 24 at Suntec Singapore."
             ),
             "visual_concept": "Serene, professional photograph of a female physician in white coat consulting notes in a modern, sunlit clinic office, calm expressions, soft natural tones.",
             "hashtags": ["#DoctorShield", "#HealthcareProfessionals", "#ClinicManagement"],
@@ -141,7 +153,8 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "title": "Telemedicine Consent & Medico-Legal Risk Management in ASEAN",
             "content": (
                 "As remote consultations expand, practitioners must maintain documentation rigor matching physical consultations.\n\n"
-                "This guide details three clinical governance safeguards for telemedicine record-keeping and statutory compliance."
+                "This guide details three clinical governance safeguards for telemedicine record-keeping and statutory compliance.\n\n"
+                "Upcoming Event: Medical Council Inquiry Protocols Workshop on Sep 24 at Suntec Singapore (Free Admission)."
             ),
         },
         "reel": {
@@ -154,51 +167,62 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
                 {"scene": 3, "visual": "Confident consultation room environment", "duration": "30-45s"},
             ],
             "voiceover": "Early advice preserves documentation integrity. DoctorShield provides dedicated peer legal defense.",
-            "captions": "Calm, experienced medical defense. DoctorShield by JA Assure.",
+            "captions": "Sep 24 Workshop · Suntec Singapore. DoctorShield by JA Assure.",
         },
         "image_generation_prompt": (
-            "Commercial advertising poster with bold typography text overlay. "
-            "Large prominent headline text overlay across the top reads: \"STAND PROTECTED WITH DOCTORSHIELD\". "
-            "Secondary sub-headline text overlay reads: \"PEER-GUIDED MEDICO-LEGAL DEFENSE · SINGAPORE & ASEAN\". "
-            "Clean graphic design poster layout with high-contrast text overlay on a serene, professional photograph of a clinic consultation room."
+            'A professional event poster for DoctorShield by JA Assure featuring the title "Medical Council Inquiry Protocols Workshop", '
+            'date "Sep 24 | 10 AM - 4 PM", location "Suntec Singapore", admission "Free Admission for Clinicians", '
+            'clean modern typography, corporate healthcare aesthetic, warm natural lighting, high-contrast graphic design poster layout, crisp legible text overlay.'
         ),
         "video_generation_prompt": (
-            "Cinematic vertical 9:16 slow push-in shot of a modern medical clinic consultation room, daylight through large windows, "
-            "a stethoscope and medical reference books resting neatly on a dark wooden desk, calm peaceful atmosphere"
+            "Cinematic vertical 9:16 shot of a composed senior physician and legal counsel discussing case documentation in a modern conference room, "
+            "warm natural lighting, slow dolly zoom, reassuring medical atmosphere, 4k"
         ),
     },
     "jaguar": {
-        "campaign_title": "ASEAN Bonded Logistics Telemetry & Chain-of-Custody Assurance",
-        "core_message": "Digital telemetry tracking meets rapid underwriting dispatch for high-value cargo in transit.",
+        "campaign_title": "Cross-Border Telemetry & Chain of Custody Freight Underwriting",
+        "core_message": "Operational, sensor-driven telemetry freight assurance across ASEAN land borders.",
+        "campaign_facts": {
+            "event_name": "Cross-Border Transit Telemetry Masterclass",
+            "date": "Nov 12, 2026",
+            "time": "9:30 AM - 1:00 PM SGT",
+            "location": "Changi Logistics Centre, Singapore",
+            "price": "Complimentary Industry Session",
+            "cta": "Book Logistics Fleet Underwriting Review",
+            "brand": "Jaguar Transit by JA Assure",
+        },
         "linkedin": {
-            "title": "Cross-Border Cargo Chain of Custody in ASEAN",
+            "title": "Closing the 48-Hour Cross-Dock Handover Exposure Window",
             "content": (
-                "In bonded transit between Singapore and Kuala Lumpur, handover checkpoints are where 68% of discrepancies occur.\n\n"
-                "Jaguar Transit combines multi-sensor telemetry tracking with real-time underwriting endorsements to keep your high-value cargo protected door-to-door.\n\n"
-                "From tamper-evident seal verification to expedited customs bonded corridor handling, our logistics desk provides the operational rigor required by modern supply chains.\n\n"
-                "Request a corridor risk assessment with our freight underwriters."
+                "When cargo moves across borders, traditional marine policies leave critical gaps during customs inspections.\n\n"
+                "Jaguar Transit integrates active IoT telemetry with insurance underwriting to provide unbroken chain-of-custody verification.\n\n"
+                "Join our Cross-Border Transit Telemetry Masterclass on Nov 12 at Changi Logistics Centre, Singapore.\n\n"
+                "Book your logistics fleet underwriting review with Jaguar Transit by JA Assure."
             ),
-            "hashtags": ["#LogisticsRisk", "#FreightSecurity", "#ASEANTrade", "#SupplyChainSafety"],
+            "hashtags": ["#LogisticsRisk", "#SupplyChainSecurity", "#CargoInsurance", "#JaguarTransit"],
         },
         "x": {
             "content": (
-                "High-value logistics is not about hope—it is about verifiable telemetry and bonded protocol enforcement.\n\n"
-                "How is your cargo secured at border clearances? Learn about Jaguar Transit: jaassure.com/jaguar"
+                "Where does your cargo risk peak? 68% of discrepancies happen at secondary customs handovers.\n\n"
+                "Attend the Transit Telemetry Masterclass: Nov 12 at Changi Logistics Centre: jaassure.com/jaguar"
             ),
-            "hashtags": ["#Logistics", "#CargoProtection"],
+            "hashtags": ["#FreightSecurity", "#CargoTech"],
         },
         "instagram": {
             "caption": (
-                "Precision freight demands precision protection. Jaguar Transit connects real-time IoT cargo sensors with instant underwriting binding across ASEAN transit corridors."
+                "Real-time sensor telemetry meets institutional freight underwriting.\n\n"
+                "Jaguar Transit ensures every sealed container is tracked and defended across Southeast Asia's critical bonded transit corridors.\n\n"
+                "Masterclass on Nov 12 at Changi Logistics Centre. Register via bio."
             ),
-            "visual_concept": "High-contrast dynamic photograph of a high-tech logistics truck with illuminated digital tamper seals passing through a Singapore port bonded terminal at dusk.",
-            "hashtags": ["#JaguarTransit", "#LogisticsTech", "#CargoSecurity"],
+            "visual_concept": "Moody twilight photography of an articulated commercial container truck with glowing digital electronic seals parked at a secure customs bonded interchange.",
+            "hashtags": ["#JaguarTransit", "#LogisticsOperations", "#FleetManagement"],
         },
         "blog": {
-            "title": "Why Generic Marine Cargo Policies Fail at Overland Land Customs",
+            "title": "Cross-Dock Delay Liability & Telemetry-Backed Cargo Underwriting",
             "content": (
                 "Traditional marine insurance clauses were written for maritime vessels, creating dangerous gaps at secondary land border clearance stations.\n\n"
-                "Jaguar Transit addresses cross-dock delays and bonded corridor regulations directly."
+                "Jaguar Transit addresses cross-dock delays and bonded corridor regulations directly.\n\n"
+                "Industry Briefing: Cross-Border Transit Telemetry Masterclass, Nov 12 at Changi Logistics Centre (Complimentary)."
             ),
         },
         "reel": {
@@ -211,13 +235,14 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
                 {"scene": 3, "visual": "Jaguar telemetry map dashboard displaying green status", "duration": "25-40s"},
             ],
             "voiceover": "Jaguar Transit embeds real-time sensor tracking into your insurance endorsement.",
-            "captions": "Real-time telemetry cargo protection. Jaguar Transit by JA Assure.",
+            "captions": "Nov 12 Masterclass · Changi Logistics Centre. Jaguar Transit by JA Assure.",
         },
         "image_generation_prompt": (
-            "Commercial advertising poster with bold typography text overlay. "
-            "Large prominent headline text overlay across the top reads: \"CHAIN OF CUSTODY ASSURED · JAGUAR TRANSIT\". "
-            "Secondary sub-headline text overlay reads: \"REAL-TIME TELEMETRY FREIGHT ENDORSEMENT\". "
-            "High-contrast industrial graphic design poster layout with bold text overlay on a high-tech container freight truck with glowing digital security seals at dusk."
+            'Commercial advertising poster with bold typography text overlay for Jaguar Transit by JA Assure. '
+            'Large prominent headline text overlay across the top reads: "TRANSIT TELEMETRY MASTERCLASS". '
+            'Secondary sub-headline text overlay reads: "NOV 12 | CHANGI LOGISTICS CENTRE". '
+            'Third line text reads: "REAL-TIME TELEMETRY FREIGHT ENDORSEMENT". '
+            'High-contrast industrial graphic design poster layout with bold text overlay on a modern telemetry container freight truck with glowing digital security seals at dusk.'
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 tracking shot alongside a sleek commercial freight truck driving across a modern cable-stayed bridge at night, "
@@ -243,21 +268,60 @@ def build_system_prompt(brand_id: str, lessons: list[dict[str, Any]]) -> str:
             + "\n\nEnforce these corrections strictly across all platforms."
         )
 
-    return f"""You are AURA, an elite AI Marketing Operations agent for JA Assure (insurance & risk management group).
-You are generating a complete, multi-platform B2B marketing campaign for the brand: {brand['name']} ({brand['tagline']}).
+    return f"""You are AURA, an AI marketing campaign generator for JA Assure.
+Generate a complete marketing campaign based on the provided campaign configuration.
 
-BRAND PERSONALITY:
-{brand['personality']}
-
-TARGET AUDIENCE:
-{brand['audience']}
-
-BRAND VOICE & TONE:
-{brand['voice']}
-
-COMPLIANCE REQUIREMENTS:
-{brand['compliance']}
+BRAND: {brand['name']} ({brand['tagline']})
+BRAND PERSONALITY: {brand['personality']}
+TARGET AUDIENCE: {brand['audience']}
+BRAND VOICE & TONE: {brand['voice']}
+COMPLIANCE REQUIREMENTS: {brand['compliance']}
 {lessons_text}
+
+IMPORTANT - CAMPAIGN CONSISTENCY DIRECTIVES:
+The generated campaign content and generated visual prompt MUST be consistent with each other.
+The LinkedIn, Instagram, X, Reel, Blog, and Media outputs are part of ONE campaign. Do not invent conflicting dates, times, event names, offers, claims, locations, or CTAs between platforms.
+
+If the campaign content contains a specific factual event detail such as:
+- Event name
+- Date
+- Time
+- Location
+- Registration deadline
+- Price/free admission
+- Workshop title
+- Offer
+- CTA
+- Website or registration instruction
+then the image_generation_prompt SHOULD incorporate those details into the visual composition when appropriate.
+
+For example, if the campaign says:
+"Join us on Sep 24 from 10 am to 4 pm for a free, in-person workshop on Medical Council inquiry protocols at Suntec Singapore"
+then the image prompt should be:
+"A professional event poster for DoctorShield by JA Assure featuring the title \\"Medical Council Inquiry Protocols Workshop\\", date \\"Sep 24, 10 AM - 4 PM\\", location \\"Suntec Singapore\\", admission \\"Free Admission\\", clean modern typography, corporate healthcare aesthetic, warm natural lighting, high-resolution graphic design poster layout."
+
+DO NOT generate an image prompt that contradicts the campaign text.
+DO NOT generate an image prompt with a different event date or a generic photo if the campaign is promoting a specific dated event.
+DO NOT leave out essential event details if the campaign is structured as an invitation or event announcement.
+
+STRICT RULES FOR IMAGE TEXT:
+1. When generating an image prompt, design it as an event poster, promotional banner, or marketing graphic with intentional typography overlay.
+2. Put exact text in quotes in the prompt.
+3. Keep the text short and punchy so the text-to-image model can render it cleanly.
+4. Include at most 3-4 text elements:
+   - Event Title or Main Headline (e.g., "Medical Council Inquiry Workshop")
+   - Date / Time (e.g., "Sep 24 | 10 AM - 4 PM")
+   - Location or Format (e.g., "Suntec Singapore" or "In-Person Workshop")
+   - Subtitle or Brand / Admission (e.g., "DoctorShield by JA Assure" or "Free Admission")
+5. Explicitly specify:
+   - Placement (e.g., "headline centered at the top", "date and location in a clean lower banner")
+   - Font style (e.g., "clean modern sans-serif typography", "bold corporate lettering")
+   - Legibility (e.g., "high contrast between text and background", "crisp readable lettering", "no gibberish text")
+6. Do NOT overload the image with paragraphs of text. Only key headlines, dates, and locations.
+7. Background visual must complement the theme (e.g. professional healthcare setting for DoctorShield, high-security luxury vault for Jade, telemetry cargo freight for Jaguar Transit).
+8. The visual style must match the brand aesthetic.
+9. Always specify clean graphic design poster layout with professional typography.
+10. The image prompt must directly reflect the content generated in the LinkedIn/Instagram/Blog/Reel posts.
 
 OUTPUT INSTRUCTIONS:
 You MUST respond with a single, strictly valid JSON object. No Markdown code blocks, no preamble, no commentary.
@@ -265,6 +329,15 @@ The JSON must have this exact structure:
 {{
   "campaign_title": "...",
   "core_message": "...",
+  "campaign_facts": {{
+    "event_name": "...",
+    "date": "...",
+    "time": "...",
+    "location": "...",
+    "price": "...",
+    "cta": "...",
+    "brand": "{brand['name']}"
+  }},
   "linkedin": {{
     "title": "...",
     "content": "...",
@@ -293,12 +366,26 @@ The JSON must have this exact structure:
     "voiceover": "...",
     "captions": "..."
   }},
-  "image_generation_prompt": "CRITICAL: MUST be a detailed prompt for a commercial marketing poster with BOLD TYPOGRAPHY TEXT OVERLAY. You MUST format this prompt as: 'Commercial advertising poster with bold typography text overlay. Large prominent headline text overlay across the top reads: \"[PUNCHY CAMPAIGN HEADLINE OR CALL TO ACTION IN QUOTES, e.g. COME TO JADE · VAULT AUDIT 2026]\". Secondary sub-headline text overlay reads: \"[SUB-HEADLINE IN QUOTES, e.g. INSTITUTIONAL JEWELLERY SECURITY · SINGAPORE]\". High-contrast graphic design poster layout with legible typography text overlay on top of [DESCRIPTION OF SCENE]'. NEVER generate a bare photographic prompt without text overlay.",
+  "image_generation_prompt": "A professional event poster for {brand['name']} by JA Assure featuring the title \\"[Exact Headline/Title in Quotes]\\", date/time \\"[Date/Time in Quotes]\\", location \\"[Location in Quotes]\\", [Visual Scene Description], clean modern typography, high contrast between text and background, crisp readable lettering, corporate aesthetic graphic design poster layout.",
   "video_generation_prompt": "..."
 }}
-
-CRITICAL REQUIREMENT: The image_generation_prompt MUST NEVER be just a description of a photo. It MUST ALWAYS command bold typography text overlay with quotes (e.g. 'Large prominent headline text overlay across the top reads: \"COME TO JADE · VAULT AUDIT\"').
 """
+
+
+def _normalize_campaign_facts(pkg: dict[str, Any], brand_id: str, thesis: str) -> dict[str, Any]:
+    facts = pkg.get("campaign_facts")
+    if not isinstance(facts, dict):
+        facts = {}
+    brand_name = BRAND_KNOWLEDGE.get(brand_id, {}).get("name", brand_id.capitalize())
+    return {
+        "event_name": facts.get("event_name") or pkg.get("campaign_title") or thesis or f"{brand_name} Briefing 2026",
+        "date": facts.get("date") or "Q4 2026",
+        "time": facts.get("time") or "2:00 PM - 5:00 PM SGT",
+        "location": facts.get("location") or "Singapore Financial District",
+        "price": facts.get("price") or "Complimentary Admission",
+        "cta": facts.get("cta") or "Register for Advisory Consultation",
+        "brand": facts.get("brand") or f"{brand_name} by JA Assure",
+    }
 
 
 def generate_campaign_content(
@@ -317,6 +404,8 @@ def generate_campaign_content(
         res = json.loads(json.dumps(demo))
         if thesis:
             res["campaign_title"] = thesis[:80]
+        if "campaign_facts" not in res or not isinstance(res.get("campaign_facts"), dict):
+            res["campaign_facts"] = _normalize_campaign_facts(res, brand_id, thesis)
         return res
 
     api_key = os.environ.get("GROQ_API_KEY")
@@ -338,6 +427,7 @@ def generate_campaign_content(
 - Target Audience Focus: {target_audience or 'Default brand audience'}
 
 Generate full, high-quality content for each requested platform, plus detailed image_generation_prompt and video_generation_prompt.
+Ensure strict factual alignment between the copy and the image poster prompt.
 Output ONLY JSON."""
 
     # Using Groq's high-speed reasoning / production model with automatic fallback
@@ -360,7 +450,10 @@ Output ONLY JSON."""
                 response_format={"type": "json_object"},
             )
             raw_content = response.choices[0].message.content or "{}"
-            return json.loads(raw_content)
+            parsed = json.loads(raw_content)
+            if "campaign_facts" not in parsed or not isinstance(parsed.get("campaign_facts"), dict):
+                parsed["campaign_facts"] = _normalize_campaign_facts(parsed, brand_id, thesis)
+            return parsed
         except json.JSONDecodeError as exc:
             raise ValueError(f"Groq returned non-JSON response: {exc}") from exc
         except Exception as exc:

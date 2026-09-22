@@ -435,8 +435,10 @@ export const auraStore = {
   },
 
   addStudioCampaignPackage(campaign: import('../api/types').StudioCampaignDetail) {
-    const mediaUrl = campaign.media.find((m) => m.local_path)?.local_path || null;
-    const newAssets: ExtendedAsset[] = campaign.contents.map((item, idx) => ({
+    if (!campaign) return;
+    const mediaUrl = campaign.media?.find((m) => m.local_path)?.local_path || null;
+    const contents = campaign.contents || [];
+    const newAssets: ExtendedAsset[] = contents.map((item, idx) => ({
       id: item.id || `ast_${Date.now()}_${idx}`,
       campaign_id: campaign.id,
       brand_id: campaign.brand_id,
@@ -451,7 +453,7 @@ export const auraStore = {
           : 'post',
       variant: 'A',
       language: campaign.language,
-      title: item.title || `${item.platform.toUpperCase()} Asset: ${campaign.thesis.slice(0, 40)}`,
+      title: item.title || `${item.platform.toUpperCase()} Asset: ${(campaign.thesis || '').slice(0, 40)}`,
       body: item.content,
       hashtags: item.hashtags || [],
       media_url: mediaUrl,

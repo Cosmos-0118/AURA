@@ -14,7 +14,8 @@ import type {
   ReviewAction,
   Snapshot,
   StudioCampaignCreate,
-  StudioCampaignDetail
+  StudioCampaignDetail,
+  CampaignSubmitResult
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
@@ -425,10 +426,29 @@ export async function generateCampaignVideo(
   );
 }
 
-export async function submitCampaignForReview(id: string): Promise<StudioCampaignDetail> {
-  return await request<StudioCampaignDetail>(
-    `/api/campaigns/${encodeURIComponent(id)}/submit-review`,
-    { method: 'POST' }
-  );
+export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
+  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
+  try {
+    const res = await request<CampaignSubmitResult>(
+      `/api/campaigns/${encodeURIComponent(id)}/submit`,
+      { method: 'POST' }
+    );
+    return res;
+  } catch (err: unknown) {
+    if (isMock) {
+      return {
+        success: true,
+        campaign_id: id,
+        status: 'pending_review',
+        message: 'Campaign submitted for verification (Mock Mode).'
+      };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(msg || 'Failed to submit campaign for verification', { cause: err });
+  }
+}
+
+export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
+  return submitCampaign(id);
 }
 
