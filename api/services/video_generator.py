@@ -48,7 +48,7 @@ def generate_video(
             "status": "completed",
         }
 
-    fal_key = os.environ.get("FAL_KEY")
+    fal_key = os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")
     if not fal_key:
         create_demo_video(target_path)
         file_size = target_path.stat().st_size if target_path.exists() else 1024
@@ -63,6 +63,8 @@ def generate_video(
             "model": chosen_model,
             "status": "completed",
         }
+
+    os.environ["FAL_KEY"] = fal_key
 
     try:
         import fal_client

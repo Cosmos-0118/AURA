@@ -77,37 +77,53 @@ def generate_image(
         }
 
     # Live generation
-    fal_key = os.environ.get("FAL_KEY")
+    fal_key = os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")
     if fal_key:
+        os.environ["FAL_KEY"] = fal_key
         try:
             import fal_client
 
-            result = fal_client.subscribe(
-                chosen_model,
-                arguments={"prompt": prompt, "image_size": "landscape_16_9"},
-                with_logs=True,
-            )
-            images = result.get("images", [])
-            if images and "url" in images[0]:
-                image_url = images[0]["url"]
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.get(image_url)
-                    resp.raise_for_status()
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(target_path, "wb") as f:
-                        f.write(resp.content)
+            models_to_try = [chosen_model]
+            if "fal-ai/flux/schnell" not in models_to_try:
+                models_to_try.append("fal-ai/flux/schnell")
 
-                file_size = target_path.stat().st_size
-                return {
-                    "local_path": rel_path,
-                    "url": f"/{rel_path}",
-                    "filename": filename,
-                    "mime_type": "image/png",
-                    "file_size": file_size,
-                    "provider": "fal",
-                    "model": chosen_model,
-                    "status": "completed",
-                }
+            last_exc = None
+            for m in models_to_try:
+                try:
+                    result = fal_client.subscribe(
+                        m,
+                        arguments={"prompt": prompt, "image_size": "landscape_16_9"},
+                        with_logs=False,
+                    )
+                    images = result.get("images", [])
+                    if images and "url" in images[0]:
+                        image_url = images[0]["url"]
+                        with httpx.Client(timeout=30.0) as client:
+                            resp = client.get(image_url)
+                            resp.raise_for_status()
+                            target_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(target_path, "wb") as f:
+                                f.write(resp.content)
+
+                        file_size = target_path.stat().st_size
+                        return {
+                            "local_path": rel_path,
+                            "url": f"/{rel_path}",
+                            "filename": filename,
+                            "mime_type": "image/png",
+                            "file_size": file_size,
+                            "provider": "fal",
+                            "model": m,
+                            "status": "completed",
+                        }
+                except Exception as e:
+                    last_exc = e
+                    if "not found" in str(e).lower() or "404" in str(e):
+                        continue
+                    raise
+
+            if last_exc:
+                raise RuntimeError(f"FAL image generation failed: {last_exc}")
         except Exception as exc:
             raise RuntimeError(f"FAL image generation failed: {exc}") from exc
 

@@ -10,15 +10,13 @@ import {
   getStudioCampaign,
   generateCampaignImage,
   generateCampaignVideo,
-  submitCampaignForReview,
-  getOperationalMode
+  submitCampaignForReview
 } from '@/lib/api/client';
 import type {
   BrandId,
   Platform,
   Language,
-  StudioCampaignDetail,
-  OperationalModeInfo
+  StudioCampaignDetail
 } from '@/lib/api/types';
 import { BrandBadge } from '@/components/aura/common';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -29,6 +27,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Icons } from '@/components/icons';
+import { useApiMode } from '@/context/api-mode-context';
+import { ApiModeToggle } from '@/components/layout/api-mode-toggle';
+import { cn } from '@/lib/utils';
 
 const STAGED_PIPELINE_STEPS = [
   'Ingesting Brand Voice & Learned Lessons Memory',
@@ -59,13 +60,8 @@ function StudioContent() {
 
   const store = useAuraStore();
 
-  // Mode Info State
-  const [modeInfo, setModeInfo] = useState<OperationalModeInfo>({
-    demo_mode: true,
-    groq_model: 'llama-3.3-70b-versatile',
-    image_model: 'fal-ai/flux/schnell',
-    video_model: 'minimax/h3-max-turbo'
-  });
+  // Mode Info from Global API Mode Context
+  const { isRealApi, modeInfo, backendStatus } = useApiMode();
 
   // Form State
   const [brandId, setBrandId] = useState<BrandId>('jade');
@@ -95,11 +91,6 @@ function StudioContent() {
   const [editableImagePrompt, setEditableImagePrompt] = useState('');
   const [editableVideoPrompt, setEditableVideoPrompt] = useState('');
   const [showPromptsAccordion, setShowPromptsAccordion] = useState(false);
-
-  // Load Operational Mode & Snapshot on mount
-  useEffect(() => {
-    getOperationalMode().then(setModeInfo).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (campaignIdFromQuery) {
@@ -281,24 +272,7 @@ function StudioContent() {
         </div>
 
         <div className='flex items-center gap-3'>
-          {/* Live / Demo Mode Badge */}
-          {modeInfo.demo_mode ? (
-            <Badge
-              variant='outline'
-              className='bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-xs px-3 py-1 font-semibold flex items-center gap-1.5'
-            >
-              <span className='size-2 rounded-full bg-amber-500 animate-pulse' />
-              DEMO MODE (Simulated Groq & Local Fallback)
-            </Badge>
-          ) : (
-            <Badge
-              variant='outline'
-              className='bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-xs px-3 py-1 font-semibold flex items-center gap-1.5'
-            >
-              <span className='size-2 rounded-full bg-emerald-500' />
-              LIVE MODE ({modeInfo.groq_model} · {modeInfo.video_model})
-            </Badge>
-          )}
+          <ApiModeToggle variant='studio' />
 
           {campaignSnapshot && (
             <Button size='sm' variant='outline' onClick={handleStartNew}>
@@ -315,9 +289,13 @@ function StudioContent() {
           <div className='h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 animate-pulse'>
             <Icons.sparkles className='size-7' />
           </div>
-          <h2 className='text-xl font-bold text-foreground'>AURA Engine is Generating Campaign</h2>
+          <h2 className='text-xl font-bold text-foreground'>
+            {isRealApi ? 'AURA Live AI Engine is Generating' : 'AURA Mock Simulator is Generating'}
+          </h2>
           <p className='text-xs text-muted-foreground max-w-md mt-1 mb-6'>
-            Synthesizing brand underwriting guidelines, historical reviewer feedback, and regulatory compliance rules across all channels.
+            {isRealApi
+              ? `Executing live prompts on Groq (${modeInfo?.groq_model || 'openai/gpt-oss-20b'}) and synthesizing multi-platform compliance-checked marketing package.`
+              : 'Synthesizing brand underwriting guidelines, historical reviewer feedback, and regulatory compliance rules using simulated mock templates.'}
           </p>
 
           <div className='flex flex-col gap-3 text-left w-full max-w-lg'>
@@ -602,13 +580,46 @@ function StudioContent() {
                   </div>
                 </div>
 
+                <div
+                  className={cn(
+                    'text-xs p-2.5 rounded-lg border flex items-center justify-between',
+                    isRealApi
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                  )}
+                >
+                  <div className='flex items-center gap-2'>
+                    <span
+                      className={cn(
+                        'size-2 rounded-full',
+                        isRealApi ? 'bg-emerald-500' : 'bg-amber-500'
+                      )}
+                    />
+                    <span className='font-semibold'>
+                      {isRealApi
+                        ? `Live AI: ${modeInfo?.groq_model || 'openai/gpt-oss-20b'}`
+                        : 'Mock Simulator Mode'}
+                    </span>
+                  </div>
+                  <span className='font-mono text-[10px] uppercase font-bold opacity-80'>
+                    {backendStatus === 'connected' ? 'Server Online' : 'Server Offline'}
+                  </span>
+                </div>
+
                 <Button
                   onClick={handleGenerate}
                   size='lg'
-                  className='w-full font-bold shadow-md mt-2'
+                  className={cn(
+                    'w-full font-bold shadow-md mt-2 transition-all',
+                    isRealApi
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : ''
+                  )}
                 >
                   <Icons.sparkles className='size-4 mr-2' />
-                  Generate Campaign Package
+                  {isRealApi
+                    ? 'Generate with Real Groq AI'
+                    : 'Generate with Mock Simulator'}
                 </Button>
               </CardContent>
             </Card>
@@ -1091,7 +1102,7 @@ function StudioContent() {
                       </CardTitle>
                     </div>
                     <Badge variant='outline' className='text-[10px] font-mono'>
-                      {imageMedia?.model || modeInfo.image_model}
+                      {imageMedia?.model || modeInfo?.image_model || 'fal-ai/flux/schnell'}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -1181,7 +1192,7 @@ function StudioContent() {
                       </CardTitle>
                     </div>
                     <Badge variant='outline' className='text-[10px] font-mono'>
-                      {videoMedia?.model || modeInfo.video_model}
+                      {videoMedia?.model || modeInfo?.video_model || 'minimax/h3-max-turbo/text-to-video'}
                     </Badge>
                   </div>
                 </CardHeader>

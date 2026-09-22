@@ -8,6 +8,7 @@ import SearchInput from '../search-input';
 import { ThemeModeToggle } from '../themes/theme-mode-toggle';
 import { NotificationBell } from './notification-bell';
 import { UserNav } from './user-nav';
+import { ApiModeToggle } from './api-mode-toggle';
 
 export default function Header() {
   return (
@@ -22,6 +23,7 @@ export default function Header() {
         <div className='hidden md:flex'>
           <SearchInput />
         </div>
+        <ApiModeToggle />
         <NotificationBell />
         <ThemeModeToggle />
         <Separator orientation='vertical' className='h-4 mx-1 hidden sm:block' />

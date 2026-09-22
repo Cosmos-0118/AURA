@@ -3,7 +3,7 @@ import os
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel
 
 try:
@@ -55,10 +55,25 @@ except ImportError:
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
+_RUNTIME_DEMO_MODE: bool | None = None
 
-def is_demo_mode() -> bool:
-    val = os.environ.get("DEMO_MODE", "true").lower()
+
+def is_demo_mode(header_val: Any = None) -> bool:
+    if header_val is not None and isinstance(header_val, str):
+        return header_val.lower() in ("true", "1", "yes")
+    if _RUNTIME_DEMO_MODE is not None:
+        return _RUNTIME_DEMO_MODE
+    val = os.environ.get("DEMO_MODE", "false" if os.environ.get("GROQ_API_KEY") else "true").lower()
     return val in ("true", "1", "yes")
+
+
+def set_runtime_demo_mode(demo: bool) -> None:
+    global _RUNTIME_DEMO_MODE
+    _RUNTIME_DEMO_MODE = demo
+
+
+class ModeUpdateRequest(BaseModel):
+    demo_mode: bool
 
 
 def _campaign(row: dict) -> Campaign:
@@ -86,11 +101,42 @@ def _campaign(row: dict) -> Campaign:
 @router.get("/mode")
 def get_operational_mode():
     """Return runtime mode and AI models configured."""
+    has_groq = bool(os.environ.get("GROQ_API_KEY"))
+    has_fal = bool(os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY"))
     return {
         "demo_mode": is_demo_mode(),
-        "groq_model": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        "groq_model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
         "image_model": os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell"),
-        "video_model": os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo"),
+        "video_model": os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo/text-to-video"),
+        "has_groq_key": has_groq,
+        "has_fal_key": has_fal,
+        "status": "connected",
+    }
+
+
+@router.post("/mode")
+def update_operational_mode(body: ModeUpdateRequest):
+    """Toggle between mock mode and real API mode at runtime."""
+    set_runtime_demo_mode(body.demo_mode)
+    return get_operational_mode()
+
+
+@router.get("/health")
+def api_health():
+    """Diagnostic health check for database, groq, and fal services."""
+    db_status = "connected"
+    try:
+        with get_db() as db:
+            db.execute("SELECT 1")
+    except Exception as e:
+        db_status = f"error: {e}"
+
+    return {
+        "status": "ok",
+        "demo_mode": is_demo_mode(),
+        "groq_connected": bool(os.environ.get("GROQ_API_KEY")),
+        "fal_connected": bool(os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")),
+        "database": db_status,
     }
 
 
@@ -148,10 +194,13 @@ def list_campaigns(brand_id: BrandId | None = None) -> list[Campaign]:
 
 
 @router.post("/studio/generate", response_model=StudioCampaignDetail)
-def generate_studio_campaign(body: StudioCampaignCreate) -> StudioCampaignDetail:
+def generate_studio_campaign(
+    body: StudioCampaignCreate,
+    x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
+) -> StudioCampaignDetail:
     """Generate a complete multi-platform campaign package using Groq or Demo mode, with repository persistence."""
     campaign_id = str(uuid4())
-    demo_mode = is_demo_mode()
+    demo_mode = is_demo_mode(x_demo_mode)
 
     # Step 1: Retrieve learned lessons from MySQL for negative guidance
     lessons_used: list[dict[str, Any]] = []
@@ -313,9 +362,13 @@ def get_studio_campaign(campaign_id: str) -> StudioCampaignDetail:
 
 
 @router.post("/{campaign_id}/generate-image", response_model=CampaignMediaItem)
-def generate_campaign_image(campaign_id: str, body: MediaGenerateRequest) -> CampaignMediaItem:
+def generate_campaign_image(
+    campaign_id: str,
+    body: MediaGenerateRequest,
+    x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
+) -> CampaignMediaItem:
     """Generate image and save locally to storage/campaigns/{campaign_id}/image/{filename}."""
-    demo_mode = is_demo_mode()
+    demo_mode = is_demo_mode(x_demo_mode)
     chosen_model = body.model or os.environ.get("IMAGE_MODEL", "fal-ai/flux/schnell")
     prompt = body.prompt
 
@@ -384,10 +437,14 @@ def generate_campaign_image(campaign_id: str, body: MediaGenerateRequest) -> Cam
 
 
 @router.post("/{campaign_id}/generate-video", response_model=CampaignMediaItem)
-def generate_campaign_video(campaign_id: str, body: MediaGenerateRequest) -> CampaignMediaItem:
+def generate_campaign_video(
+    campaign_id: str,
+    body: MediaGenerateRequest,
+    x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
+) -> CampaignMediaItem:
     """Generate vertical Reel video and save locally to storage/campaigns/{campaign_id}/video/{filename}."""
-    demo_mode = is_demo_mode()
-    chosen_model = body.model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo")
+    demo_mode = is_demo_mode(x_demo_mode)
+    chosen_model = body.model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo/text-to-video")
     prompt = body.prompt
 
     # 1. Load campaign and video prompt from MySQL

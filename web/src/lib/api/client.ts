@@ -22,13 +22,30 @@ import { COMPETITOR_INTEL } from '../demo/research';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+export function getStoredApiMode(): 'real' | 'mock' {
+  if (typeof window === 'undefined') return 'real';
+  const stored = localStorage.getItem('aura_api_mode');
+  return stored === 'mock' ? 'mock' : 'real';
+}
+
+export function setStoredApiMode(mode: 'real' | 'mock') {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('aura_api_mode', mode);
+    window.dispatchEvent(new CustomEvent('aura_api_mode_change', { detail: mode }));
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Demo-Mode': isMock ? 'true' : 'false',
+    ...(init?.headers as Record<string, string>)
+  };
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers
-    }
+    headers
   });
 
   if (!response.ok) {
@@ -324,10 +341,54 @@ export async function getOperationalMode(): Promise<OperationalModeInfo> {
     return await request<OperationalModeInfo>('/api/campaigns/mode');
   } catch {
     return {
-      demo_mode: true,
-      groq_model: 'llama-3.3-70b-versatile',
+      demo_mode: getStoredApiMode() === 'mock',
+      groq_model: 'openai/gpt-oss-20b',
       image_model: 'fal-ai/flux/schnell',
-      video_model: 'minimax/h3-max-turbo'
+      video_model: 'minimax/h3-max-turbo/text-to-video'
+    };
+  }
+}
+
+export async function setOperationalMode(demo_mode: boolean): Promise<OperationalModeInfo> {
+  setStoredApiMode(demo_mode ? 'mock' : 'real');
+  try {
+    return await request<OperationalModeInfo>('/api/campaigns/mode', {
+      method: 'POST',
+      body: JSON.stringify({ demo_mode })
+    });
+  } catch {
+    return {
+      demo_mode,
+      groq_model: 'openai/gpt-oss-20b',
+      image_model: 'fal-ai/flux/schnell',
+      video_model: 'minimax/h3-max-turbo/text-to-video'
+    };
+  }
+}
+
+export async function testApiConnection(): Promise<{
+  success: boolean;
+  message: string;
+  latencyMs: number;
+  data?: Record<string, unknown>;
+}> {
+  const start = performance.now();
+  try {
+    const data = await request<Record<string, unknown>>('/api/campaigns/health');
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      success: true,
+      message: `Connected (${latencyMs}ms)`,
+      latencyMs,
+      data
+    };
+  } catch (err: unknown) {
+    const latencyMs = Math.round(performance.now() - start);
+    const msg = err instanceof Error ? err.message : 'Failed to connect to backend';
+    return {
+      success: false,
+      message: msg,
+      latencyMs
     };
   }
 }

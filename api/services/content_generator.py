@@ -333,22 +333,33 @@ def generate_campaign_content(
 Generate full, high-quality content for each requested platform, plus detailed image_generation_prompt and video_generation_prompt.
 Output ONLY JSON."""
 
-    # Using Groq's high-speed reasoning / production model
-    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Using Groq's high-speed reasoning / production model with automatic fallback
+    preferred_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+    candidate_models = [preferred_model]
+    for fallback in ["openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"]:
+        if fallback not in candidate_models:
+            candidate_models.append(fallback)
 
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.7,
-            response_format={"type": "json_object"},
-        )
-        raw_content = response.choices[0].message.content or "{}"
-        return json.loads(raw_content)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Groq returned non-JSON response: {exc}") from exc
-    except Exception as exc:
-        raise RuntimeError(f"Groq content generation failed: {exc}") from exc
+    last_exc = None
+    for m in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=m,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            raw_content = response.choices[0].message.content or "{}"
+            return json.loads(raw_content)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Groq returned non-JSON response: {exc}") from exc
+        except Exception as exc:
+            last_exc = exc
+            if "model_not_found" in str(exc) or "404" in str(exc):
+                continue
+            raise RuntimeError(f"Groq content generation failed: {exc}") from exc
+
+    raise RuntimeError(f"Groq content generation failed: {last_exc}") from last_exc
