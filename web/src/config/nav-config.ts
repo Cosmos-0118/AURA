@@ -12,27 +12,9 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Video Studio',
-        url: '/dashboard/video',
-        icon: 'video',
-        items: []
-      },
-      {
-        title: 'Publish',
-        url: '/dashboard/publish',
-        icon: 'send',
-        items: []
-      },
-      {
-        title: 'Lead Intelligence',
-        url: '/dashboard/leads',
-        icon: 'search',
-        items: []
-      },
-      {
-        title: 'Competitor Intelligence',
-        url: '/dashboard/competitor-intelligence',
-        icon: 'trendingUp',
+        title: 'History',
+        url: '/dashboard/history',
+        icon: 'history',
         items: []
       },
       {
@@ -40,7 +22,20 @@ export const navGroups: NavGroup[] = [
         url: '/dashboard/review',
         icon: 'checks',
         items: []
+      },
+      {
+        title: 'Lead Intelligence',
+        url: '/dashboard/leads',
+        icon: 'teams',
+        items: []
+      },
+      {
+        title: 'Competitor Intelligence',
+        url: '/dashboard/competitor-intelligence',
+        icon: 'trendingUp',
+        items: []
       }
     ]
   }
 ];
+

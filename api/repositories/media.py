@@ -1,5 +1,6 @@
 """Campaign Media Repository and local filesystem helper."""
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -29,8 +30,8 @@ def determine_next_media_path(
     """Determine the next safe versioned filename and relative path for image or video.
 
     Returns: (absolute_path, filename, relative_path)
-    Example: storage/campaigns/{id}/image/poster_original_v1.png
-             storage/campaigns/{id}/image/poster_final_v1.png
+    Example: storage/campaigns/{id}/image/original_v1.png
+             storage/campaigns/{id}/image/final_v1.png
     """
     target_dir = ensure_media_dir(campaign_id, media_type)
     ext = ".png" if media_type == "image" else ".mp4"
@@ -38,9 +39,10 @@ def determine_next_media_path(
 
     v = 1
     while True:
-        filename = f"{base_name}_{stage}_v{v}{ext}"
+        filename = f"{stage}_v{v}{ext}"
         candidate_path = target_dir / filename
-        if not candidate_path.exists():
+        legacy_path = target_dir / f"{base_name}_{stage}_v{v}{ext}"
+        if not candidate_path.exists() and not legacy_path.exists():
             break
         v += 1
 
@@ -184,36 +186,67 @@ def record_watermarked_media(
     logo_position: str | None = None,
     logo_scale: float = 100.0,
     logo_opacity: float = 100.0,
+    watermark_config: dict[str, Any] | list[Any] | None = None,
     model: str = "watermark-composer",
     provider: str = "local_composer",
 ) -> dict[str, Any]:
     """Insert a final watermarked media record linked to its original parent."""
     mid = str(uuid4())
-    db.execute(
-        """
-        INSERT INTO campaign_media
-            (id, campaign_id, media_type, provider, model, prompt, local_path, filename, mime_type, file_size, status, media_stage, watermarked, logo_path, logo_position, logo_scale, logo_opacity, parent_media_id)
-        VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'completed', 'final', 1, %s, %s, %s, %s, %s)
-        """,
-        (
-            mid,
-            campaign_id,
-            media_type,
-            provider,
-            model,
-            prompt,
-            local_path,
-            filename,
-            mime_type,
-            file_size,
-            logo_path,
-            logo_position,
-            logo_scale,
-            logo_opacity,
-            parent_media_id,
-        ),
-    )
+    config_json = json.dumps(watermark_config) if watermark_config is not None else None
+
+    try:
+        db.execute(
+            """
+            INSERT INTO campaign_media
+                (id, campaign_id, media_type, provider, model, prompt, local_path, filename, mime_type, file_size, status, media_stage, watermarked, logo_path, logo_position, logo_scale, logo_opacity, parent_media_id, watermark_config)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'completed', 'final', 1, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                mid,
+                campaign_id,
+                media_type,
+                provider,
+                model,
+                prompt,
+                local_path,
+                filename,
+                mime_type,
+                file_size,
+                logo_path,
+                logo_position,
+                logo_scale,
+                logo_opacity,
+                parent_media_id,
+                config_json,
+            ),
+        )
+    except Exception:
+        db.execute(
+            """
+            INSERT INTO campaign_media
+                (id, campaign_id, media_type, provider, model, prompt, local_path, filename, mime_type, file_size, status, media_stage, watermarked, logo_path, logo_position, logo_scale, logo_opacity, parent_media_id)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'completed', 'final', 1, %s, %s, %s, %s, %s)
+            """,
+            (
+                mid,
+                campaign_id,
+                media_type,
+                provider,
+                model,
+                prompt,
+                local_path,
+                filename,
+                mime_type,
+                file_size,
+                logo_path,
+                logo_position,
+                logo_scale,
+                logo_opacity,
+                parent_media_id,
+            ),
+        )
 
     log_event(
         db,
@@ -228,15 +261,29 @@ def record_watermarked_media(
             "stage": "final",
             "logo_position": logo_position,
             "logo_scale": logo_scale,
+            "watermark_config": watermark_config,
         },
     )
 
     return get_media_by_id(db, mid)
 
 
+def _enrich_media_record(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    res = dict(row)
+    if "watermark_config" in res and isinstance(res["watermark_config"], str):
+        try:
+            res["watermark_config"] = json.loads(res["watermark_config"])
+        except Exception:
+            pass
+    return res
+
+
 def get_media_by_id(db: Any, media_id: str) -> dict[str, Any] | None:
     """Retrieve media item by ID."""
-    return db.execute("SELECT * FROM campaign_media WHERE id = %s", (media_id,)).fetchone()
+    row = db.execute("SELECT * FROM campaign_media WHERE id = %s", (media_id,)).fetchone()
+    return _enrich_media_record(row)
 
 
 def get_media_for_campaign(
@@ -249,4 +296,5 @@ def get_media_for_campaign(
         query += " AND media_type = %s"
         params.append(media_type)
     query += " ORDER BY created_at ASC"
-    return db.execute(query, tuple(params)).fetchall()
+    rows = db.execute(query, tuple(params)).fetchall()
+    return [_enrich_media_record(r) for r in rows]

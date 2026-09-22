@@ -6,7 +6,20 @@ export type LogoAnchor =
   | 'center'
   | 'custom';
 
+export interface WatermarkLogo {
+  id: string;
+  logoPath: string;
+  name?: string;
+  anchor: LogoAnchor;
+  scale: number; // 20–200 (%)
+  opacity: number; // 10–100 (%)
+  padding?: number;
+  x?: number; // 0–100 (%)
+  y?: number; // 0–100 (%)
+}
+
 export interface LogoConfig {
+
   x: number; // percent of canvas width (0–100)
   y: number; // percent of canvas height (0–100)
   scale: number; // 20–200 (%)

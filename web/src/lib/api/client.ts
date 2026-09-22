@@ -22,7 +22,14 @@ import type {
   PublishResponse,
   CompetitorDashboard,
   CompetitorEventAnalysis,
-  CompetitorScanResult
+  CompetitorScanResult,
+  HistoryCampaignSummary,
+  AssistantChatRequest,
+  AssistantChatResponse,
+  ResubmitReviewRequest,
+  ResubmitReviewResponse,
+  CampaignWorkspaceHistory,
+  BrandLogoItem
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
@@ -31,23 +38,16 @@ import { COMPETITOR_INTEL } from '../demo/research';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 export function getStoredApiMode(): 'real' | 'mock' {
-  if (typeof window === 'undefined') return 'real';
-  const stored = localStorage.getItem('aura_api_mode');
-  return stored === 'mock' ? 'mock' : 'real';
+  return 'real';
 }
 
-export function setStoredApiMode(mode: 'real' | 'mock') {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('aura_api_mode', mode);
-    window.dispatchEvent(new CustomEvent('aura_api_mode_change', { detail: mode }));
-  }
+export function setStoredApiMode(_mode: 'real' | 'mock') {
+  // Mock mode toggle removed
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Demo-Mode': isMock ? 'true' : 'false',
     ...(init?.headers as Record<string, string>)
   };
 
@@ -62,6 +62,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return (await response.json()) as T;
 }
+
 
 
 function jsonBody(body: unknown): RequestInit {
@@ -588,6 +589,8 @@ export async function applyCampaignWatermark(
     logo_opacity?: number;
     custom_text?: string | null;
     image_data?: string | null;
+    logos?: any[];
+    watermark_config?: any;
   }
 ): Promise<CampaignMediaItem> {
   return await request<CampaignMediaItem>(
@@ -614,30 +617,68 @@ export async function uploadWatermarkedMedia(
 }
 
 export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
-  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
-  try {
-    const res = await request<CampaignSubmitResult>(
-      `/api/campaigns/${encodeURIComponent(id)}/submit`,
-      { method: 'POST' }
-    );
-    return res;
-  } catch (err: unknown) {
-    if (isMock) {
-      return {
-        success: true,
-        campaign_id: id,
-        status: 'pending_review',
-        message: 'Campaign submitted for verification (Mock Mode).'
-      };
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(msg || 'Failed to submit campaign for verification', { cause: err });
-  }
+  return await request<CampaignSubmitResult>(
+    `/api/campaigns/${encodeURIComponent(id)}/submit`,
+    { method: 'POST' }
+  );
 }
 
 export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
   return submitCampaign(id);
 }
+
+export async function getHistoryList(): Promise<HistoryCampaignSummary[]> {
+  return await request<HistoryCampaignSummary[]>('/api/campaigns/history-list');
+}
+
+export async function getCampaignWorkspaceHistory(id: string): Promise<CampaignWorkspaceHistory> {
+  return await request<CampaignWorkspaceHistory>(
+    `/api/campaigns/${encodeURIComponent(id)}/workspace-history`
+  );
+}
+
+export async function resubmitCampaignReview(
+  id: string,
+  note?: string
+): Promise<ResubmitReviewResponse> {
+  return await request<ResubmitReviewResponse>(
+    `/api/campaigns/${encodeURIComponent(id)}/resubmit`,
+    jsonBody({ note })
+  );
+}
+
+export async function assistantChat(
+  id: string,
+  body: AssistantChatRequest
+): Promise<AssistantChatResponse> {
+  return await request<AssistantChatResponse>(
+    `/api/campaigns/${encodeURIComponent(id)}/chat`,
+    jsonBody(body)
+  );
+}
+
+export async function getBrandLogos(): Promise<BrandLogoItem[]> {
+  try {
+    const res = await fetch('/api/logos');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch {
+    // fallback to direct API
+  }
+  try {
+    return await request<BrandLogoItem[]>('/logos');
+  } catch {
+    return [
+      { name: 'Jade', filename: 'Jade.png', url: '/logos/Jade.png' },
+      { name: 'DoctorShield', filename: 'doctorshield.png', url: '/logos/doctorshield.png' },
+      { name: 'JA Assure', filename: 'ja.png', url: '/logos/ja.png' },
+      { name: 'Jaguar', filename: 'jaguar.png', url: '/logos/jaguar.png' }
+    ];
+  }
+}
+
 
 export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
   const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
@@ -688,6 +729,33 @@ export async function publishCampaignPlatform(
 ): Promise<PublishResponse> {
   return await request<PublishResponse>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/publish/${encodeURIComponent(platform)}`,
+    { method: 'POST' }
+  );
+}
+
+export async function publishToLinkedIn(
+  campaignId: string
+): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/linkedin`,
+    { method: 'POST' }
+  );
+}
+
+export async function publishToInstagram(
+  campaignId: string
+): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/instagram`,
+    { method: 'POST' }
+  );
+}
+
+export async function publishToX(
+  campaignId: string
+): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/x`,
     { method: 'POST' }
   );
 }

@@ -59,6 +59,8 @@ def generate_video(
 
     fal_key = os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")
     if not fal_key:
+        if not demo_mode:
+            raise RuntimeError("FAL_KEY or FAL_AI_API_KEY environment variable is not configured.")
         create_demo_video(target_path)
         file_size = target_path.stat().st_size if target_path.exists() else 1024
         return {
@@ -118,6 +120,8 @@ def generate_video(
             "media_stage": "original",
         }
     except Exception as exc:
+        if not demo_mode:
+            raise RuntimeError(f"FAL video generation failed: {exc}") from exc
         logger.warning("FAL video generation failed (%s). Falling back to local playable video.", exc)
         create_demo_video(target_path)
         file_size = target_path.stat().st_size if target_path.exists() else 1024
@@ -140,7 +144,7 @@ def save_watermarked_video_bytes(
     raw_video_bytes: bytes,
     extension: str = ".mp4",
 ) -> dict[str, Any]:
-    """Save user-exported watermarked video to storage/campaigns/{campaign_id}/video/reel_final_v{v}.mp4."""
+    """Save user-exported watermarked video to storage/campaigns/{campaign_id}/video/final_v{v}.mp4."""
     target_path, filename, rel_path = determine_next_media_path(campaign_id, "video", stage="final")
     target_path.parent.mkdir(parents=True, exist_ok=True)
 

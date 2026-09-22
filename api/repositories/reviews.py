@@ -13,36 +13,71 @@ except ImportError:
     from repositories.lessons import create_lesson
 
 
-def enqueue_for_review(db: Any, campaign_id: str) -> str:
-    """Insert or update campaign in review_queue."""
-    existing = db.execute(
-        "SELECT id FROM review_queue WHERE campaign_id = %s",
-        (campaign_id,),
-    ).fetchone()
-    if existing:
+def enqueue_for_review(db: Any, campaign_id: str, is_resubmission: bool = False) -> str:
+    """Insert review cycle in review_queue, preserving past cycles."""
+    cycle = 1
+    try:
+        past_reviews = db.execute(
+            "SELECT review_cycle FROM review_queue WHERE campaign_id = %s ORDER BY review_cycle DESC LIMIT 1",
+            (campaign_id,),
+        ).fetchone()
+        if past_reviews and past_reviews.get("review_cycle"):
+            cycle = int(past_reviews["review_cycle"]) + 1
+        elif past_reviews:
+            cycle = 2
+    except Exception:
+        pass
+
+    try:
         db.execute(
-            """
-            UPDATE review_queue
-            SET status = 'pending_review', reviewer_note = NULL, feedback_tag = NULL, reviewed_at = NULL
-            WHERE id = %s
-            """,
-            (existing["id"],),
+            "UPDATE review_queue SET is_current = 0 WHERE campaign_id = %s",
+            (campaign_id,),
         )
-        return str(existing["id"])
+    except Exception:
+        pass
 
     rq_id = str(uuid4())
-    db.execute(
-        """
-        INSERT INTO review_queue (id, campaign_id, status)
-        VALUES (%s, %s, 'pending_review')
-        """,
-        (rq_id, campaign_id),
+    try:
+        db.execute(
+            """
+            INSERT INTO review_queue (id, campaign_id, status, review_cycle, is_current)
+            VALUES (%s, %s, 'pending_review', %s, 1)
+            """,
+            (rq_id, campaign_id, cycle),
+        )
+    except Exception:
+        db.execute(
+            """
+            INSERT INTO review_queue (id, campaign_id, status)
+            VALUES (%s, %s, 'pending_review')
+            """,
+            (rq_id, campaign_id),
+        )
+
+    log_event(
+        db,
+        campaign_id=campaign_id,
+        event_type="resubmitted_for_review" if (cycle > 1 or is_resubmission) else "submitted_for_review",
+        description=f"Submitted campaign to Review Queue (Cycle {cycle})",
+        metadata={"review_id": rq_id, "review_cycle": cycle},
     )
     return rq_id
 
 
+def get_review_history(db: Any, campaign_id: str) -> list[dict[str, Any]]:
+    """Retrieve full chronological review history and cycles for a campaign."""
+    return db.execute(
+        """
+        SELECT * FROM review_queue
+        WHERE campaign_id = %s
+        ORDER BY created_at ASC
+        """,
+        (campaign_id,),
+    ).fetchall()
+
+
 def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]:
-    """Fetch review queue items with rich campaign metadata, media preview, facts, and publications."""
+    """Fetch review queue items with rich campaign metadata, STRICTLY final media preview, facts, and publications."""
     query = """
         SELECT
             rq.id as review_id,
@@ -62,14 +97,43 @@ def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]
             c.status as campaign_status
         FROM review_queue rq
         JOIN campaigns c ON c.id = rq.campaign_id
+        WHERE (rq.is_current = 1 OR rq.is_current IS NULL)
     """
     params = []
     if status and status != "all":
-        query += " WHERE rq.status = %s"
+        query += " AND rq.status = %s"
         params.append(status)
     query += " ORDER BY rq.created_at DESC"
 
-    rows = db.execute(query, tuple(params)).fetchall()
+    try:
+        rows = db.execute(query, tuple(params)).fetchall()
+    except Exception:
+        # Fallback if is_current is not present in SQLite query
+        query_fallback = """
+            SELECT
+                rq.id as review_id,
+                rq.campaign_id,
+                rq.status as review_status,
+                rq.reviewer_note,
+                rq.feedback_tag,
+                rq.reviewed_at,
+                rq.created_at as queued_at,
+                c.brand_id,
+                c.title as campaign_title,
+                c.objective,
+                c.language,
+                c.thesis,
+                c.target_audience,
+                c.campaign_facts,
+                c.status as campaign_status
+            FROM review_queue rq
+            JOIN campaigns c ON c.id = rq.campaign_id
+        """
+        if status and status != "all":
+            query_fallback += " WHERE rq.status = %s"
+        query_fallback += " ORDER BY rq.created_at DESC"
+        rows = db.execute(query_fallback, tuple(params)).fetchall()
+
     enriched = []
     for r in rows:
         cid = r["campaign_id"]
@@ -84,12 +148,12 @@ def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]
             elif isinstance(r["campaign_facts"], dict):
                 facts = r["campaign_facts"]
 
-        # 2. Latest Image (Prioritize final watermarked asset)
+        # 2. Latest Image - STRICTLY final watermarked asset
         img_row = db.execute(
             """
             SELECT * FROM campaign_media
-            WHERE campaign_id = %s AND media_type = 'image' AND status = 'completed'
-            ORDER BY CASE WHEN media_stage = 'final' THEN 1 ELSE 0 END DESC, created_at DESC LIMIT 1
+            WHERE campaign_id = %s AND media_type = 'image' AND media_stage = 'final' AND status = 'completed'
+            ORDER BY created_at DESC LIMIT 1
             """,
             (cid,),
         ).fetchone()
@@ -101,12 +165,12 @@ def get_review_queue(db: Any, status: str | None = None) -> list[dict[str, Any]]
             latest_image_url = f"/{lp}" if not lp.startswith("/") else lp
             latest_image_prompt = img_row.get("prompt")
 
-        # 3. Video Asset check (Prioritize final watermarked asset)
+        # 3. Video Asset check - STRICTLY final watermarked asset
         vid_row = db.execute(
             """
             SELECT * FROM campaign_media
-            WHERE campaign_id = %s AND media_type = 'video' AND status = 'completed'
-            ORDER BY CASE WHEN media_stage = 'final' THEN 1 ELSE 0 END DESC, created_at DESC LIMIT 1
+            WHERE campaign_id = %s AND media_type = 'video' AND media_stage = 'final' AND status = 'completed'
+            ORDER BY created_at DESC LIMIT 1
             """,
             (cid,),
         ).fetchone()
