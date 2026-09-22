@@ -12,34 +12,26 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  SidebarRail
+  SidebarMenuSubItem
 } from '@/components/ui/sidebar';
 import { navGroups } from '@/config/nav-config';
-import { useMediaQuery } from '@/hooks/use-media-query';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import * as React from 'react';
 import { Icons } from '@/components/icons';
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const { isOpen } = useMediaQuery();
   const filteredGroups = useFilteredNavGroups(navGroups);
 
-  React.useEffect(() => {
-    // Side effects based on sidebar state changes
-  }, [isOpen]);
-
   return (
-    <Sidebar collapsible='icon'>
-      <SidebarHeader className='border-b px-4 py-3'>
+    <Sidebar collapsible='icon' expandOnHover>
+      <SidebarHeader className='h-14 justify-center border-b px-4 group-data-[collapsible=icon]:px-2'>
         <div className='flex items-center gap-3'>
-          <div className='flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-background font-bold tracking-tight text-sm shadow-sm'>
+          <div className='flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground text-background font-bold tracking-tight text-sm shadow-sm'>
             A
           </div>
-          <div className='flex flex-col min-w-0'>
+          <div className='flex min-w-0 flex-col group-data-[collapsible=icon]:hidden'>
             <div className='flex items-center gap-1.5'>
               <span className='font-bold text-sm tracking-wide text-foreground'>AURA</span>
               <span className='rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400'>
@@ -121,12 +113,11 @@ export default function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter className='p-2 border-t'>
-        <div className='flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/40 text-[11px] text-muted-foreground font-medium'>
+        <div className='flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/40 text-[11px] text-muted-foreground font-medium group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0'>
           <span className='size-2 rounded-full bg-emerald-500 shrink-0' />
-          <span className='truncate text-foreground font-semibold'>JA Assure Desk</span>
+          <span className='truncate text-foreground font-semibold group-data-[collapsible=icon]:hidden'>JA Assure Desk</span>
         </div>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

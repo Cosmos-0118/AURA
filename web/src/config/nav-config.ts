@@ -30,26 +30,15 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
-        title: 'Review Queue',
-        url: '/dashboard/review',
-        icon: 'checks',
-        items: []
-      }
-    ]
-  },
-  {
-    label: 'INTELLIGENCE',
-    items: [
-      {
         title: 'Competitor Intelligence',
         url: '/dashboard/competitor-intelligence',
-        icon: 'search',
+        icon: 'trendingUp',
         items: []
       },
       {
-        title: 'Lead Generation',
-        url: '/dashboard/leads',
-        icon: 'user',
+        title: 'Review Queue',
+        url: '/dashboard/review',
+        icon: 'checks',
         items: []
       }
     ]

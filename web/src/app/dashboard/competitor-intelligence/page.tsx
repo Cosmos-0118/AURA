@@ -16,6 +16,7 @@ import type {
   CompetitorRecord,
   CompetitorWatch
 } from '@/lib/api/types';
+import styles from './page.module.css';
 
 type View = 'feed' | 'sources' | 'watchlist';
 type FilterValue = '' | string;
@@ -139,7 +140,7 @@ function impactClasses(impact: string): { badge: string; rail: string } {
 function Badge({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <span
-      className={`inline-flex w-fit items-center rounded-full border px-2 py-1 text-[10px] leading-none ${className || 'border-[#e6e6e6] bg-[#f7f7f7] text-[#404040] dark:border-[#424242] dark:bg-[#242424] dark:text-[#d4d4d4]'}`}
+      className={`inline-flex max-w-full w-fit items-center rounded-full border px-2 py-1 text-[10px] leading-tight ${styles.wrapAnywhere} ${className || 'border-[#e6e6e6] bg-[#f7f7f7] text-[#404040] dark:border-[#424242] dark:bg-[#242424] dark:text-[#d4d4d4]'}`}
     >
       {children}
     </span>
@@ -357,7 +358,7 @@ export default function CompetitorIntelligencePage() {
   };
 
   const renderHeader = () => (
-    <header className='flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center'>
+    <header className={styles.header}>
       <button type='button' className='flex items-center gap-3 text-left' onClick={() => openView('feed')} aria-label='JA Assure competitor intelligence home'>
         <span className='grid size-9 place-items-center rounded-[11px] border border-[#e6e6e6] bg-[#f7f7f7] text-sm font-extrabold tracking-[-0.08em] text-black dark:border-[#424242] dark:bg-[#242424] dark:text-white'>JA</span>
         <span>
@@ -365,7 +366,7 @@ export default function CompetitorIntelligencePage() {
           <small className='mt-0.5 block text-[11px] text-[#737373] dark:text-[#a3a3a3]'>Competitor intelligence</small>
         </span>
       </button>
-      <div className='flex flex-wrap items-center justify-start gap-2 sm:justify-end'>
+      <div className='flex max-w-full flex-wrap items-center justify-start gap-2'>
         <button type='button' className={`${quietButton} ${view === 'sources' ? 'bg-[#f5f5f5] text-black dark:bg-[#242424] dark:text-white' : ''}`} onClick={() => openView('sources')}>Sources</button>
         <button type='button' className={`${quietButton} ${view === 'watchlist' ? 'bg-[#f5f5f5] text-black dark:bg-[#242424] dark:text-white' : ''}`} onClick={() => openView('watchlist')}>Watchlist</button>
         <button type='button' className={quietButton} onClick={() => void syncChanges()} disabled={busyAction !== null}>
@@ -391,11 +392,11 @@ export default function CompetitorIntelligencePage() {
       </div>
 
       <form className='mb-[15px] flex flex-wrap gap-2' onSubmit={(event) => event.preventDefault()}>
-        <label className='min-w-[220px] flex-[2_1_220px]'>
+        <label className='min-w-0 flex-[2_1_220px]'>
           <span className='sr-only'>Search events</span>
           <div className='relative'>
             <Icons.search className='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#a3a3a3]' />
-            <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder='Search competitor, summary, or evidence…' />
+            <input aria-label='Search events' className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder='Search competitor, summary, or evidence…' />
           </div>
         </label>
         <SelectFilter value={brand} options={selectOptions.brand} onChange={setBrand} label='Brand' />
@@ -410,23 +411,25 @@ export default function CompetitorIntelligencePage() {
         {filteredEvents.map((event) => {
           const impactStyle = impactClasses(event.impact);
           return (
-            <button key={event.id} type='button' className='grid grid-cols-[5px_minmax(0,1fr)] items-stretch gap-[15px] rounded-xl border border-[#e6e6e6] bg-white pr-[18px] text-left transition hover:-translate-y-px hover:border-[#737373] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:border-[#424242] dark:bg-[#171717] dark:hover:border-[#a3a3a3] dark:hover:bg-[#242424] dark:focus-visible:ring-white sm:grid-cols-[6px_minmax(0,1fr)_auto] sm:py-[17px]' onClick={() => setSelectedEvent(event)}>
+            <button key={event.id} type='button' aria-label={`View change from ${competitorName(event, dashboard?.competitors || [])}: ${event.summary}`} className='grid min-w-0 grid-cols-[5px_minmax(0,1fr)] items-stretch gap-4 rounded-xl border border-[#e6e6e6] bg-white pr-4 text-left transition hover:-translate-y-px hover:border-[#737373] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:border-[#424242] dark:bg-[#171717] dark:hover:border-[#a3a3a3] dark:hover:bg-[#242424] dark:focus-visible:ring-white' onClick={() => setSelectedEvent(event)}>
               <span className={`rounded-r-md ${impactStyle.rail}`} />
-              <span className='min-w-0 py-[17px] sm:py-0'>
-                <span className='mb-2 flex flex-wrap items-center gap-[7px]'>
-                  <span className='text-[13px] font-bold text-[#09090b] dark:text-white'>{competitorName(event, dashboard?.competitors || [])}</span>
-                  <Badge className={impactStyle.badge}>{label(event.impact)} impact</Badge>
-                  <Badge>{label(event.brand_id)}</Badge>
-                  {event.relationship ? <Badge className='border-violet-500/35 bg-violet-500/10 text-violet-600 dark:text-violet-300'>{label(event.relationship)}</Badge> : null}
+              <span className={`${styles.eventBody} py-4`}>
+                <span className='min-w-0'>
+                  <span className='mb-2 flex min-w-0 flex-wrap items-center gap-[7px]'>
+                    <span className={`min-w-0 text-[13px] font-bold text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{competitorName(event, dashboard?.competitors || [])}</span>
+                    <Badge className={impactStyle.badge}>{label(event.impact)} impact</Badge>
+                    <Badge>{label(event.brand_id)}</Badge>
+                    {event.relationship ? <Badge className='border-violet-500/35 bg-violet-500/10 text-violet-600 dark:text-violet-300'>{label(event.relationship)}</Badge> : null}
+                  </span>
+                  <span className={`mb-2 block line-clamp-2 text-[13px] leading-[1.55] text-[#404040] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.summary}</span>
+                  <span className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>
+                    <span>{label(event.change_type)}</span><span>{label(event.country)}</span><span>{event.source}</span><span>{formatDate(event.detected_at)}</span>
+                  </span>
                 </span>
-                <span className='mb-3 block text-[13px] leading-[1.55] text-[#404040] dark:text-[#d4d4d4]'>{event.summary}</span>
-                <span className='flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-[#737373] dark:text-[#a3a3a3]'>
-                  <span>{label(event.change_type)}</span><span>·</span><span>{label(event.country)}</span><span>·</span><span>{event.source}</span><span>·</span><span>{formatDate(event.detected_at)}</span>
+                <span className='min-w-0 text-left'>
+                  <small className='mb-1 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>Confidence</small>
+                  <strong className='text-sm text-black dark:text-white'>{Math.round(event.confidence * 100)}%</strong>
                 </span>
-              </span>
-              <span className='col-start-2 row-start-2 self-center py-0 text-left sm:col-start-auto sm:row-start-auto sm:min-w-[112px] sm:py-0 sm:text-right'>
-                <small className='mb-1 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>{event.current_value ? 'Detected value' : 'Confidence'}</small>
-                <strong className='text-sm text-black dark:text-white'>{event.current_value || `${Math.round(event.confidence * 100)}%`}</strong>
               </span>
             </button>
           );
@@ -481,7 +484,7 @@ export default function CompetitorIntelligencePage() {
           <p className='m-0 text-[13px] text-[#737373] dark:text-[#a3a3a3]'>Every tracked competitor and the URLs being monitored.</p>
         </div>
         <div className='flex w-full items-center gap-3 sm:w-auto'>
-          <input className={`${inputClass} sm:w-64`} value={watchSearch} onChange={(event) => setWatchSearch(event.target.value)} placeholder='Search watchlist…' />
+          <input aria-label='Search watchlist' className={`${inputClass} sm:w-64`} value={watchSearch} onChange={(event) => setWatchSearch(event.target.value)} placeholder='Search watchlist…' />
           <span className='whitespace-nowrap text-xs text-[#737373] dark:text-[#a3a3a3]'>{filteredCompetitors.length} tracked</span>
         </div>
       </div>
@@ -533,18 +536,22 @@ export default function CompetitorIntelligencePage() {
     const event = selectedEvent;
     const eventAnalysis = analysis[event.id];
     return (
-      <section className='pb-10 pt-7'>
+      <section className='mx-auto max-w-[980px] min-w-0 pb-10 pt-7'>
         <button type='button' className='mb-[18px] inline-flex text-[13px] text-[#737373] hover:text-[#09090b] hover:underline dark:text-[#a3a3a3] dark:hover:text-white' onClick={() => setSelectedEvent(null)}>← Back to feed</button>
-        <p className='mb-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#737373] dark:text-[#a3a3a3]'>{competitorName(event, dashboard?.competitors || [])} · {label(event.country)}</p>
-        <h1 className='mb-3.5 max-w-[1000px] text-[26px] font-semibold leading-tight tracking-[-0.035em] text-[#09090b] dark:text-white sm:text-[34px]'>{event.summary}</h1>
+        <p className={`mb-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>{competitorName(event, dashboard?.competitors || [])} · {label(event.country)}</p>
+        <h1 className={`mb-3.5 line-clamp-2 text-[26px] font-semibold leading-tight tracking-[-0.035em] text-[#09090b] dark:text-white sm:text-[30px] ${styles.wrapAnywhere}`}>{event.summary}</h1>
         <div className='mb-5 flex flex-wrap items-center gap-2'>
           <Badge className={impactClasses(event.impact).badge}>{label(event.impact)} impact</Badge>
           <Badge>{label(event.brand_id)}</Badge>
           {event.relationship ? <Badge className='border-violet-500/35 bg-violet-500/10 text-violet-600 dark:text-violet-300'>{label(event.relationship)}</Badge> : null}
           <span className='text-xs text-[#737373] dark:text-[#a3a3a3]'>{formatDate(event.detected_at)} via {event.source}</span>
         </div>
-        <div className={`${panelClass} p-5 sm:p-7`}>
-          <div className='grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3'>
+        <div className={`${panelClass} min-w-0 p-4 sm:p-6`}>
+          <div className='mb-5'>
+            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Change summary</h2>
+            <p className={`m-0 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.summary}</p>
+          </div>
+          <div className={`${styles.metadataGrid} gap-2.5`}>
             {[
               ['Competitor', competitorName(event, dashboard?.competitors || [])],
               ['Market', label(event.country)],
@@ -553,21 +560,21 @@ export default function CompetitorIntelligencePage() {
               ...(event.product_category ? [['Product category', event.product_category]] : []),
               ['Source', event.source]
             ].map(([name, value]) => (
-              <div key={name} className='rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
+              <div key={name} className='min-w-0 rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
                 <span className='mb-1.5 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>{name}</span>
-                <strong className='text-[13px] text-[#09090b] dark:text-white'>{value}</strong>
+                <strong className={`text-[13px] text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</strong>
               </div>
             ))}
           </div>
           {event.previous_value || event.current_value ? (
-            <div className='mt-2.5 grid gap-2.5 sm:grid-cols-2'>
+            <div className={`${styles.metadataGrid} mt-2.5 gap-2.5`}>
               {[
                 ['Before', event.previous_value || 'Not found'],
                 ['After', event.current_value || 'Not found']
               ].map(([name, value]) => (
-                <div key={name} className='rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
+                <div key={name} className='min-w-0 rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
                   <span className='mb-1.5 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>{name}</span>
-                  <strong className='text-[13px] text-[#09090b] dark:text-white'>{value}</strong>
+                  <strong className={`text-[13px] text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</strong>
                 </div>
               ))}
             </div>
@@ -582,11 +589,11 @@ export default function CompetitorIntelligencePage() {
           </div>
           <div className='mt-[17px]'>
             <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Captured evidence</h2>
-            <p className='border-l-2 border-black bg-[#f5f5f5] p-3 text-xs leading-[1.6] text-[#404040] dark:border-white dark:bg-[#242424] dark:text-[#d4d4d4]'>{event.evidence}</p>
+            <p className={`border-l-2 border-black bg-[#f5f5f5] p-3 text-xs leading-[1.6] text-[#404040] dark:border-white dark:bg-[#242424] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.evidence}</p>
           </div>
           <div className='mt-[17px]'>
             <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Before / after diff</h2>
-            <pre className='max-h-[300px] overflow-auto whitespace-pre-wrap break-words border border-[#e6e6e6] p-3 text-[11px] leading-[1.5] text-[#404040] dark:border-[#424242] dark:text-[#d4d4d4]'>{eventDiff === null ? 'Loading captured diff…' : eventDiff || 'No line changes in the captured evidence.'}</pre>
+            <pre className={`max-h-[300px] min-w-0 overflow-auto whitespace-pre-wrap border border-[#e6e6e6] p-3 text-[11px] leading-[1.5] text-[#404040] dark:border-[#424242] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{eventDiff === null ? 'Loading captured diff…' : eventDiff || 'No line changes in the captured evidence.'}</pre>
           </div>
           <div className='mt-[17px]'>
             <div className='flex flex-wrap gap-2'>
@@ -611,8 +618,8 @@ export default function CompetitorIntelligencePage() {
   };
 
   return (
-    <main className='min-h-[calc(100vh-4rem)] w-full bg-white px-4 pb-16 pt-6 text-[#09090b] dark:bg-black dark:text-white sm:px-6 lg:px-12 xl:px-16'>
-      <div className='mx-auto w-full max-w-[1440px]'>
+    <main className='min-h-[calc(100vh-4rem)] min-w-0 w-full bg-white px-4 pb-16 pt-6 text-[#09090b] dark:bg-black dark:text-white sm:px-6 lg:px-8 xl:px-12'>
+      <div className={`mx-auto min-w-0 w-full max-w-[1440px] ${styles.workspace}`}>
         {renderHeader()}
         {notice ? (
           <div className='fixed bottom-5 right-5 z-50 flex max-w-[380px] items-start gap-2.5 rounded-[10px] border border-[#e6e6e6] bg-white p-3 text-[13px] leading-6 text-[#09090b] shadow-2xl dark:border-[#424242] dark:bg-[#171717] dark:text-white' role='status'>

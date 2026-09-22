@@ -155,9 +155,51 @@ stop_tracked_process() {
   rm -f "$pid_file"
 }
 
+stop_port_listener() {
+  local name="$1"
+  local port="$2"
+  local pid
+  local pids
+  local remaining=0
+
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  [[ -n "$pids" ]] || return 0
+
+  for pid in $pids; do
+    log "Stopping $name listener on port $port (pid $pid)"
+    stop_process_tree "$pid"
+  done
+
+  for _ in {1..20}; do
+    port_is_busy "$port" || return 0
+    sleep 0.25
+  done
+
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  for pid in $pids; do
+    log "$name on port $port did not stop cleanly; sending SIGKILL to pid $pid"
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+
+  for _ in {1..10}; do
+    port_is_busy "$port" || return 0
+    sleep 0.25
+  done
+
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  for pid in $pids; do
+    log "Could not free port $port; still held by pid $pid ($(process_command "$pid"))" >&2
+    remaining=1
+  done
+  return "$remaining"
+}
+
 stop_stack() {
   stop_tracked_process "frontend" "$WEB_PID_FILE" || true
   stop_tracked_process "backend" "$API_PID_FILE" || true
+  # PID files are removed by clean/build; always reclaim AURA ports so orphans do not block restart.
+  stop_port_listener "frontend" "$WEB_PORT" || true
+  stop_port_listener "backend" "$API_PORT" || true
   stop_competitor_support || true
 }
 
@@ -263,12 +305,23 @@ port_is_busy() {
   lsof -tiTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
 
+describe_port_holder() {
+  local port="$1"
+  local pid
+  pid="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$pid" ]]; then
+    printf 'unknown process'
+    return 0
+  fi
+  printf 'pid %s (%s)' "$pid" "$(process_command "$pid")"
+}
+
 assert_ports_free() {
   if port_is_busy "$API_PORT"; then
-    fail "Port $API_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $API_PORT is still in use by $(describe_port_holder "$API_PORT") after stop."
   fi
   if port_is_busy "$WEB_PORT"; then
-    fail "Port $WEB_PORT is already in use. Run './scripts/macos/stop.sh' for AURA-owned processes or stop the other process manually."
+    fail "Port $WEB_PORT is still in use by $(describe_port_holder "$WEB_PORT") after stop."
   fi
 }
 
@@ -432,7 +485,7 @@ Commands:
   start   Start FastAPI and the existing Next.js production build
   dev     Start FastAPI and Next.js in development mode with hot reload
   up      Clean, build, then start FastAPI and Next.js in production mode
-  stop    Stop only AURA processes recorded by this runner
+  stop    Stop AURA processes and free the API/web listen ports
 EOF
 }
 
