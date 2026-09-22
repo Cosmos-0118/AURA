@@ -62,6 +62,25 @@ class Competitor:
 
 
 @dataclass(slots=True)
+class WatchSource:
+    id: str
+    competitor_id: str
+    url: str
+    kind: str
+    priority: str
+    interval_hours: int
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"pricing", "product", "logistics", "news", "insights", "homepage"}:
+            raise ValueError(f"Unsupported watch kind {self.kind!r}")
+        if self.priority not in PRIORITY_TYPES or self.interval_hours < 1:
+            raise ValueError(f"Invalid watch scheduling for {self.id}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class Snapshot:
     id: str
     competitor_id: str

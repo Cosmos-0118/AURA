@@ -10,6 +10,10 @@ services:
       INTEL_DB_PATH: /app/data/intelligence.db
       INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      CHANGEDETECTION_API_URL: http://changedetection:5000
+      CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
     volumes:
       - intelligence-data:/app/data
       - ./config:/app/config:ro
@@ -27,6 +31,10 @@ services:
       INTEL_SCAN_INTERVAL: ${INTEL_SCAN_INTERVAL:-900}
       INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      CHANGEDETECTION_API_URL: http://changedetection:5000
+      CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
     volumes:
       - intelligence-data:/app/data
       - ./config:/app/config:ro
@@ -42,21 +50,36 @@ services:
       - "${CHANGEDETECTION_PORT:-5001}:5000"
     environment:
       BASE_URL: ${CHANGEDETECTION_BASE_URL:-http://localhost:5001}
-      PLAYWRIGHT_DRIVER_URL: ws://browser-chrome:3000
+      PLAYWRIGHT_DRIVER_URL: ${PLAYWRIGHT_DRIVER_URL:-ws://browser-chrome:3000/?headful=true&--disable-http2&--disable-quic&--window-size=1920,1080}
+      FETCH_WORKERS: ${FETCH_WORKERS:-1}
       # The upstream image disables visual screenshot diffing by default.
       # Keep it available alongside the text processor used by AURA webhooks.
       DISABLED_PROCESSORS: ${DISABLED_PROCESSORS:-}
     volumes:
       - changedetection-data:/datastore
     depends_on:
-      - browser-chrome
+      browser-chrome:
+        condition: service_healthy
 
   browser-chrome:
     image: dgtlmoon/sockpuppetbrowser:latest
     hostname: browser-chrome
     restart: unless-stopped
+    init: true
+    shm_size: 2gb
+    environment:
+      MAX_CONCURRENT_CHROME_PROCESSES: ${MAX_CONCURRENT_CHROME_PROCESSES:-2}
+      WS_PING_TIMEOUT: ${WS_PING_TIMEOUT:-60}
+      CONNECTION_QUEUE_TIMEOUT: ${CONNECTION_QUEUE_TIMEOUT:-300}
+      LOG_LEVEL: ${BROWSER_LOG_LEVEL:-INFO}
     cap_add:
       - SYS_ADMIN
+    healthcheck:
+      test: ["CMD", "python3", "/usr/src/app/docker-health-check.py", "--host", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   searxng:
     image: searxng/searxng:latest

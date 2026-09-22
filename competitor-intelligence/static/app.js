@@ -1,4 +1,4 @@
-const state = { events: [], competitors: [], monitors: [], scanning: false, scanTimer: null, scanStartedAt: 0, scanTrigger: null };
+const state = { events: [], competitors: [], monitors: [], watches: [], scanning: false, scanTimer: null, scanStartedAt: 0, scanTrigger: null };
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -20,6 +20,7 @@ const labels = {
   promotion: 'Promotion',
   article: 'Article',
   social_post: 'Social post',
+  article: 'New article',
   DIRECT_COMPETITOR: 'Direct competitor',
   INDIRECT_COMPETITOR: 'Indirect competitor',
   PARTNER: 'Partner / overlap',
@@ -44,14 +45,29 @@ async function request(path, options) {
 }
 
 function showNotice(message, tone = 'warning') {
-  const notice = $('#notice');
-  notice.hidden = false;
-  notice.textContent = message;
-  notice.dataset.tone = tone;
+  const container = $('#toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${tone}`;
+  toast.setAttribute('role', tone === 'info' ? 'status' : 'alert');
+  const text = document.createElement('span');
+  text.className = 'toast-message';
+  text.textContent = message;
+  const close = document.createElement('button');
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', 'Dismiss notification');
+  close.textContent = '×';
+  close.addEventListener('click', () => toast.remove());
+  toast.append(text, close);
+  container.append(toast);
+  window.setTimeout(() => {
+    toast.classList.add('is-leaving');
+    window.setTimeout(() => toast.remove(), 250);
+  }, 6000);
 }
 
 function clearNotice() {
-  $('#notice').hidden = true;
+  $('#toast-container')?.replaceChildren();
 }
 
 function formatElapsed(milliseconds) {
@@ -64,39 +80,20 @@ function startScanOverlay(targets) {
   const activeElement = document.activeElement;
   state.scanTrigger = activeElement instanceof HTMLElement ? activeElement : null;
   state.scanning = true;
-  const startedAt = performance.now();
-  state.scanStartedAt = startedAt;
-  let phaseIndex = 0;
+  state.scanStartedAt = performance.now();
   overlay.hidden = false;
   overlay.setAttribute('aria-hidden', 'false');
-  overlay.classList.remove('is-complete', 'is-error');
   document.body.classList.add('is-scanning');
   $('main').inert = true;
   $('main').setAttribute('aria-busy', 'true');
-  $('#scan-title').textContent = targets.length > 1 ? 'Scanning watchlist' : `Scanning ${targets[0]}`;
-  $('#scan-targets').innerHTML = targets.map((target) => `<span class="scan-target"><i></i>${escapeHtml(target)}</span>`).join('');
-  $('#scan-phase').textContent = scanPhases[phaseIndex];
-  $('#scan-elapsed').textContent = '00:00';
-  $('#scan-status').textContent = 'The dashboard will update when the scan returns.';
+  $('#scan-title').textContent = targets.length > 1 ? `Scanning ${targets.length} sources` : `Scanning ${targets[0] || 'source'}`;
   $('#scan-card').focus({ preventScroll: true });
-  state.scanTimer = window.setInterval(() => {
-    phaseIndex = (phaseIndex + 1) % scanPhases.length;
-    $('#scan-phase').textContent = scanPhases[phaseIndex];
-    $('#scan-elapsed').textContent = formatElapsed(performance.now() - startedAt);
-  }, 1200);
 }
 
-async function finishScanOverlay(outcome = 'complete') {
-  if (state.scanTimer) window.clearInterval(state.scanTimer);
-  state.scanTimer = null;
+async function finishScanOverlay() {
   const overlay = $('#scan-overlay');
-  overlay.classList.toggle('is-complete', outcome === 'complete');
-  overlay.classList.toggle('is-error', outcome === 'error');
-  $('#scan-phase').textContent = outcome === 'complete' ? 'Snapshot comparison complete' : 'Scan stopped with an error';
-  $('#scan-status').textContent = outcome === 'complete' ? 'Fresh source state is ready in the workspace.' : 'Check the notice for the source error details.';
-  const minimumVisibleTime = 1200;
-  const remaining = Math.max(520, minimumVisibleTime - (performance.now() - state.scanStartedAt));
-  await new Promise((resolve) => window.setTimeout(resolve, remaining));
+  const elapsed = performance.now() - state.scanStartedAt;
+  if (elapsed < 400) await new Promise((resolve) => window.setTimeout(resolve, 400 - elapsed));
   overlay.hidden = true;
   overlay.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('is-scanning');
@@ -132,7 +129,7 @@ function renderEvents(events) {
     return;
   }
   $('#events').innerHTML = events.map((event) => `
-    <article class="event-card" data-event-id="${escapeHtml(event.id)}" tabindex="0" role="button" aria-label="View details for ${escapeHtml(event.summary)}">
+    <a class="event-card" href="/event/${encodeURIComponent(event.id)}" aria-label="View details for ${escapeHtml(event.summary)}">
       <span class="event-rail event-rail-${escapeHtml(event.impact)}"></span>
       <div class="event-content">
         <div class="event-topline">
@@ -152,36 +149,8 @@ function renderEvents(events) {
       <div class="event-value">
         ${event.current_value ? `<small>Detected value</small><strong>${escapeHtml(event.current_value)}</strong>` : '<small>Confidence</small><strong>' + Math.round(event.confidence * 100) + '%</strong>'}
       </div>
-    </article>
+    </a>
   `).join('');
-  document.querySelectorAll('.event-card').forEach((card) => {
-    card.addEventListener('click', () => openDetail(card.dataset.eventId));
-    card.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail(card.dataset.eventId); } });
-  });
-}
-
-function openDetail(id) {
-  const event = state.events.find((item) => item.id === id);
-  if (!event) return;
-  $('#event-detail').innerHTML = `
-    <div class="detail">
-      <div class="event-topline"><span class="badge badge-${escapeHtml(event.impact)}">${escapeHtml(event.impact)} impact</span><span class="badge badge-brand">${escapeHtml(labels[event.brand_id] || event.brand_id)}</span>${event.relationship ? `<span class="badge badge-relationship">${escapeHtml(labels[event.relationship] || event.relationship)}</span>` : ''}</div>
-      <h2>${escapeHtml(event.summary)}</h2>
-      <div class="detail-grid">
-        <div class="detail-box"><span>Competitor</span><strong>${escapeHtml(event.competitor_name)}</strong></div>
-        <div class="detail-box"><span>Market</span><strong>${escapeHtml(labels[event.country] || event.country || 'Regional')}</strong></div>
-        <div class="detail-box"><span>Change type</span><strong>${escapeHtml(labels[event.change_type] || event.change_type)}</strong></div>
-        ${event.product_category ? `<div class="detail-box"><span>Product category</span><strong>${escapeHtml(event.product_category)}</strong></div>` : ''}
-        <div class="detail-box"><span>Analysis confidence</span><strong>${Math.round(event.confidence * 100)}%</strong></div>
-      </div>
-      ${event.previous_value || event.current_value ? `<div class="detail-grid"><div class="detail-box"><span>Before</span><strong>${escapeHtml(event.previous_value || 'Not found')}</strong></div><div class="detail-box"><span>After</span><strong>${escapeHtml(event.current_value || 'Not found')}</strong></div></div>` : ''}
-      <div class="detail-section"><h3>Why it matters</h3><p>${escapeHtml(event.why_it_matters)}</p></div>
-      <div class="detail-section"><h3>Recommended action</h3><p>${escapeHtml(event.recommended_action)}</p></div>
-      <div class="detail-section"><h3>Captured evidence</h3><p class="evidence">${escapeHtml(event.evidence)}</p></div>
-      <div class="detail-section"><h3>Detected</h3><p>${escapeHtml(formatDate(event.detected_at))} via ${escapeHtml(event.source)}</p></div>
-    </div>
-  `;
-  $('#event-dialog').showModal();
 }
 
 function filterQuery() {
@@ -196,37 +165,65 @@ async function refreshEvents() {
 }
 
 async function refreshDashboard() {
-  const [summary, competitors, health, monitors] = await Promise.all([
-    request('/api/summary'), request('/api/competitors'), request('/api/source-health'), request('/api/monitors'),
+  const [summary, competitors, health, monitors, watches] = await Promise.all([
+    request('/api/summary'), request('/api/competitors'), request('/api/source-health'), request('/api/monitors'), request('/api/watches'),
   ]);
   state.competitors = competitors;
   state.monitors = monitors;
+  state.watches = watches;
+  if ($('#summary-watches')) $('#summary-watches').textContent = `${watches.length} URLs`;
   renderSummary(summary);
-  $('#watchlist').innerHTML = competitors.map((competitor) => {
+  const watchlistEl = $('#watchlist');
+  if (watchlistEl) {
+    watchlistEl.innerHTML = competitors.map((competitor) => {
     const monitor = monitors.find((item) => item.competitor_id === competitor.id) || {};
-    const source = monitor.source ? `${monitor.source} · ${monitor.versions || 0} version${monitor.versions === 1 ? '' : 's'}` : 'Not checked yet';
-    const link = monitor.source_url ? `<a class="watch-link" href="${escapeHtml(monitor.source_url)}" target="_blank" rel="noreferrer">Open source</a>` : '';
+    const watchRows = watches.filter((item) => item.competitor_id === competitor.id);
+    const checked = watchRows.filter((item) => item.last_checked).length;
+    const status = competitor.monitor
+      ? `${watchRows.length} URL${watchRows.length === 1 ? '' : 's'} · ${checked} checked · last ${escapeHtml(formatDate(monitor.last_checked))}`
+      : 'Context only — not scanned';
+    const link = monitor.source_url ? `<a class="watch-link" href="${escapeHtml(monitor.source_url)}" target="_blank" rel="noreferrer">Open source ↗</a>` : '';
     const relationship = labels[competitor.relationship] || competitor.relationship;
-    const monitorAction = competitor.monitor
-      ? `<button class="watch-action" data-scan-id="${escapeHtml(competitor.id)}">Scan</button>`
-      : '<span class="watch-context">Context only</span>';
+    const urls = competitor.monitor && watchRows.length
+      ? `<div class="watch-urls">${watchRows.map((item) => `
+        <div class="watch-url">
+          <div class="watch-url-info">
+            <a class="watch-url-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.id)}</a>
+            <span class="watch-url-meta">${escapeHtml(item.kind)} · every ${item.interval_hours}h · ${escapeHtml(item.priority)} priority</span>
+          </div>
+          <button class="button button-quiet watch-scan" data-scan-watch-id="${escapeHtml(item.id)}">Scan</button>
+        </div>`).join('')}</div>`
+      : '';
     return `
-    <div class="watch-row"><div><div class="watch-name">${escapeHtml(competitor.name)}</div><div class="watch-detail">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)} · ${escapeHtml(relationship)}</div><div class="watch-detail">${escapeHtml(competitor.product_category)} · ${escapeHtml(competitor.market || competitor.countries.join(', '))}</div><div class="watch-detail">${escapeHtml(source)} · checked ${escapeHtml(formatDate(monitor.last_checked))}</div>${link}</div>${monitorAction}</div>
+    <article class="watch-card">
+      <div class="watch-card-head">
+        <div>
+          <div class="watch-name">${escapeHtml(competitor.name)}</div>
+          <div class="watch-badges"><span class="badge badge-brand">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)}</span><span class="badge badge-relationship">${escapeHtml(relationship)}</span></div>
+        </div>
+        ${link}
+      </div>
+      <p class="watch-sub">${escapeHtml(competitor.product_category)} · ${escapeHtml(competitor.market || competitor.countries.join(', '))}</p>
+      <p class="watch-status">${status}</p>
+      ${urls}
+    </article>
     `;
   }).join('') || '<div class="empty-state">Add competitors to config/competitors.json.</div>';
-  document.querySelectorAll('[data-scan-id]').forEach((button) => button.addEventListener('click', () => scan(button.dataset.scanId, button)));
-  $('#source-health').innerHTML = health.map((item) => `<div class="health-row"><div><div class="health-name">${escapeHtml(item.source)}</div><div class="health-detail">${escapeHtml(item.detail)}</div></div><span class="health-status health-${escapeHtml(item.status)}">${escapeHtml(item.status.replace('_', ' '))}</span></div>`).join('');
+    document.querySelectorAll('[data-scan-watch-id]').forEach((button) => button.addEventListener('click', () => scanWatch(button.dataset.scanWatchId, button)));
+  }
+  const healthEl = $('#source-health');
+  if (healthEl) healthEl.innerHTML = health.map((item) => `<div class="health-row"><div><div class="health-name">${escapeHtml(item.source)}</div><div class="health-detail">${escapeHtml(item.detail)}</div></div><span class="health-status health-${escapeHtml(item.status)}">${escapeHtml(item.status.replace('_', ' '))}</span></div>`).join('');
 }
 
-async function scan(id, button) {
+async function scanWatch(id, button) {
   if (state.scanning) return;
   if (button) { button.disabled = true; button.textContent = 'Scanning…'; }
   clearNotice();
-  const competitor = state.competitors.find((item) => item.id === id);
-  startScanOverlay([competitor?.name || 'Selected watch']);
+  const watch = state.watches.find((item) => item.id === id);
+  startScanOverlay([watch?.id || 'Selected watch']);
   let outcome = 'complete';
   try {
-    const result = await request(`/api/competitors/${encodeURIComponent(id)}/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const result = await request(`/api/watches/${encodeURIComponent(id)}/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     if (result.status === 'error') {
       outcome = 'error';
       showNotice(`Scan failed: ${result.error}`);
@@ -279,23 +276,35 @@ async function scanAll() {
   }
 }
 
+async function syncChanges() {
+  const button = $('#sync-changes');
+  button.disabled = true;
+  button.textContent = 'Syncing…';
+  clearNotice();
+  try {
+    const result = await request('/api/sync-changedetection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await Promise.all([refreshDashboard(), refreshEvents()]);
+    showNotice(`Imported ${result.imported} snapshot${result.imported === 1 ? '' : 's'} from changedetection.${result.errors.length ? ` ${result.errors.length} watch errors: ${result.errors.slice(0, 2).join('; ')}` : ''}`, result.errors.length ? 'warning' : 'info');
+  } catch (error) {
+    showNotice(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Sync 5001 changes';
+  }
+}
+
 async function boot() {
   try {
     await request('/api/health');
-    $('#api-status').textContent = 'Service ready';
-    $('#api-status').className = 'status-pill status-ready';
     await refreshDashboard();
     await refreshEvents();
   } catch (error) {
-    $('#api-status').textContent = 'Service unavailable';
-    $('#api-status').className = 'status-pill status-error';
     showNotice(error.message);
   }
 }
 
 $('#scan-all').addEventListener('click', scanAll);
+$('#sync-changes').addEventListener('click', syncChanges);
 $('#filters').addEventListener('input', () => refreshEvents().catch((error) => showNotice(error.message)));
 $('#clear-filters').addEventListener('click', () => { $('#filters').reset(); refreshEvents().catch((error) => showNotice(error.message)); });
-$('#close-dialog').addEventListener('click', () => $('#event-dialog').close());
-$('#event-dialog').addEventListener('click', (event) => { if (event.target === $('#event-dialog')) $('#event-dialog').close(); });
 boot();

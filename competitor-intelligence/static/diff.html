@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="JA Assure competitor intelligence monitor — full diff" />
+    <title>Full diff · Competitor Intelligence</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="JA Assure competitor intelligence home">
+          <span class="brand-mark">JA</span>
+          <span>
+            <strong>JA Assure</strong>
+            <small>Competitor intelligence</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <a class="button button-quiet" href="/sources">Sources</a>
+          <a class="button button-quiet" href="/watchlist">Watchlist</a>
+        </div>
+      </header>
+
+      <a id="back-to-event" class="back-link" href="/">← Back to event</a>
+
+      <div class="page-header">
+        <div>
+          <p id="diff-eyebrow" class="eyebrow">Before / after diff</p>
+          <h1 id="diff-title">Full diff</h1>
+        </div>
+      </div>
+
+      <pre id="full-diff" class="diff-evidence diff-full" aria-live="polite">Loading captured diff…</pre>
+
+      <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+    </main>
+
+    <script src="/static/diff.js" defer></script>
+  </body>
+</html>

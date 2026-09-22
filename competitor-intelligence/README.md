@@ -1,17 +1,18 @@
 # JA Assure Competitor Intelligence
 
 Standalone competitor monitoring module for Jade, DoctorShield, and Jaguar
-Transit. It is intentionally independent from the AURA dashboard: it owns its
-configuration, SQLite database, HTTP API, and browser dashboard.
+Transit. It owns its configuration, SQLite database, HTTP API, and browser
+dashboard. The 5001 changedetection UI is a source of snapshots; the main
+Intelligence feed is served by this module on port 8787.
 
 The collection pipeline is deterministic:
 
 ```text
-configured URL / changedetection webhook / RSS feed
+configured URL / changedetection history or webhook / RSS feed
         -> normalized content
         -> hash and snapshot
-        -> meaningful diff
-        -> deterministic change classification
+        -> structured premium, new-link, or meaningful text diff
+        -> deterministic change classification and optional Gemini analysis
         -> event and evidence in the dashboard
 ```
 
@@ -26,6 +27,13 @@ copying their source code:
 The built-in website collector also works without any external service. It is a
 useful baseline for a local demo and for sources that do not need JavaScript
 rendering.
+
+The Compose defaults keep browser checks conservative: one changedetection
+worker, two isolated Chrome sessions, a larger shared memory area, a readiness
+healthcheck, and a 60-second CDP keepalive. The browser URL disables HTTP/2 and
+QUIC and uses headful Chrome because some publishers fail HTTP/2 navigation or
+serve an anti-bot challenge to headless browsers. Liberty watches use the
+plain HTTP collector because those pages do not require JavaScript.
 
 ## Run with the upstream tools
 
@@ -52,12 +60,66 @@ website registry and polls configured feeds every 15 minutes by default. These
 services are optional: the direct website collector and webhook endpoint still
 work when only the intelligence container is running.
 
+`./run.sh` loads the repository root `.env` for Compose interpolation. It passes
+only `GEMINI_API_KEY` and `GEMINI_MODEL` to the intelligence container. Local
+Python mode reads those two settings directly from the root `.env` when they
+are not already in the process environment. The Gemini key is never sent to
+the browser. Set `CHANGEDETECTION_API_KEY` in the shell or Compose environment
+if the changedetection API requires a key; find it under changedetection
+Settings → API.
+
 The compose setup also enables changedetection.io's `Visual / Image screenshot
 change detection` processor. The AURA-provisioned watchlist intentionally
 remains `Webpage Text/HTML, JSON and PDF changes` because the intelligence
 webhook needs text for deterministic classification. Use the visual processor
 for a separate watch when you need before/after screenshot diffs; it requires
 the configured Playwright browser backend.
+
+## Connect changedetection to Intelligence
+
+The source list is `config/watches.json`. It currently has 35 page watches
+across 12 active competitor relationships. Product and pricing pages run every
+6 hours, logistics and insights every 12 hours, news listings every 6 hours,
+and the Parcel Pro homepage every 24 hours. Each page has its own baseline.
+
+After both services start, run `python -m competitor_intelligence
+provision-changedetection` with the changedetection API key to create or update
+the configured watches and webhooks. The Intelligence page's **Sync 5001
+changes** button imports existing changedetection history, including changes
+that predate webhook setup. The collector worker also syncs on each polling
+cycle. Only snapshots newer than the stored cursor are imported, so repeated
+syncs do not create duplicate events. The first snapshot of each source is a
+baseline; the next meaningful difference creates a feed event.
+
+For local Python mode, `./run.sh --local` reads the API credential from the
+running local changedetection container and uses history polling. For immediate
+webhook delivery, run Intelligence through Compose so the `intelligence`
+container hostname in the watch notification URL resolves. Existing
+changedetection watches outside `config/watches.json` are preserved and do not
+appear in the JA feed until explicitly mapped to a brand source.
+
+For a source-specific direct check, use its Scan button in the Intelligence
+watchlist. **Scan watchlist** checks all configured URLs, which can take several
+minutes. A failed or blocked source reports an error; it does not erase the
+previous baseline. Some publishers block automated requests or render news
+links only in a browser, so source health should be reviewed before relying on
+an empty feed.
+
+G4S currently returns Radware's HTTP 247 bot-protection challenge from this
+runtime. The collector identifies that challenge and refuses to store it as a
+baseline. G4S watches therefore use the headful Chrome backend; if the
+publisher continues to challenge the runtime, the watch remains an explicit
+blocked source instead of producing false changes.
+
+Income's medical indemnity premium table is parsed into risk category,
+annual premium, discount, and effective date. A category price change produces
+a high impact event with explicit before and after prices. News and insights
+pages compare article URLs and titles. New articles are fetched and screened
+for brand relevance before an event is created; Gemini is used for that screen
+when configured, with a local keyword screen otherwise. Open an event to see
+the captured diff and choose **Analyze with AI** for a Gemini summary, why it
+matters, and a suggested next action. Gemini analysis is on demand and does
+not rewrite the stored evidence.
 
 ## Run it
 
@@ -100,10 +162,13 @@ INTEL_PORT=8787
 INTEL_DB_PATH=data/intelligence.db
 INTEL_COMPETITORS=config/competitors.json
 INTEL_FEEDS=config/feeds.json
+INTEL_WATCHES=config/watches.json
 INTEL_REQUEST_TIMEOUT=20
 INTEL_WEBHOOK_TOKEN=replace-with-a-long-random-value
 CHANGEDETECTION_API_URL=http://localhost:5001
 CHANGEDETECTION_API_KEY=replace-with-changedetection-api-key
+GEMINI_API_KEY=replace-with-personal-gemini-key
+GEMINI_MODEL=gemini-3.6-flash
 SEARXNG_URL=http://localhost:8080
 DISABLED_PROCESSORS=
 ```
@@ -169,8 +234,8 @@ same header.
 
 - No AURA API, frontend route, or shared contract is required.
 - No crawler framework is vendored.
-- No LLM is required for collection or change detection. An AI analyst can be
-  added later behind the stored event/evidence boundary.
+- No LLM is required for collection or change detection. Gemini is used for
+  optional relevance screening and on-demand evidence analysis.
 - Snapshot history and event evidence live in SQLite so the module is portable.
 - External collectors are best-effort and report errors in source health; one
   failing source does not stop other scans.

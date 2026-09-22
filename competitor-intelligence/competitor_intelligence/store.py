@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Callable
@@ -85,6 +86,10 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_detected
                     ON events(detected_at DESC);
+                CREATE TABLE IF NOT EXISTS source_cursors (
+                    source_key TEXT PRIMARY KEY,
+                    remote_version TEXT NOT NULL
+                );
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
@@ -310,6 +315,41 @@ class Store:
                     (competitor_id,),
                 ).fetchone()
         return self._snapshot_from_row(row) if row else None
+
+    def get_cursor(self, source_key: str) -> str | None:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT remote_version FROM source_cursors WHERE source_key = ?", (source_key,)
+            ).fetchone()
+        return row["remote_version"] if row else None
+
+    def set_cursor(self, source_key: str, version: str) -> None:
+        with closing(self._connect()) as connection, connection:
+            connection.execute(
+                "INSERT INTO source_cursors(source_key, remote_version) VALUES (?, ?) "
+                "ON CONFLICT(source_key) DO UPDATE SET remote_version = excluded.remote_version",
+                (source_key, version),
+            )
+
+    def event_evidence_pair(self, event_id: str) -> tuple[ChangeEvent, str, str] | None:
+        with closing(self._connect()) as connection:
+            row = connection.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+            if row is None:
+                return None
+            event = self._event_from_row(row)
+            match = re.search(r":([0-9a-f]{64}):([0-9a-f]{64}):\d+$", row["event_key"] or "")
+            if not match:
+                return None
+            contents = []
+            for digest in match.groups():
+                snapshot = connection.execute(
+                    "SELECT content FROM snapshots WHERE competitor_id = ? AND content_hash = ? "
+                    "ORDER BY scraped_at DESC LIMIT 1", (event.competitor_id, digest)
+                ).fetchone()
+                if snapshot is None:
+                    return None
+                contents.append(snapshot["content"])
+        return event, contents[0], contents[1]
 
     def add_snapshot(self, snapshot: Snapshot) -> None:
         with closing(self._connect()) as connection, connection:

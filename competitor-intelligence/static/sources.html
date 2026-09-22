@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="JA Assure competitor intelligence monitor — sources" />
+    <title>Sources · Competitor Intelligence</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="JA Assure competitor intelligence home">
+          <span class="brand-mark">JA</span>
+          <span>
+            <strong>JA Assure</strong>
+            <small>Competitor intelligence</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <a class="button button-quiet is-active" href="/sources" aria-current="page">Sources</a>
+          <a class="button button-quiet" href="/watchlist">Watchlist</a>
+          <button id="sync-changes" class="button button-quiet">Sync 5001 changes</button>
+          <button id="scan-all" class="button button-primary">Scan watchlist</button>
+        </div>
+      </header>
+
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">Collection layer</p>
+          <h1>Source health</h1>
+          <p class="page-copy">Live status of every collection source feeding the feed.</p>
+        </div>
+        <span id="source-count" class="muted">0 sources</span>
+      </div>
+
+      <section class="panel">
+        <div id="source-health" class="health-list"></div>
+      </section>
+
+      <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+    </main>
+
+    <div id="scan-overlay" class="scan-overlay" hidden aria-hidden="true">
+      <section id="scan-card" class="scan-card" role="dialog" aria-modal="true" aria-labelledby="scan-title" aria-describedby="scan-copy" tabindex="-1">
+        <div class="scan-spinner" aria-hidden="true"></div>
+        <h2 id="scan-title">Scanning</h2>
+        <p id="scan-copy">Checking sources for changes. This may take a few seconds.</p>
+        <div class="scan-progress" aria-hidden="true"><span></span></div>
+      </section>
+    </div>
+
+    <script src="/static/sources.js" defer></script>
+  </body>
+</html>

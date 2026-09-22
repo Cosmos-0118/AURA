@@ -18,26 +18,12 @@
           </span>
         </a>
         <div class="topbar-actions">
-          <span id="api-status" class="status-pill status-loading">Connecting</span>
+          <a class="button button-quiet" href="/sources">Sources</a>
+          <a class="button button-quiet" href="/watchlist">Watchlist</a>
+          <button id="sync-changes" class="button button-quiet">Sync 5001 changes</button>
           <button id="scan-all" class="button button-primary">Scan watchlist</button>
         </div>
       </header>
-
-      <section class="hero">
-        <div>
-          <p class="eyebrow">Signal room / live workspace</p>
-          <h1>Know what moved before the market does.</h1>
-          <p class="hero-copy">
-            Deterministic snapshots, meaningful diffs, and an evidence trail for Jade,
-            DoctorShield, and Jaguar Transit.
-          </p>
-        </div>
-        <div class="hero-note">
-          <span class="pulse-dot"></span>
-          <span>Independent monitor</span>
-          <small>No AURA API connection required</small>
-        </div>
-      </section>
 
       <section id="summary" class="summary-grid" aria-label="Intelligence summary">
         <article class="summary-card summary-card-accent">
@@ -53,28 +39,27 @@
         <article class="summary-card">
           <span class="summary-label">Watchlist</span>
           <strong id="summary-competitors">—</strong>
-          <small>Registered competitors</small>
+          <small>Registered relationships</small>
         </article>
         <article class="summary-card">
           <span class="summary-label">Data path</span>
-          <strong class="summary-word">Hash + diff</strong>
-          <small>LLM optional, evidence first</small>
+          <strong id="summary-watches" class="summary-word">—</strong>
+          <small>Source specific checks</small>
         </article>
       </section>
 
-      <div id="notice" class="notice" role="status" hidden></div>
+      <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 
-      <section class="workspace-grid">
-        <div class="main-column">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Prioritised feed</p>
-              <h2>Detected changes</h2>
-            </div>
-            <span id="event-count" class="muted">0 events</span>
+      <section class="feed">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Prioritised feed</p>
+            <h2>Detected changes</h2>
           </div>
+          <span id="event-count" class="muted">0 events</span>
+        </div>
 
-          <form id="filters" class="filters" aria-label="Filter intelligence events">
+        <form id="filters" class="filters" aria-label="Filter intelligence events">
             <label class="search-field">
               <span class="sr-only">Search events</span>
               <input id="filter-search" name="search" type="search" placeholder="Search competitor, summary, or evidence…" />
@@ -136,71 +121,18 @@
           </form>
 
           <div id="events" class="events" aria-live="polite"></div>
-        </div>
-
-        <aside class="side-column">
-          <section class="panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Collection layer</p>
-                <h2>Source health</h2>
-              </div>
-              <span class="live-indicator" aria-label="Live source status"></span>
-            </div>
-            <div id="source-health" class="health-list"></div>
-          </section>
-
-          <section class="panel watchlist-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Registry</p>
-                <h2>Watchlist</h2>
-              </div>
-            </div>
-            <div id="watchlist" class="watchlist"></div>
-          </section>
-
-          <section class="panel digest-panel">
-            <p class="eyebrow">Operating principle</p>
-            <h2>Analyst, not sensor.</h2>
-            <p>
-              Every signal begins as a captured source, then passes through a hash,
-              diff, and evidence check before it reaches this feed.
-            </p>
-            <div class="pipeline">
-              <span>Capture</span><i>→</i><span>Diff</span><i>→</i><span>Classify</span>
-            </div>
-          </section>
-        </aside>
       </section>
     </main>
 
     <div id="scan-overlay" class="scan-overlay" hidden aria-hidden="true">
       <section id="scan-card" class="scan-card" role="dialog" aria-modal="true" aria-labelledby="scan-title" aria-describedby="scan-copy" tabindex="-1">
-        <div class="scan-visual" aria-hidden="true">
-          <span class="scan-grid"></span>
-          <span class="scan-beam"></span>
-          <span class="scan-node scan-node-one"></span>
-          <span class="scan-node scan-node-two"></span>
-          <span class="scan-node scan-node-three"></span>
-        </div>
-        <div class="scan-kicker"><span class="scan-pulse"></span> Live collection in progress</div>
-        <h2 id="scan-title">Scanning watchlist</h2>
-        <p id="scan-copy">Reading current sources, normalizing text, and comparing it with stored snapshots.</p>
-        <div id="scan-targets" class="scan-targets" aria-label="Scan targets"></div>
-        <div class="scan-telemetry">
-          <span><i class="telemetry-dot"></i><span id="scan-phase" aria-live="polite" aria-atomic="true">Opening source watches</span></span>
-          <span id="scan-elapsed">00:00</span>
-        </div>
+        <div class="scan-spinner" aria-hidden="true"></div>
+        <h2 id="scan-title">Scanning</h2>
+        <p id="scan-copy">Checking sources for changes. This may take a few seconds.</p>
         <div class="scan-progress" aria-hidden="true"><span></span></div>
-        <div class="scan-footer"><span id="scan-status" role="status" aria-live="polite" aria-atomic="true">The dashboard will update when the scan returns.</span><strong>HASH + DIFF</strong></div>
       </section>
     </div>
 
-    <dialog id="event-dialog" class="event-dialog">
-      <button id="close-dialog" class="dialog-close" aria-label="Close event details">×</button>
-      <div id="event-detail"></div>
-    </dialog>
     <script src="/static/app.js" defer></script>
   </body>
 </html>

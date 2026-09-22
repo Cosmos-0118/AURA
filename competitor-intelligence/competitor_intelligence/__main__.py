@@ -42,7 +42,12 @@ def main() -> None:
         print(f"Competitor intelligence worker polling every {SCAN_INTERVAL}s")
         try:
             while True:
-                for result in service.scan_all():
+                try:
+                    print(service.sync_changedetection(), flush=True)
+                except Exception as exc:
+                    print(f"Changedetection sync unavailable: {exc}", flush=True)
+                for watch in service.due_watches():
+                    result = service.scan_watch(watch)
                     print(result.to_dict(), flush=True)
                 for result in service.poll_feeds():
                     print(result, flush=True)

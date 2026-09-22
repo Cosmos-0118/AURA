@@ -4,15 +4,17 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import urllib.error
 from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
 from competitor_intelligence.analysis import content_hash, meaningful_change
-from competitor_intelligence.collectors import CollectedContent, FeedItem
-from competitor_intelligence.config import load_competitors
-from competitor_intelligence.models import Competitor
-from competitor_intelligence.provision import _notification_url, provision_changedetection
+from competitor_intelligence.collectors import (CollectedContent, FeedItem, collect_watch,
+                                                extract_income_pricing_text, request_bytes)
+from competitor_intelligence.config import load_competitors, load_watches
+from competitor_intelligence.models import Competitor, WatchSource
+from competitor_intelligence.provision import _fetch_backend, _notification_url, provision_changedetection
 from competitor_intelligence.service import IntelligenceService
 from competitor_intelligence.store import Store
 
@@ -75,6 +77,42 @@ class IntelligenceCoreTests(unittest.TestCase):
             self.assertFalse(retired.monitor)
             self.assertNotIn("jade-competitor-1", {item.id for item in store.list_competitors()})
 
+    def test_running_service_refreshes_registry_before_dashboard_reads(self) -> None:
+        first = Competitor(
+            id="first-competitor",
+            brand_id="jade",
+            name="First competitor",
+            niche="valuable goods",
+            countries=["SG"],
+            url="https://first.example.test",
+        )
+        second = Competitor(
+            id="second-competitor",
+            brand_id="jade",
+            name="Second competitor",
+            niche="valuable goods",
+            countries=["SG"],
+            url="https://second.example.test",
+        )
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "competitor_intelligence.service.COMPETITORS_PATH",
+            Path(directory) / "competitors.json",
+        ):
+            registry_path = Path(directory) / "competitors.json"
+            registry_path.write_text(json.dumps([first.to_dict()]), encoding="utf-8")
+            store = Store(Path(directory) / "test.db")
+            service = IntelligenceService(store)
+            self.assertEqual([item.id for item in service.competitors()], [first.id])
+
+            registry_path.write_text(
+                json.dumps([first.to_dict(), second.to_dict()]), encoding="utf-8"
+            )
+
+            self.assertEqual(
+                {item.id for item in service.competitors()},
+                {first.id, second.id},
+            )
+
     def test_empty_registry_retires_managed_rows_when_file_exists(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             registry_path = Path(directory) / "competitors.json"
@@ -125,6 +163,230 @@ class IntelligenceCoreTests(unittest.TestCase):
         self.assertTrue(meaningful_change("Premium USD 800", "Premium USD 801"))
         old = "alpha beta gamma " * 100
         self.assertTrue(meaningful_change(old, old.replace(" gamma", "")))
+
+    def test_income_pricing_extracts_category_discount_and_effective_date(self) -> None:
+        html = b'''<table><tr><th>Risk Category</th><th>Annual Premium (S$)</th></tr>
+        <tr><td>Low Risk (see definition)</td><td>$1,773.98</td></tr>
+        <tr><td>High Risk</td><td>$8,583.75</td></tr></table>
+        <p>10% discount will be applied from 2 September 2025 to 1 September 2026.</p>'''
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(html, "text/html")):
+            result = json.loads(collect_watch("https://example.test/prices", "pricing").content)
+        self.assertEqual(result["premiums"]["Low Risk (see definition)"], "S$1,773.98")
+        self.assertEqual(result["premiums"]["High Risk"], "S$8,583.75")
+        self.assertIn("10% discount", result["discount"])
+        self.assertEqual(result["effective_date"], "from 2 September 2025 to 1 September 2026")
+
+    def test_news_listing_extracts_next_data_article_links(self) -> None:
+        html = b'''<html><head><title>Newsroom</title></head><body>
+        <script id="__NEXT_DATA__" type="application/json">
+        {"props":{"pageProps":{"page":{"blocks":[{"settings":{"cards":{"articles":[
+        {"title":"New specie underwriting capability","buttons":[{"link":"/sg/newsroom/new-specie-capability"}]},
+        {"title":"A second article","buttons":[{"link":"/sg/newsroom/second-article"}]}
+        ]}}}]}}}}
+        </script></body></html>'''
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(html, "text/html")):
+            result = collect_watch("https://www.libertyinternational.com/sg/newsroom", "news")
+        self.assertIn("https://www.libertyinternational.com/sg/newsroom/new-specie-capability", result.content)
+        self.assertIn("New specie underwriting capability", result.content)
+
+    def test_bot_protection_challenge_is_reported_without_creating_content(self) -> None:
+        body = b'<script src="/kramericaindustries.ac_v2.lib.js"></script>'
+        response = type("Response", (), {
+            "status": 247,
+            "headers": {},
+            "read": lambda self: body,
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: False,
+        })()
+        with patch("competitor_intelligence.collectors.urllib.request.urlopen", return_value=response):
+            with self.assertRaisesRegex(ValueError, "HTTP 247 bot-protection challenge"):
+                collect_watch("https://www.g4s.com/what-we-do/cash-solutions", "logistics")
+
+    def test_transient_http_failure_is_retried(self) -> None:
+        response = type("Response", (), {
+            "status": 200,
+            "headers": {"Content-Type": "text/plain"},
+            "read": lambda self: b"ok",
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: False,
+        })()
+        failure = urllib.error.HTTPError(
+            "https://example.test", 503, "temporary", {}, None
+        )
+        with patch(
+            "competitor_intelligence.collectors.urllib.request.urlopen",
+            side_effect=[failure, response],
+        ) as opener, patch("competitor_intelligence.collectors.time.sleep") as sleeper:
+            self.assertEqual(request_bytes("https://example.test/page"), (b"ok", "text/plain"))
+        self.assertEqual(opener.call_count, 2)
+        sleeper.assert_called_once_with(1)
+
+    def test_changedetection_pricing_text_extracts_all_risk_categories(self) -> None:
+        text = "\n".join(f"{category}\n${1000 + index:,.2f}" for index, category in enumerate((
+            "Obstetric Risk", "Gynaecology", "Office Gynaecology", "High Risk",
+            "Medium Risk", "Low Risk", "Family Medicine - Procedural",
+            "Family Medicine - Non-Procedural",
+        )))
+        payload = json.loads(extract_income_pricing_text(text))
+        self.assertEqual(len(payload["premiums"]), 8)
+        self.assertEqual(payload["premiums"]["Low Risk"], "S$1,005.00")
+
+    def test_pricing_change_creates_category_specific_event_and_diff(self) -> None:
+        competitor = Competitor("doctorshield-income", "doctorshield", "Income Insurance",
+                                "medical indemnity", ["SG"],
+                                "https://example.test/prices")
+        watch = WatchSource("income-prices", competitor.id, competitor.url, "pricing", "high", 6)
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("competitor_intelligence.service.load_watches", return_value=[watch]):
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            before = json.dumps({"premiums": {"Low Risk": "S$1,773.98"}, "discount": None, "effective_date": None})
+            after = json.dumps({"premiums": {"Low Risk": "S$1,899.00"}, "discount": None, "effective_date": None})
+            service.scan(competitor.id, CollectedContent(before, "website", url=watch.url, source_key=watch.url))
+            result = service.scan(competitor.id, CollectedContent(after, "website", url=watch.url, source_key=watch.url))
+            self.assertTrue(result.changed)
+            event = service.events()[0]
+            self.assertIn("Low Risk", event["summary"])
+            self.assertEqual(event["previous_value"], "Low Risk: S$1,773.98")
+            self.assertEqual(event["current_value"], "Low Risk: S$1,899.00")
+            self.assertIn("S$1,899.00", service.event_diff(result.event_id)["diff"])
+
+    def test_multiple_premium_changes_are_all_reported(self) -> None:
+        before = json.dumps({"premiums": {"Low Risk": "S$100", "High Risk": "S$200"}})
+        after = json.dumps({"premiums": {"Low Risk": "S$120", "High Risk": "S$250"}})
+        competitor = Competitor("income", "doctorshield", "Income", "medical", ["SG"],
+                                "https://example.test/prices")
+        result = IntelligenceService._price_change(competitor, before, after)
+        self.assertIn("Low Risk", result["summary"])
+        self.assertIn("High Risk", result["summary"])
+        self.assertIn("S$250", result["current_value"])
+
+    def test_changedetection_price_snapshot_uses_structured_comparison(self) -> None:
+        competitor = Competitor("doctorshield-income", "doctorshield", "Income",
+                                "medical indemnity", ["SG"], "https://example.test/prices")
+        watch = WatchSource("prices", competitor.id, competitor.url, "pricing", "high", 6)
+        categories = ("Obstetric Risk", "Gynaecology", "Office Gynaecology", "High Risk",
+                      "Medium Risk", "Low Risk", "Family Medicine - Procedural",
+                      "Family Medicine - Non-Procedural")
+        def page(low_risk):
+            return "\n".join(f"{category}\n${low_risk if category == 'Low Risk' else 1000 + index:,.2f}"
+                             for index, category in enumerate(categories))
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("competitor_intelligence.service.load_watches", return_value=[watch]):
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            service.scan(competitor.id, CollectedContent(page(1773.98), "changedetection",
+                                                       url=watch.url, source_key=watch.url))
+            result = service.scan(competitor.id, CollectedContent(page(1899.00), "changedetection",
+                                                                url=watch.url, source_key=watch.url))
+            self.assertTrue(result.changed)
+            self.assertEqual(service.events()[0]["previous_value"], "Low Risk: S$1,773.98")
+            self.assertIn("S$1,899.00", service.event_diff(result.event_id)["diff"])
+
+    def test_news_listing_requires_a_new_relevant_article_link(self) -> None:
+        competitor = Competitor("news-1", "jade", "Example", "jewellers block", ["SG"],
+                                "https://example.test/news")
+        watch = WatchSource("news", competitor.id, competitor.url, "news", "medium", 6)
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("competitor_intelligence.service.load_watches", return_value=[watch]), \
+             patch("competitor_intelligence.service.collect_website", return_value=CollectedContent(
+                 "Jewellery cover expansion announced", "website")), \
+             patch("competitor_intelligence.service.article_relevant", return_value=True):
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            service.scan(competitor.id, CollectedContent("Page header", "changedetection",
+                                                       url=watch.url, source_key=watch.url))
+            self.assertFalse(service.scan(competitor.id, CollectedContent(
+                "Page header updated", "changedetection", url=watch.url,
+                source_key=watch.url)).changed)
+            service.scan(competitor.id, CollectedContent(
+                "https://example.test/news/old\tOld article", "website",
+                url=watch.url, source_key=watch.url))
+            result = service.scan(competitor.id, CollectedContent(
+                "https://example.test/news/old\tOld article\nhttps://example.test/news/new\tNew jewellery article",
+                "website", url=watch.url, source_key=watch.url))
+            self.assertTrue(result.changed)
+            self.assertEqual(service.events()[0]["change_type"], "article")
+
+    def test_changedetection_history_sync_is_incremental(self) -> None:
+        competitor = Competitor("watch-1", "jade", "Test Jeweller", "jewellers block", ["SG"],
+                                "https://example.test/product")
+        watch = WatchSource("product", competitor.id, competitor.url, "product", "high", 6)
+
+        class FakeResponse:
+            def __init__(self, body):
+                self.body = body.encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self.body
+
+        def open_url(request, timeout):
+            url = request.full_url
+            if url.endswith("/api/v1/watch"):
+                return FakeResponse(json.dumps({"uuid-1": {"url": competitor.url}}))
+            if url.endswith("/history"):
+                return FakeResponse(json.dumps({"100": "old", "200": "new"}))
+            return FakeResponse("Cover from SGD 500" if url.endswith("/100") else "Cover from SGD 425")
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("competitor_intelligence.service.load_watches", return_value=[watch]), \
+             patch("competitor_intelligence.service.urllib.request.urlopen", side_effect=open_url):
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            self.assertEqual(service.sync_changedetection()["imported"], 2)
+            self.assertEqual(len(service.events()), 1)
+            self.assertEqual(service.sync_changedetection()["imported"], 0)
+            self.assertEqual(len(service.events()), 1)
+
+    def test_history_sync_does_not_replay_older_versions_after_webhook(self) -> None:
+        competitor = Competitor("watch-2", "jade", "Test Jeweller", "jewellers block", ["SG"],
+                                "https://example.test/product")
+        watch = WatchSource("product", competitor.id, competitor.url, "product", "high", 6)
+
+        class FakeResponse:
+            def __init__(self, body):
+                self.body = body.encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self.body
+
+        def open_url(request, timeout):
+            url = request.full_url
+            if url.endswith("/api/v1/watch"):
+                return FakeResponse(json.dumps({"uuid-2": {"url": competitor.url}}))
+            if url.endswith("/history"):
+                return FakeResponse(json.dumps({"100": "old", "200": "current", "300": "new"}))
+            return FakeResponse({"100": "Price SGD 100", "200": "Price SGD 200",
+                                 "300": "Price SGD 300"}[url.rsplit("/", 1)[-1]])
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("competitor_intelligence.service.load_watches", return_value=[watch]), \
+             patch("competitor_intelligence.service.urllib.request.urlopen", side_effect=open_url):
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            service.scan(competitor.id, CollectedContent("Price SGD 200", "changedetection",
+                                                         url=watch.url, source_key=watch.url,
+                                                         observed_at="1970-01-01T00:03:20+00:00"))
+            self.assertEqual(service.sync_changedetection()["imported"], 1)
+            self.assertEqual(len(service.events()), 1)
+            self.assertIn("SGD 300", service.events()[0]["evidence"])
 
     def test_changedetection_content_creates_one_event(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -387,14 +649,24 @@ class IntelligenceCoreTests(unittest.TestCase):
         ]
         with patch("competitor_intelligence.provision.CHANGEDETECTION_API_KEY", "api-key"), \
              patch("competitor_intelligence.provision.load_competitors", return_value=[competitor]), \
+             patch("competitor_intelligence.provision.load_watches", return_value=[WatchSource("test-watch", competitor.id, competitor.url, "product", "high", 6)]), \
              patch("competitor_intelligence.provision.urllib.request.urlopen", side_effect=responses) as opener:
             result = provision_changedetection()
         request = opener.call_args_list[1].args[0]
         self.assertEqual(result[0]["status"], "updated")
         self.assertEqual(request.get_method(), "PUT")
         self.assertTrue(request.full_url.endswith("/api/v1/watch/watch-id"))
+        payload = json.loads(request.data)
+        self.assertEqual(payload["fetch_backend"], "html_webdriver")
+        self.assertEqual(payload["time_between_check"], {"hours": 6, "minutes": 0, "seconds": 0})
 
-    def test_legacy_changedetection_watch_is_paused(self) -> None:
+    def test_liberty_watch_uses_http_backend(self) -> None:
+        self.assertEqual(
+            _fetch_backend("https://www.libertyinternational.com/sg/product/fine-art-and-specie"),
+            "html_requests",
+        )
+
+    def test_existing_unconfigured_watch_is_preserved(self) -> None:
         class FakeResponse:
             def __init__(self, body: str, status: int = 200):
                 self.body = body.encode("utf-8")
@@ -432,14 +704,12 @@ class IntelligenceCoreTests(unittest.TestCase):
         ]
         with patch("competitor_intelligence.provision.CHANGEDETECTION_API_KEY", "api-key"), \
              patch("competitor_intelligence.provision.load_competitors", return_value=[]), \
+             patch("competitor_intelligence.provision.load_watches", return_value=[]), \
              patch("competitor_intelligence.provision.urllib.request.urlopen", side_effect=responses) as opener:
             result = provision_changedetection()
 
-        request = opener.call_args_list[2].args[0]
-        self.assertEqual(result[0]["status"], "paused")
-        self.assertEqual(request.get_method(), "PUT")
-        self.assertTrue(request.full_url.endswith("/api/v1/watch/legacy-watch"))
-        self.assertEqual(json.loads(request.data), {"paused": True})
+        self.assertEqual(result, [])
+        self.assertEqual(opener.call_count, 1)
 
     def test_manual_legacy_changedetection_watch_is_not_paused(self) -> None:
         class FakeResponse:
@@ -470,11 +740,12 @@ class IntelligenceCoreTests(unittest.TestCase):
 
         with patch("competitor_intelligence.provision.CHANGEDETECTION_API_KEY", "api-key"), \
              patch("competitor_intelligence.provision.load_competitors", return_value=[]), \
+             patch("competitor_intelligence.provision.load_watches", return_value=[]), \
              patch("competitor_intelligence.provision.urllib.request.urlopen", side_effect=responses) as opener:
             result = provision_changedetection()
 
         self.assertEqual(result, [])
-        self.assertEqual(opener.call_count, 2)
+        self.assertEqual(opener.call_count, 1)
 
 
 if __name__ == "__main__":
