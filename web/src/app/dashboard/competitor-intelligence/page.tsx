@@ -21,6 +21,23 @@ import styles from './page.module.css';
 type View = 'feed' | 'sources' | 'watchlist';
 type FilterValue = '' | string;
 
+const INIT_ATTEMPTS = 8;
+const INIT_BASE_DELAY_MS = 400;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isDashboardHydrated(dashboard: CompetitorDashboard | null): boolean {
+  if (!dashboard) return false;
+  if (dashboard.ready === false) return false;
+  // Watches can load from JSON before the DB registry is upserted; competitors
+  // are the real signal that the shared store has been initialized.
+  return dashboard.competitors.length > 0;
+}
+
 const labels: Record<string, string> = {
   jade: 'Jade',
   doctorshield: 'DoctorShield',
@@ -184,6 +201,7 @@ export default function CompetitorIntelligencePage() {
   const [view, setView] = useState<View>('feed');
   const [dashboard, setDashboard] = useState<CompetitorDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CompetitorEvent | null>(null);
@@ -197,20 +215,48 @@ export default function CompetitorIntelligencePage() {
   const [changeType, setChangeType] = useState<FilterValue>('');
   const [source, setSource] = useState<FilterValue>('');
 
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
+  const loadDashboard = useCallback(async (options?: { quiet?: boolean }) => {
+    if (!options?.quiet) setIsLoading(true);
     try {
-      setDashboard(await getCompetitorDashboard());
+      const next = await getCompetitorDashboard();
+      setDashboard(next);
+      setLoadError(null);
       setNotice(null);
+      return isDashboardHydrated(next);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not load competitor intelligence.');
+      const message = error instanceof Error ? error.message : 'Could not load competitor intelligence.';
+      setLoadError(message);
+      return false;
     } finally {
-      setIsLoading(false);
+      if (!options?.quiet) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadDashboard();
+    let cancelled = false;
+
+    const hydrate = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      for (let attempt = 1; attempt <= INIT_ATTEMPTS; attempt += 1) {
+        if (cancelled) return;
+        const hydrated = await loadDashboard({ quiet: attempt > 1 });
+        if (cancelled) return;
+        if (hydrated) {
+          setIsLoading(false);
+          return;
+        }
+        if (attempt < INIT_ATTEMPTS) {
+          await sleep(Math.min(4000, INIT_BASE_DELAY_MS * attempt));
+        }
+      }
+      if (!cancelled) setIsLoading(false);
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, [loadDashboard]);
 
   useEffect(() => {
@@ -351,15 +397,6 @@ export default function CompetitorIntelligencePage() {
     }
   };
 
-  const resetFilters = () => {
-    setSearch('');
-    setBrand('');
-    setImpact('');
-    setCountry('');
-    setChangeType('');
-    setSource('');
-  };
-
   const openView = (nextView: View) => {
     setSelectedEvent(null);
     setView(nextView);
@@ -412,7 +449,6 @@ export default function CompetitorIntelligencePage() {
         <SelectFilter value={country} options={selectOptions.country} onChange={setCountry} label='Country' />
         <SelectFilter value={changeType} options={selectOptions.changeType} onChange={setChangeType} label='Change type' />
         <SelectFilter value={source} options={selectOptions.source} onChange={setSource} label='Source' />
-        <button type='button' className={`${quietButton} self-stretch`} onClick={resetFilters}>Clear</button>
       </form>
 
       <div className='flex flex-col gap-2.5' aria-live='polite'>
@@ -650,8 +686,16 @@ export default function CompetitorIntelligencePage() {
             <button type='button' className='grid size-6 flex-none place-items-center rounded-full border border-[#e6e6e6] text-[#737373] dark:border-[#424242]' onClick={() => setNotice(null)} aria-label='Dismiss notification'>×</button>
           </div>
         ) : null}
-        {isLoading && !dashboard ? (
-          <div className='flex items-center gap-2 py-20 text-sm text-[#737373] dark:text-[#a3a3a3]'><Icons.spinner className='size-4 animate-spin' /> Loading intelligence data…</div>
+        {isLoading && !isDashboardHydrated(dashboard) ? (
+          <div className='flex items-center gap-2 py-20 text-sm text-[#737373] dark:text-[#a3a3a3]'><Icons.spinner className='size-4 animate-spin' /> Initializing competitor intelligence…</div>
+        ) : !isDashboardHydrated(dashboard) ? (
+          <div className={`${panelClass} mt-8 px-5 py-11 text-center`}>
+            <strong className='mb-2 block text-[15px] text-[#09090b] dark:text-white'>Competitor intelligence is not ready</strong>
+            <p className='mb-4 text-[13px] text-[#737373] dark:text-[#a3a3a3]'>{loadError || 'The registry has not hydrated yet. Retry once the API finishes initializing.'}</p>
+            <button type='button' className={primaryButton} onClick={() => void loadDashboard()}>
+              Retry
+            </button>
+          </div>
         ) : selectedEvent ? renderEventDetail() : view === 'sources' ? renderSources() : view === 'watchlist' ? renderWatchlist() : renderFeed()}
       </div>
       {busyAction?.startsWith('scan') ? (

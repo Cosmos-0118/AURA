@@ -103,6 +103,8 @@ def get_intelligence_service() -> IntelligenceService:
 
 _worker_lock = threading.Lock()
 _worker_thread: threading.Thread | None = None
+_init_lock = threading.Lock()
+_initialized = False
 
 
 def _scan_interval() -> int:
@@ -135,24 +137,84 @@ def _run_worker() -> None:
         time.sleep(_scan_interval())
 
 
-def start_competitor_refresh() -> None:
-    """Start the non-blocking collector worker when AURA starts.
+def initialize_competitor_intelligence(*, force: bool = False) -> dict[str, Any]:
+    """Ensure the shared store and competitor registry are loaded before serving UI.
 
-    Tests and explicitly disabled local runs do not start a network worker.
+    The dashboard used to race the first request against lazy singleton creation.
+    Always warming the registry at startup (and again on demand) keeps the first
+    paint from rendering an empty shell that only fills after a manual refresh.
     """
 
-    if os.getenv("AURA_COMPETITOR_REFRESH", "true").lower() in {"0", "false", "no"}:
-        return
+    global _initialized
+    with _init_lock:
+        if _initialized and not force:
+            return competitor_readiness()
+        service = get_intelligence_service()
+        service.sync_registry()
+        competitors = service.competitors()
+        watches = service.watches()
+        _initialized = True
+        readiness = {
+            "ready": True,
+            "competitors": len(competitors),
+            "watches": len(watches),
+            "events": service.summary().get("total", 0),
+        }
+        logger.info(
+            "Competitor intelligence ready (%s competitors, %s watches)",
+            readiness["competitors"],
+            readiness["watches"],
+        )
+        return readiness
+
+
+def competitor_readiness() -> dict[str, Any]:
+    """Return whether the registry has been loaded into AURA's store."""
+
+    if not _initialized:
+        return {"ready": False, "competitors": 0, "watches": 0, "events": 0}
+    try:
+        service = get_intelligence_service()
+        summary = service.store.summary()
+        return {
+            "ready": True,
+            "competitors": int(summary.get("relationships") or 0),
+            "watches": len(service.watches()),
+            "events": int(summary.get("total") or 0),
+        }
+    except Exception as exc:
+        return {
+            "ready": False,
+            "competitors": 0,
+            "watches": 0,
+            "events": 0,
+            "error": str(exc),
+        }
+
+
+def start_competitor_refresh() -> None:
+    """Initialize the registry, then start the collector worker when enabled.
+
+    Tests skip the network worker. Disabling refresh still warms the registry so
+    `/api/competitors/dashboard` is not empty on the first request.
+    """
+
     if os.getenv("PYTEST_CURRENT_TEST"):
+        return
+
+    try:
+        initialize_competitor_intelligence()
+    except Exception:
+        logger.exception("Competitor intelligence failed to initialize on startup")
+        return
+
+    if os.getenv("AURA_COMPETITOR_REFRESH", "true").lower() in {"0", "false", "no"}:
         return
 
     global _worker_thread
     with _worker_lock:
         if _worker_thread is not None and _worker_thread.is_alive():
             return
-        # Initialize the registry before the thread starts so startup errors
-        # are visible to the API process instead of being silently detached.
-        get_intelligence_service()
         _worker_thread = threading.Thread(
             target=_run_worker,
             name="aura-competitor-refresh",
@@ -164,15 +226,19 @@ def start_competitor_refresh() -> None:
 def reset_intelligence_service_cache() -> None:
     """Reset the singleton for isolated tests and local database switches."""
 
-    global _worker_thread
+    global _worker_thread, _initialized
     get_intelligence_service.cache_clear()
     with _worker_lock:
         _worker_thread = None
+    with _init_lock:
+        _initialized = False
 
 
 def service_payload(service: IntelligenceService) -> dict[str, Any]:
     """Build the complete native dashboard payload used by the web client."""
 
+    initialize_competitor_intelligence()
+    service.sync_registry()
     return {
         "summary": service.summary(),
         "competitors": [item.to_dict() for item in service.competitors()],
@@ -180,4 +246,5 @@ def service_payload(service: IntelligenceService) -> dict[str, Any]:
         "watches": service.watch_status(),
         "events": service.events(),
         "source_health": service.source_health(),
+        "ready": True,
     }

@@ -19,7 +19,9 @@ RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
 MAX_REQUEST_ATTEMPTS = 3
 COOKIE_CONTAINER_PATTERN = re.compile(
     r"(?:cookie|consent|onetrust|cookiebot|trustarc|quantcast|usercentrics|"
-    r"didomi|gdpr|ccpa|cookieyes|iubenda|osano)",
+    r"didomi|gdpr|ccpa|cookieyes|iubenda|osano|geolocation|geo[-_ ]?(?:selector|redirect)|"
+    r"country[-_ ]?(?:selector|redirect)|market[-_ ]?(?:selector|redirect)|"
+    r"region[-_ ]?(?:selector|redirect)|location[-_ ]?(?:selector|redirect))",
     re.IGNORECASE,
 )
 COOKIE_CONTAINER_ATTRIBUTES = frozenset({"id", "class", "role", "aria-label", "aria-labelledby"})
@@ -50,6 +52,17 @@ class FeedItem:
     content: str
     url: str
     published_at: str | None = None
+
+
+class FetchedBytes(tuple[bytes, str]):
+    """Two-value response tuple that also retains the final redirect URL."""
+
+    url: str
+
+    def __new__(cls, body: bytes, content_type: str, url: str) -> "FetchedBytes":
+        result = super().__new__(cls, (body, content_type))
+        result.url = url
+        return result
 
 
 class VisibleTextParser(HTMLParser):
@@ -187,6 +200,8 @@ def request_bytes(
 ) -> tuple[bytes, str]:
     headers = {
         "Accept": accept,
+        # Keep geo and consent experiments stable across direct captures.
+        "Accept-Language": "en-SG,en;q=0.9,en-US;q=0.8",
         "User-Agent": USER_AGENT,
     }
     headers.update(extra_headers or {})
@@ -209,7 +224,8 @@ def request_bytes(
                     time.sleep(2 ** (attempt + 2))
                     continue
                 content_type = response.headers.get("Content-Type", "")
-                return body, content_type
+                effective_url = getattr(response, "geturl", lambda: url)()
+                return FetchedBytes(body, content_type, effective_url)
         except urllib.error.HTTPError as exc:
             if exc.code not in RETRYABLE_HTTP_STATUS_CODES or attempt == MAX_REQUEST_ATTEMPTS - 1:
                 raise
@@ -220,8 +236,25 @@ def request_bytes(
     raise RuntimeError(f"Could not fetch {url}")
 
 
+def _unexpected_redirect(requested_url: str, effective_url: str) -> bool:
+    requested = urlsplit(requested_url)
+    effective = urlsplit(effective_url or requested_url)
+    requested_host = requested.hostname or ""
+    effective_host = effective.hostname or ""
+    if requested_host.removeprefix("www.").lower() != effective_host.removeprefix("www.").lower():
+        return True
+    locale_pattern = re.compile(r"^[a-z]{2}(?:-[a-z]{2})?$", re.IGNORECASE)
+    requested_locale = next((part for part in requested.path.split("/") if locale_pattern.fullmatch(part)), None)
+    effective_locale = next((part for part in effective.path.split("/") if locale_pattern.fullmatch(part)), None)
+    return bool(requested_locale and effective_locale and requested_locale.casefold() != effective_locale.casefold())
+
+
 def collect_website(url: str) -> CollectedContent:
-    body, content_type = request_bytes(url, accept="text/html,application/xhtml+xml")
+    fetched = request_bytes(url, accept="text/html,application/xhtml+xml")
+    body, content_type = fetched
+    effective_url = getattr(fetched, "url", url)
+    if _unexpected_redirect(url, effective_url):
+        raise ValueError(f"Unexpected redirect from {url} to {effective_url}; retaining baseline")
     charset = "utf-8"
     match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
     if match:
@@ -278,7 +311,11 @@ def _next_data_article_links(html: str, base_url: str) -> list[tuple[str, str]]:
 def collect_watch(url: str, kind: str) -> CollectedContent:
     if kind not in {"pricing", "news", "insights"}:
         return collect_website(url)
-    body, content_type = request_bytes(url, accept="text/html,application/xhtml+xml")
+    fetched = request_bytes(url, accept="text/html,application/xhtml+xml")
+    body, content_type = fetched
+    effective_url = getattr(fetched, "url", url)
+    if _unexpected_redirect(url, effective_url):
+        raise ValueError(f"Unexpected redirect from {url} to {effective_url}; retaining baseline")
     match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
     html = body.decode(match.group(1) if match else "utf-8", errors="replace")
     parser = StructuredPageParser()

@@ -25,6 +25,34 @@ COOKIE_NOISE_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
+COOKIE_BANNER_LINE_PATTERN = re.compile(
+    r"(?:\b(?:we|this\s+(?:site|website))\s+use(?:s)?\b[^\n]*\bcookies?\b|"
+    r"\buses\s+cookies?\b|\b(?:cookie|consent|privacy)\s+(?:banner|notice|preferences?|settings?)\b|"
+    r"\b(?:necessary|optional|analytics|non[- ]essential)\s+cookies?\b|"
+    r"\b(?:accept|reject|manage)\b[^\n]*\b(?:cookies?|consent|preferences?|privacy)\b)",
+    re.IGNORECASE,
+)
+COOKIE_COPY_SUFFIX_PATTERN = re.compile(
+    r"(?:^|\s+)\b(?:we|this\s+(?:site|website))\s+use(?:s)?\b"
+    r"(?=[^\n]*\bcookies?\b)[^\n]*$",
+    re.IGNORECASE,
+)
+LOCATION_PROMPT_PATTERN = re.compile(
+    r"(?:^hello,?\s+we\s+have\s+detected\s+you\s+are\s+visiting\s+from\b|"
+    r"^would\s+you\s+like\s+to\s+go\s+to\s+the\s+.+?\s+website\??"
+    r"(?:\s+(?:yes|no|yes\s+no|no\s+yes))?$)",
+    re.IGNORECASE,
+)
+TRANSIENT_CONTROL_PATTERN = re.compile(
+    r"^(?:×|x|yes|no|yes\s+no|no\s+yes|accept\s+all|preferences)$", re.IGNORECASE
+)
+CONSENT_CONTROL_PATTERN = re.compile(r"^(?:×|x|accept\s+all|preferences)$", re.IGNORECASE)
+INTERSTITIAL_PATTERN = re.compile(
+    r"^(?:please\s+enable\s+javascript|javascript\s+is\s+required|"
+    r"checking\s+your\s+browser|just\s+a\s+moment|access\s+denied|"
+    r"verify\s+(?:you\s+are\s+)?human|security\s+check)\b.*$",
+    re.IGNORECASE,
+)
 SOURCE_RELIABILITY = {
     "website": 0.94,
     "changedetection": 0.90,
@@ -45,12 +73,34 @@ CHANGE_EVIDENCE_PRIOR = {
 }
 
 
-def normalize_content(content: str) -> str:
-    lines = []
-    for raw_line in content.splitlines():
-        line = " ".join(raw_line.split())
-        if not line:
+def _normalized_lines(content: str) -> tuple[list[str], int]:
+    lines: list[str] = []
+    removed_transient_chars = 0
+    raw_lines = [" ".join(raw_line.split()) for raw_line in content.splitlines()]
+    raw_lines = [line for line in raw_lines if line]
+    has_cookie_signal = any(COOKIE_BANNER_LINE_PATTERN.search(line) for line in raw_lines)
+    location_prompt_active = False
+
+    for index, line in enumerate(raw_lines):
+        original_line = line
+        if LOCATION_PROMPT_PATTERN.search(line):
+            removed_transient_chars += len(line)
+            location_prompt_active = True
             continue
+        if location_prompt_active and TRANSIENT_CONTROL_PATTERN.fullmatch(line):
+            removed_transient_chars += len(line)
+            continue
+        location_prompt_active = False
+
+        if has_cookie_signal and CONSENT_CONTROL_PATTERN.fullmatch(line):
+            removed_transient_chars += len(line)
+            continue
+        # Consent providers often append a variable-length paragraph to real
+        # copy or a price row. Keep the preceding evidence and discard that
+        # suffix so wording changes cannot create an event.
+        line_before_cookie_suffix = line
+        line = COOKIE_COPY_SUFFIX_PATTERN.sub("", line).strip()
+        removed_transient_chars += max(0, len(line_before_cookie_suffix) - len(line))
         if COOKIE_NOISE_PATTERN.search(line):
             substantive = COOKIE_NOISE_PATTERN.sub(" ", line)
             substantive = " ".join(substantive.split()).strip(" .,:;|·-[]()")
@@ -58,9 +108,77 @@ def normalize_content(content: str) -> str:
             # copy and remove only the matched consent segment. Protect price
             # lines if a malformed/no-punctuation banner match is too broad.
             line = substantive or (line if price_values(line) else "")
+        if CONSENT_CONTROL_PATTERN.fullmatch(line) and (
+            has_cookie_signal or (line.casefold() == "preferences" and index == len(raw_lines) - 1)
+        ):
+            removed_transient_chars += len(line)
+            continue
+        if COOKIE_BANNER_LINE_PATTERN.search(line):
+            # A changedetection text snapshot can put a consent block and real
+            # copy on one line. Keep the real copy only when the remaining
+            # text no longer looks like consent UI.
+            if price_values(line) or (
+                line != original_line
+                and not re.search(r"\b(?:cookie|consent|privacy)\b", line, re.IGNORECASE)
+            ):
+                pass
+            else:
+                removed_transient_chars += len(original_line)
+                continue
         if line:
             lines.append(line)
+    return lines, removed_transient_chars
+
+
+def normalize_content(content: str) -> str:
+    lines, _ = _normalized_lines(content)
     return "\n".join(lines)
+
+
+MARKET_TERMS = {
+    "sg": ("howden india", "india site", "india website", "indonesia site", "malaysia site", "thailand site", "hong kong site"),
+    "hk": ("howden india", "india site", "indonesia site", "malaysia site", "singapore site", "thailand site"),
+    "my": ("howden india", "india site", "indonesia site", "singapore site", "thailand site", "hong kong site"),
+    "th": ("howden india", "india site", "indonesia site", "singapore site", "malaysia site", "hong kong site"),
+}
+
+
+def capture_quality_error(
+    content: str,
+    *,
+    baseline: str | None = None,
+    expected_url: str | None = None,
+) -> str | None:
+    """Reject captures that contain only, or are dominated by, transient UI."""
+    lines, removed_transient_chars = _normalized_lines(content)
+    normalized_length = sum(len(line) for line in lines)
+    if not lines:
+        return "capture contains no substantive page content after transient UI filtering"
+    if (
+        removed_transient_chars >= 80
+        and removed_transient_chars > normalized_length * 2
+        and normalized_length < 32
+    ):
+        return "capture is dominated by transient consent or location UI"
+    if baseline and removed_transient_chars >= 80:
+        baseline_length = len(normalize_content(baseline))
+        if baseline_length >= 128 and normalized_length < baseline_length * 0.25:
+            return "capture is much shorter than the valid baseline after transient UI filtering"
+    if normalized_length < 320 and any(INTERSTITIAL_PATTERN.search(line) for line in lines):
+        return "capture looks like an access or JavaScript interstitial; retaining baseline"
+    if expected_url and baseline:
+        locale_match = re.search(r"/([a-z]{2})(?:-[a-z]{2})?/", expected_url, re.IGNORECASE)
+        locale = locale_match.group(1).casefold() if locale_match else ""
+        recent_lines = [line.casefold().strip(" .:|-") for line in lines[:12]]
+        baseline_text = normalize_content(baseline)
+        similarity = SequenceMatcher(None, baseline_text, "\n".join(lines)).ratio()
+        if (
+            locale in MARKET_TERMS
+            and similarity < 0.55
+            and any(term in recent_lines for term in MARKET_TERMS[locale])
+        ):
+            return "capture appears to be from a different market; retaining baseline"
+    return None
 
 
 def content_hash(content: str) -> str:
