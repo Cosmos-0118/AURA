@@ -30,16 +30,15 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
-HOST = os.getenv("INTEL_HOST", "127.0.0.1")
-PORT = env_int("INTEL_PORT", 8787)
-DB_PATH = Path(os.getenv("INTEL_DB_PATH", str(ROOT / "data" / "intelligence.db")))
+DB_PATH = Path(
+    os.getenv("AURA_INTELLIGENCE_DB", str(ROOT.parent / "storage" / "aura.db"))
+)
 COMPETITORS_PATH = Path(
     os.getenv("INTEL_COMPETITORS", str(ROOT / "config" / "competitors.json"))
 )
 FEEDS_PATH = Path(os.getenv("INTEL_FEEDS", str(ROOT / "config" / "feeds.json")))
 WATCHES_PATH = Path(os.getenv("INTEL_WATCHES", str(ROOT / "config" / "watches.json")))
 REQUEST_TIMEOUT = env_int("INTEL_REQUEST_TIMEOUT", 20)
-SCAN_INTERVAL = env_int("INTEL_SCAN_INTERVAL", 900)
 SEARXNG_URL = os.getenv("SEARXNG_URL", "").rstrip("/")
 WEBHOOK_TOKEN = os.getenv("INTEL_WEBHOOK_TOKEN", "")
 CHANGEDETECTION_API_URL = os.getenv("CHANGEDETECTION_API_URL", "http://changedetection:5000").rstrip("/")

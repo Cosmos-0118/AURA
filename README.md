@@ -11,15 +11,12 @@ agent swarm, publisher, or full marketing suite.
 
 ## Start here
 
-- Everyone: [8-hour team plan](docs/TEAM-PLAN.md)
-- Your coding agent: [repository rules](AGENTS.md)
-- Your exact assignment: [member role cards](docs/members/)
-- Frozen integration shapes: [contracts](docs/03-CONTRACTS.md)
-- Local environment: [setup](docs/02-SETUP.md)
+- Competitor intelligence: [how it works](competitor-intelligence/docs/01-HOW-IT-WORKS.md)
+- Runtime and launcher: [how it runs](competitor-intelligence/docs/02-HOW-IT-RUNS.md)
 
-The platform scaffold is already complete on `main`. Do not recreate the API,
-database, typed client, or navigation. Start the feature work assigned in the
-team plan.
+The dashboard and competitor-intelligence collector now run as one AURA
+application. The collector package supplies monitoring and classification
+logic; the AURA API owns the native dashboard and lifecycle.
 
 ## Run locally
 

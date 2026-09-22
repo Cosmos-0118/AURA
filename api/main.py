@@ -5,12 +5,18 @@ from fastapi.staticfiles import StaticFiles
 
 try:
     from .agents.lead_intel import start_daily_refresh
+    from .services.competitor_intelligence import start_competitor_refresh
     from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
     from agents.lead_intel import start_daily_refresh
+    from services.competitor_intelligence import start_competitor_refresh
     from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics, video
 
-app = FastAPI(title="AURA API", version="0.1.0", on_startup=[start_daily_refresh])
+app = FastAPI(
+    title="AURA API",
+    version="0.1.0",
+    on_startup=[start_daily_refresh, start_competitor_refresh],
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],

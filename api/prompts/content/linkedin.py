@@ -1,6 +1,6 @@
 """LinkedIn (and Instagram) prompt templates for all three AURA brands.
 
-Brand voices (frozen — matches docs/03-CONTRACTS.md):
+Brand voices (frozen — matches the AURA brand and API contracts):
   jade          — Precise, premium, B2B specialist
                   Themes: jewellery, craft, inventory, discretion
                   Never: guaranteed, 100% covered, cheapest

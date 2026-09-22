@@ -1,7 +1,7 @@
 [project]
 name = "ja-assure-competitor-intelligence"
 version = "0.1.0"
-description = "Standalone deterministic competitor intelligence monitor for JA Assure"
+description = "AURA's deterministic competitor intelligence collectors and analysis"
 requires-python = ">=3.11"
 dependencies = []
 

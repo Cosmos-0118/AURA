@@ -16,7 +16,7 @@ from .config import (
 )
 
 
-WEBHOOK_PATH = "/api/webhooks/changedetection"
+WEBHOOK_PATH = "/api/competitors/webhooks/changedetection"
 WATCH_TITLE_PREFIX = "JA Assure competitor intelligence ·"
 
 
@@ -86,10 +86,9 @@ def _canonical_url(url: str) -> str:
 
 
 def _notification_url() -> str:
-    # Docker Compose intelligence service by default. Local `./run.sh --local`
-    # should set INTEL_WEBHOOK_HOST=host.docker.internal:8787 so changedetection
-    # can reach the host Python dashboard.
-    host = os.getenv("INTEL_WEBHOOK_HOST", "intelligence:8787").strip() or "intelligence:8787"
+    # Changedetection runs in Docker while AURA owns the host API. The main
+    # launcher overrides this with the configured API port when needed.
+    host = os.getenv("INTEL_WEBHOOK_HOST", "host.docker.internal:8000").strip() or "host.docker.internal:8000"
     url = f"post://{host}{WEBHOOK_PATH}"
     if WEBHOOK_TOKEN:
         token = urllib.parse.quote(WEBHOOK_TOKEN, safe="")

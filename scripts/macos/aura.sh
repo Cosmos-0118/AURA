@@ -6,11 +6,20 @@ export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 API_DIR="$ROOT_DIR/api"
 WEB_DIR="$ROOT_DIR/web"
+COMPETITOR_DIR="$ROOT_DIR/competitor-intelligence"
+COMPETITOR_COMPOSE_FILE="$COMPETITOR_DIR/compose.yaml"
 RUN_DIR="$ROOT_DIR/.aura/run"
 LOG_DIR="$ROOT_DIR/.aura/logs"
 LOCAL_UV_CACHE="$ROOT_DIR/.aura/uv-cache"
 LOCAL_BUN_CACHE="$ROOT_DIR/.aura/bun-cache"
 AURA_TMP_DIR="$ROOT_DIR/.aura/tmp"
+
+COMPETITOR_ENABLED="${AURA_COMPETITOR_INTELLIGENCE:-true}"
+COMPETITOR_REQUIRED="${AURA_COMPETITOR_REQUIRED:-true}"
+COMPETITOR_DISCOVERY="${AURA_COMPETITOR_DISCOVERY:-true}"
+CHANGEDETECTION_PORT="${CHANGEDETECTION_PORT:-5001}"
+SEARXNG_PORT="${SEARXNG_PORT:-8080}"
+RSSHUB_PORT="${RSSHUB_PORT:-1200}"
 
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8000}"
@@ -149,6 +158,105 @@ stop_tracked_process() {
 stop_stack() {
   stop_tracked_process "frontend" "$WEB_PID_FILE" || true
   stop_tracked_process "backend" "$API_PID_FILE" || true
+  stop_competitor_support || true
+}
+
+competitor_compose() {
+  local -a compose_args=(
+    --env-file "$ROOT_DIR/.env"
+    -f "$COMPETITOR_COMPOSE_FILE"
+    --project-directory "$COMPETITOR_DIR"
+    --profile discovery
+    --profile social
+  )
+  docker compose "${compose_args[@]}" "$@"
+}
+
+load_competitor_api_key() {
+  [[ -n "${CHANGEDETECTION_API_KEY:-}" ]] && return 0
+  local token
+  token="$(competitor_compose exec -T changedetection python -c 'import json; print(json.load(open("/datastore/changedetection.json"))["settings"]["application"]["api_access_token"])' 2>/dev/null || true)"
+  if [[ -n "$token" ]]; then
+    export CHANGEDETECTION_API_KEY="$token"
+    log "Loaded the changedetection API credential."
+  else
+    log "Changedetection API credential was not available; watch provisioning will be skipped."
+  fi
+}
+
+start_competitor_support() {
+  [[ "$COMPETITOR_ENABLED" == "true" ]] || {
+    log "Competitor intelligence support is disabled (AURA_COMPETITOR_INTELLIGENCE=$COMPETITOR_ENABLED)."
+    return 0
+  }
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
+      fail "Competitor intelligence requires Docker Compose. Set AURA_COMPETITOR_INTELLIGENCE=false to run AURA without collectors."
+    fi
+    log "Docker Compose is unavailable; starting AURA without competitor collectors."
+    return 0
+  fi
+
+  log "Starting competitor collectors: changedetection, browser, SearXNG, RSSHub, and Redis."
+  local -a support_services=(changedetection)
+  if [[ "$COMPETITOR_DISCOVERY" == "true" ]]; then
+    support_services+=(searxng rsshub-redis rsshub)
+  fi
+  if ! competitor_compose up -d "${support_services[@]}"; then
+    if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
+      fail "Competitor collector services failed to start."
+    fi
+    log "Competitor collector services failed to start; continuing without them."
+    return 0
+  fi
+
+  if ! wait_for_http "changedetection" "http://127.0.0.1:${CHANGEDETECTION_PORT}/" 90; then
+    if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
+      competitor_compose logs --tail=40 changedetection || true
+      fail "Changedetection did not become ready."
+    fi
+    log "Changedetection is not ready; direct website scans remain available."
+  fi
+
+  if [[ "$COMPETITOR_DISCOVERY" == "true" ]]; then
+    wait_for_http "SearXNG" "http://127.0.0.1:${SEARXNG_PORT}/" 45 || log "SearXNG is not ready; search will remain disabled."
+    wait_for_http "RSSHub" "http://127.0.0.1:${RSSHUB_PORT}/healthz" 60 || log "RSSHub is not ready; feed polling will remain limited."
+    export SEARXNG_URL="${SEARXNG_URL:-http://127.0.0.1:${SEARXNG_PORT}}"
+  fi
+
+  export AURA_COMPETITOR_REFRESH="${AURA_COMPETITOR_REFRESH:-true}"
+  export CHANGEDETECTION_API_URL="${CHANGEDETECTION_API_URL:-http://127.0.0.1:${CHANGEDETECTION_PORT}}"
+  export INTEL_WEBHOOK_HOST="${INTEL_WEBHOOK_HOST:-host.docker.internal:${API_PORT}}"
+  load_competitor_api_key
+}
+
+stop_competitor_support() {
+  [[ "$COMPETITOR_ENABLED" == "true" ]] || return 0
+  command -v docker >/dev/null 2>&1 || return 0
+  docker compose version >/dev/null 2>&1 || return 0
+  [[ -f "$COMPETITOR_COMPOSE_FILE" ]] || return 0
+  log "Stopping competitor collector services (data volumes are preserved)."
+  competitor_compose down --remove-orphans || true
+}
+
+provision_competitor_watches() {
+  [[ "$COMPETITOR_ENABLED" == "true" ]] || return 0
+  [[ -n "${CHANGEDETECTION_API_KEY:-}" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || {
+    log "python3 is unavailable; competitor watch provisioning was skipped."
+    return 0
+  }
+
+  log "Provisioning competitor watches into changedetection."
+  if ! (
+    cd "$COMPETITOR_DIR"
+    INTEL_WEBHOOK_HOST="${INTEL_WEBHOOK_HOST:-host.docker.internal:${API_PORT}}" \
+      CHANGEDETECTION_API_URL="${CHANGEDETECTION_API_URL:-http://127.0.0.1:${CHANGEDETECTION_PORT}}" \
+      python3 -m competitor_intelligence provision-changedetection
+  ); then
+    log "Competitor watch provisioning failed; the native AURA dashboard is still available."
+  fi
 }
 
 port_is_busy() {
@@ -167,6 +275,28 @@ assert_ports_free() {
 ensure_env() {
   [[ -f "$ROOT_DIR/.env" ]] || fail "Missing .env. Copy .env.example to .env and set DATABASE_URL before starting AURA."
 
+  while IFS='=' read -r env_key env_value; do
+    case "$env_key" in
+      AURA_COMPETITOR_INTELLIGENCE|AURA_COMPETITOR_REQUIRED|AURA_COMPETITOR_DISCOVERY|AURA_COMPETITOR_REFRESH|CHANGEDETECTION_PORT|SEARXNG_PORT|RSSHUB_PORT)
+        env_value="${env_value%$'\r'}"
+        env_value="${env_value#\"}"
+        env_value="${env_value%\"}"
+        env_value="${env_value#\'}"
+        env_value="${env_value%\'}"
+        if [[ -n "$env_value" ]]; then
+          printf -v "$env_key" '%s' "$env_value"
+        fi
+        ;;
+    esac
+  done < "$ROOT_DIR/.env"
+
+  COMPETITOR_ENABLED="${AURA_COMPETITOR_INTELLIGENCE:-$COMPETITOR_ENABLED}"
+  COMPETITOR_REQUIRED="${AURA_COMPETITOR_REQUIRED:-$COMPETITOR_REQUIRED}"
+  COMPETITOR_DISCOVERY="${AURA_COMPETITOR_DISCOVERY:-$COMPETITOR_DISCOVERY}"
+  CHANGEDETECTION_PORT="${CHANGEDETECTION_PORT:-5001}"
+  SEARXNG_PORT="${SEARXNG_PORT:-8080}"
+  RSSHUB_PORT="${RSSHUB_PORT:-1200}"
+
   if [[ ! -f "$WEB_DIR/.env.local" ]]; then
     log "Creating web/.env.local from the non-secret template"
     cp "$WEB_DIR/env.example.txt" "$WEB_DIR/.env.local"
@@ -177,7 +307,7 @@ build_backend() {
   log "Syncing backend environment"
   (cd "$API_DIR" && UV_CACHE_DIR="$UV_CACHE_DIR" uv sync --frozen)
   log "Compiling backend sources"
-  (cd "$API_DIR" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run python -m compileall main.py db.py schemas.py graph.py routes agents)
+  (cd "$API_DIR" && UV_CACHE_DIR="$UV_CACHE_DIR" uv run python -m compileall main.py db.py schemas.py graph.py routes agents services)
 }
 
 build_frontend() {
@@ -225,6 +355,7 @@ start_processes() {
   ensure_layout
   stop_stack
   assert_ports_free
+  start_competitor_support
 
   : > "$API_LOG"
   : > "$WEB_LOG"
@@ -260,6 +391,7 @@ start_processes() {
     return 1
   fi
   capture_listener_pid "backend" "$API_PORT" "$API_PID_FILE"
+  provision_competitor_watches
 
   if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/studio"; then
     log "Frontend failed to become ready. Recent log:"
@@ -312,11 +444,10 @@ interactive_menu() {
   printf '2) Build + run\n'
   printf '3) Just run\n'
   printf '4) Dev mode (hot reload)\n'
-  printf '5) Competitor Intelligence (Port 8787)\n'
   printf 'q) Exit\n\n'
 
   local choice
-  read -r -p 'Choose an option [1-5/q]: ' choice
+  read -r -p 'Choose an option [1-4/q]: ' choice
   case "$choice" in
     1)
       clean_generated
@@ -333,15 +464,11 @@ interactive_menu() {
     4)
       start_processes "development"
       ;;
-    5)
-      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
-      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
-      ;;
     q|Q|"")
       log "Nothing started"
       ;;
     *)
-      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, 5, or q."
+      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, or q."
       ;;
   esac
 }
@@ -366,8 +493,8 @@ main() {
       start_processes "development"
       ;;
     intel|intelligence)
-      log "Starting Competitor Intelligence on http://127.0.0.1:8787"
-      (cd "$ROOT_DIR/competitor-intelligence" && python3 -m competitor_intelligence serve --host 127.0.0.1 --port 8787)
+      log "Competitor Intelligence is integrated into AURA; starting the full application stack."
+      start_processes "production"
       ;;
     up)
       clean_generated

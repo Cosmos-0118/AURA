@@ -789,7 +789,7 @@ class IntelligenceCoreTests(unittest.TestCase):
         with patch("competitor_intelligence.provision.WEBHOOK_TOKEN", "token/with+symbols"):
             self.assertEqual(
                 _notification_url(),
-                "post://intelligence:8787/api/webhooks/changedetection?+X-Webhook-Token=token%2Fwith%2Bsymbols",
+                "post://host.docker.internal:8000/api/competitors/webhooks/changedetection?+X-Webhook-Token=token%2Fwith%2Bsymbols",
             )
 
     def test_existing_changedetection_watch_is_reconciled(self) -> None:
@@ -884,7 +884,7 @@ class IntelligenceCoreTests(unittest.TestCase):
                 json.dumps(
                     {
                         "notification_urls": [
-                            "post://intelligence:8787/api/webhooks/changedetection"
+                            "post://host.docker.internal:8000/api/competitors/webhooks/changedetection"
                         ]
                     }
                 )

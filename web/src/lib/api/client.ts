@@ -19,7 +19,10 @@ import type {
   CampaignReviewCard,
   CampaignPublicationItem,
   CampaignEventItem,
-  PublishResponse
+  PublishResponse,
+  CompetitorDashboard,
+  CompetitorEventAnalysis,
+  CompetitorScanResult
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
@@ -127,6 +130,119 @@ export async function scanCompetitor(id: string): Promise<Snapshot> {
       scraped_at: new Date().toISOString()
     };
   }
+}
+
+function demoCompetitorDashboard(): CompetitorDashboard {
+  const competitors = COMPETITOR_INTEL.map((item) => ({
+    id: item.id,
+    brand_id: item.target_brand,
+    name: item.competitor_name,
+    url: item.source_url,
+    niche: item.detected_change,
+    countries: ['SG'],
+    priority: 'medium' as const,
+    organization_id: item.competitor_name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    relationship: 'DIRECT_COMPETITOR',
+    market: 'Singapore',
+    product_category: item.suggested_topic,
+    monitor: true,
+    retired: false
+  }));
+
+  return {
+    summary: {
+      total: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      competitors: competitors.length,
+      relationships: competitors.length,
+      organizations: competitors.length
+    },
+    competitors,
+    monitors: competitors.map((item) => ({
+      competitor_id: item.id,
+      competitor_name: item.name,
+      brand_id: item.brand_id,
+      priority: item.priority,
+      organization_id: item.organization_id,
+      relationship: item.relationship,
+      relationship_market: item.market,
+      product_category: item.product_category,
+      monitor_enabled: 1,
+      retired: 0,
+      source: null,
+      source_url: item.url,
+      market: item.market,
+      source_key: null,
+      last_checked: null,
+      latest_hash: null,
+      change_summary: null,
+      snapshots: 0,
+      versions: 0,
+      status: 'not_checked' as const
+    })),
+    watches: [],
+    events: [],
+    source_health: [
+      { source: 'website', status: 'demo', detail: 'Demo data is active' },
+      { source: 'changedetection', status: 'waiting', detail: 'No live collector in demo mode' },
+      { source: 'rsshub', status: 'waiting', detail: 'No live collector in demo mode' },
+      { source: 'searxng', status: 'waiting', detail: 'No live collector in demo mode' }
+    ]
+  };
+}
+
+export async function getCompetitorDashboard(brandId?: BrandId): Promise<CompetitorDashboard> {
+  try {
+    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    return await request<CompetitorDashboard>(`/api/competitors/dashboard${query}`);
+  } catch (error) {
+    if (getStoredApiMode() !== 'mock') throw error;
+    const fallback = demoCompetitorDashboard();
+    if (!brandId) return fallback;
+    return {
+      ...fallback,
+      competitors: fallback.competitors.filter((item) => item.brand_id === brandId),
+      monitors: fallback.monitors.filter((item) => item.brand_id === brandId)
+    };
+  }
+}
+
+export async function scanAllCompetitors(): Promise<CompetitorScanResult[]> {
+  return request<CompetitorScanResult[]>('/api/competitors/scan-all', { method: 'POST' });
+}
+
+export async function scanCompetitorWatch(watchId: string): Promise<CompetitorScanResult> {
+  return request<CompetitorScanResult>(
+    `/api/competitors/watches/${encodeURIComponent(watchId)}/scan`,
+    { method: 'POST' }
+  );
+}
+
+export async function analyzeCompetitorEvent(eventId: string): Promise<CompetitorEventAnalysis> {
+  return request<CompetitorEventAnalysis>(
+    `/api/competitors/events/${encodeURIComponent(eventId)}/analyze`,
+    { method: 'POST' }
+  );
+}
+
+export async function getCompetitorEventDiff(eventId: string): Promise<{
+  event_id: string;
+  source_url: string | null;
+  before: string;
+  after: string;
+  diff: string;
+}> {
+  return request(`/api/competitors/events/${encodeURIComponent(eventId)}/diff`);
+}
+
+export async function syncCompetitorChangedetection(): Promise<{ imported: number; errors: string[] }> {
+  return request('/api/competitors/sync-changedetection', { method: 'POST' });
+}
+
+export async function pollCompetitorFeeds(): Promise<unknown[]> {
+  return request('/api/competitors/poll-feeds', { method: 'POST' });
 }
 
 export async function createCampaign(body: CampaignCreate): Promise<Campaign> {

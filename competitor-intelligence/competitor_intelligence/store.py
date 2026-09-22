@@ -93,6 +93,22 @@ class Store:
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
+            # AURA's original SQLite schema already had a small `competitors`
+            # table. Add the collector-owned columns before any registry rows
+            # are upserted into that shared database.
+            self._ensure_column(connection, "competitors", "niche", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                connection,
+                "competitors",
+                "countries",
+                "TEXT NOT NULL DEFAULT '[]'",
+            )
+            self._ensure_column(
+                connection,
+                "competitors",
+                "priority",
+                "TEXT NOT NULL DEFAULT 'medium'",
+            )
             self._ensure_column(connection, "competitors", "organization_id", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(
                 connection,

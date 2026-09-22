@@ -62,6 +62,113 @@ export type Snapshot = {
   scraped_at: string;
 };
 
+export type CompetitorRecord = Competitor & {
+  niche: string;
+  countries: string[];
+  priority: 'high' | 'medium' | 'low';
+  organization_id: string;
+  relationship: string;
+  market: string;
+  product_category: string;
+  monitor: boolean;
+  retired: boolean;
+};
+
+export type CompetitorMonitor = {
+  competitor_id: string;
+  competitor_name: string;
+  brand_id: BrandId;
+  priority: string;
+  organization_id: string;
+  relationship: string;
+  relationship_market: string;
+  product_category: string;
+  monitor_enabled: number;
+  retired: number;
+  source: string | null;
+  source_url: string | null;
+  market: string | null;
+  source_key: string | null;
+  last_checked: string | null;
+  latest_hash: string | null;
+  change_summary: string | null;
+  snapshots: number;
+  versions: number;
+  status: 'not_checked' | 'active' | string;
+};
+
+export type CompetitorWatch = {
+  id: string;
+  competitor_id: string;
+  url: string;
+  kind: string;
+  priority: 'high' | 'medium' | 'low';
+  interval_hours: number;
+  last_checked: string | null;
+};
+
+export type CompetitorEvent = {
+  id: string;
+  competitor_id: string;
+  brand_id: BrandId;
+  country: string | null;
+  change_type: string;
+  impact: 'high' | 'medium' | 'low' | string;
+  source: string;
+  source_url: string | null;
+  summary: string;
+  previous_value: string | null;
+  current_value: string | null;
+  why_it_matters: string;
+  recommended_action: string;
+  evidence: string;
+  confidence: number;
+  detected_at: string;
+  competitor_name?: string;
+  organization_id?: string;
+  relationship?: string;
+  product_category?: string;
+};
+
+export type CompetitorSourceHealth = {
+  source: string;
+  status: string;
+  detail: string;
+};
+
+export type CompetitorDashboard = {
+  summary: {
+    total: number;
+    high: number;
+    medium: number;
+    low: number;
+    competitors: number;
+    relationships: number;
+    organizations: number;
+  };
+  competitors: CompetitorRecord[];
+  monitors: CompetitorMonitor[];
+  watches: CompetitorWatch[];
+  events: CompetitorEvent[];
+  source_health: CompetitorSourceHealth[];
+};
+
+export type CompetitorScanResult = {
+  competitor_id: string;
+  status: string;
+  changed: boolean;
+  summary: string | null;
+  event_id: string | null;
+  error: string | null;
+};
+
+export type CompetitorEventAnalysis = {
+  summary: string;
+  why_it_matters: string;
+  recommended_action: string;
+  confidence_reason: string;
+};
+
 export type CampaignCreate = {
   brand_id: BrandId;
   topic: string;
