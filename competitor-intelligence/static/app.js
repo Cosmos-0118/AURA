@@ -1,4 +1,4 @@
-const state = { events: [], competitors: [] };
+const state = { events: [], competitors: [], monitors: [], scanning: false, scanTimer: null, scanStartedAt: 0, scanTrigger: null };
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -22,6 +22,13 @@ const labels = {
   social_post: 'Social post',
 };
 
+const scanPhases = [
+  'Opening source watches',
+  'Reading current pages',
+  'Normalizing source text',
+  'Comparing stored snapshots',
+];
+
 async function request(path, options) {
   const response = await fetch(path, options);
   const payload = await response.json().catch(() => ({}));
@@ -40,7 +47,61 @@ function clearNotice() {
   $('#notice').hidden = true;
 }
 
+function formatElapsed(milliseconds) {
+  const seconds = Math.floor(milliseconds / 1000);
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function startScanOverlay(targets) {
+  const overlay = $('#scan-overlay');
+  const activeElement = document.activeElement;
+  state.scanTrigger = activeElement instanceof HTMLElement ? activeElement : null;
+  state.scanning = true;
+  const startedAt = performance.now();
+  state.scanStartedAt = startedAt;
+  let phaseIndex = 0;
+  overlay.hidden = false;
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.classList.remove('is-complete', 'is-error');
+  document.body.classList.add('is-scanning');
+  $('main').inert = true;
+  $('main').setAttribute('aria-busy', 'true');
+  $('#scan-title').textContent = targets.length > 1 ? 'Scanning watchlist' : `Scanning ${targets[0]}`;
+  $('#scan-targets').innerHTML = targets.map((target) => `<span class="scan-target"><i></i>${escapeHtml(target)}</span>`).join('');
+  $('#scan-phase').textContent = scanPhases[phaseIndex];
+  $('#scan-elapsed').textContent = '00:00';
+  $('#scan-status').textContent = 'The dashboard will update when the scan returns.';
+  $('#scan-card').focus({ preventScroll: true });
+  state.scanTimer = window.setInterval(() => {
+    phaseIndex = (phaseIndex + 1) % scanPhases.length;
+    $('#scan-phase').textContent = scanPhases[phaseIndex];
+    $('#scan-elapsed').textContent = formatElapsed(performance.now() - startedAt);
+  }, 1200);
+}
+
+async function finishScanOverlay(outcome = 'complete') {
+  if (state.scanTimer) window.clearInterval(state.scanTimer);
+  state.scanTimer = null;
+  const overlay = $('#scan-overlay');
+  overlay.classList.toggle('is-complete', outcome === 'complete');
+  overlay.classList.toggle('is-error', outcome === 'error');
+  $('#scan-phase').textContent = outcome === 'complete' ? 'Snapshot comparison complete' : 'Scan stopped with an error';
+  $('#scan-status').textContent = outcome === 'complete' ? 'Fresh source state is ready in the workspace.' : 'Check the notice for the source error details.';
+  const minimumVisibleTime = 1200;
+  const remaining = Math.max(520, minimumVisibleTime - (performance.now() - state.scanStartedAt));
+  await new Promise((resolve) => window.setTimeout(resolve, remaining));
+  overlay.hidden = true;
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('is-scanning');
+  $('main').inert = false;
+  $('main').removeAttribute('aria-busy');
+  state.scanning = false;
+  if (state.scanTrigger?.isConnected) state.scanTrigger.focus({ preventScroll: true });
+  state.scanTrigger = null;
+}
+
 function formatDate(value) {
+  if (!value) return 'Never';
   return new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
@@ -57,7 +118,10 @@ function renderSummary(summary) {
 function renderEvents(events) {
   $('#event-count').textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
   if (!events.length) {
-    $('#events').innerHTML = '<div class="empty-state"><strong>No meaningful changes detected</strong>Run a watchlist scan or adjust the filters. Baseline captures do not create noise events.</div>';
+    const checked = state.monitors.filter((item) => item.last_checked).length;
+    $('#events').innerHTML = checked
+      ? `<div class="empty-state"><strong>No meaningful changes detected</strong>${checked} source${checked === 1 ? '' : 's'} have baselines. The latest scans are unchanged; new evidence will appear here when a monitored product page moves.</div>`
+      : '<div class="empty-state"><strong>No baselines captured yet</strong>Run a watchlist scan or start the collector worker to capture the first real source snapshot.</div>';
     return;
   }
   $('#events').innerHTML = events.map((event) => `
@@ -123,43 +187,82 @@ async function refreshEvents() {
 }
 
 async function refreshDashboard() {
-  const [summary, competitors, health] = await Promise.all([
-    request('/api/summary'), request('/api/competitors'), request('/api/source-health'),
+  const [summary, competitors, health, monitors] = await Promise.all([
+    request('/api/summary'), request('/api/competitors'), request('/api/source-health'), request('/api/monitors'),
   ]);
   state.competitors = competitors;
+  state.monitors = monitors;
   renderSummary(summary);
-  $('#watchlist').innerHTML = competitors.map((competitor) => `
-    <div class="watch-row"><div><div class="watch-name">${escapeHtml(competitor.name)}</div><div class="watch-detail">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)} · ${escapeHtml(competitor.priority)} priority</div></div><button class="watch-action" data-scan-id="${escapeHtml(competitor.id)}">Scan</button></div>
-  `).join('') || '<div class="empty-state">Add competitors to config/competitors.json.</div>';
+  $('#watchlist').innerHTML = competitors.map((competitor) => {
+    const monitor = monitors.find((item) => item.competitor_id === competitor.id) || {};
+    const source = monitor.source ? `${monitor.source} · ${monitor.versions || 0} version${monitor.versions === 1 ? '' : 's'}` : 'Not checked yet';
+    const link = monitor.source_url ? `<a class="watch-link" href="${escapeHtml(monitor.source_url)}" target="_blank" rel="noreferrer">Open source</a>` : '';
+    return `
+    <div class="watch-row"><div><div class="watch-name">${escapeHtml(competitor.name)}</div><div class="watch-detail">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)} · ${escapeHtml(competitor.priority)} priority</div><div class="watch-detail">${escapeHtml(source)} · checked ${escapeHtml(formatDate(monitor.last_checked))}</div>${link}</div><button class="watch-action" data-scan-id="${escapeHtml(competitor.id)}">Scan</button></div>
+    `;
+  }).join('') || '<div class="empty-state">Add competitors to config/competitors.json.</div>';
   document.querySelectorAll('[data-scan-id]').forEach((button) => button.addEventListener('click', () => scan(button.dataset.scanId, button)));
   $('#source-health').innerHTML = health.map((item) => `<div class="health-row"><div><div class="health-name">${escapeHtml(item.source)}</div><div class="health-detail">${escapeHtml(item.detail)}</div></div><span class="health-status health-${escapeHtml(item.status)}">${escapeHtml(item.status.replace('_', ' '))}</span></div>`).join('');
 }
 
 async function scan(id, button) {
+  if (state.scanning) return;
   if (button) { button.disabled = true; button.textContent = 'Scanning…'; }
   clearNotice();
+  const competitor = state.competitors.find((item) => item.id === id);
+  startScanOverlay([competitor?.name || 'Selected watch']);
+  let outcome = 'complete';
   try {
     const result = await request(`/api/competitors/${encodeURIComponent(id)}/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    if (result.status === 'error') showNotice(`Scan failed: ${result.error}`);
-    else showNotice(result.changed ? 'Meaningful change detected and added to the feed.' : 'Scan complete. No meaningful change detected.', 'info');
+    if (result.status === 'error') {
+      outcome = 'error';
+      showNotice(`Scan failed: ${result.error}`);
+    } else if (result.status === 'baseline') {
+      showNotice('Baseline captured. Future scans will be compared against this source.', 'info');
+    } else {
+      showNotice(result.changed ? 'Meaningful change detected and added to the feed.' : 'Scan complete. No meaningful change detected.', 'info');
+    }
     await Promise.all([refreshDashboard(), refreshEvents()]);
-  } catch (error) { showNotice(error.message); }
-  finally { if (button) { button.disabled = false; button.textContent = 'Scan'; } }
+  } catch (error) {
+    outcome = 'error';
+    showNotice(error.message);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Scan'; }
+    await finishScanOverlay(outcome);
+  }
 }
 
 async function scanAll() {
+  if (state.scanning) return;
   const button = $('#scan-all');
   button.disabled = true;
   button.textContent = 'Scanning…';
   clearNotice();
+  startScanOverlay(state.competitors.map((item) => item.name));
+  let outcome = 'complete';
   try {
     const results = await request('/api/scan-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const changed = results.filter((item) => item.changed).length;
+    const baseline = results.filter((item) => item.status === 'baseline').length;
+    const changed = results.filter((item) => item.changed || item.status === 'changed').length;
+    const unchanged = results.filter((item) => item.status === 'unchanged').length;
     const failed = results.filter((item) => item.status === 'error').length;
-    showNotice(`${results.length} watchlist scans complete · ${changed} meaningful change${changed === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}.`, failed ? 'warning' : 'info');
+    outcome = failed ? 'error' : 'complete';
+    const details = [
+      baseline ? `${baseline} baseline${baseline === 1 ? '' : 's'}` : '',
+      changed ? `${changed} changed` : '',
+      unchanged ? `${unchanged} unchanged` : '',
+      failed ? `${failed} failed` : '',
+    ].filter(Boolean).join(' · ');
+    showNotice(`${results.length} watchlist scan${results.length === 1 ? '' : 's'} complete · ${details}.`, failed ? 'warning' : 'info');
     await Promise.all([refreshDashboard(), refreshEvents()]);
-  } catch (error) { showNotice(error.message); }
-  finally { button.disabled = false; button.textContent = 'Scan watchlist'; }
+  } catch (error) {
+    outcome = 'error';
+    showNotice(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Scan watchlist';
+    await finishScanOverlay(outcome);
+  }
 }
 
 async function boot() {

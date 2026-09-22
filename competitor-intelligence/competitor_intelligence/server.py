@@ -28,6 +28,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "service": "competitor-intelligence"})
         if parsed.path == "/api/competitors":
             return self._json([item.to_dict() for item in self.service.competitors()])
+        if parsed.path == "/api/monitors":
+            return self._json(self.service.monitor_status())
         if parsed.path == "/api/events":
             query = parse_qs(parsed.query)
             filters = {key: values[0] for key, values in query.items() if values and values[0]}

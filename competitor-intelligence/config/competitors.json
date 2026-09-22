@@ -5,7 +5,7 @@
     "name": "Chubb Singapore",
     "niche": "jewellers block / jewellery insurance",
     "countries": ["SG", "MY", "HK", "ID", "TH"],
-    "url": "https://www.chubb.com/sg-en/",
+    "url": "https://www.chubb.com/sg-en/business/fine-art-valuable-goods-insurance.html",
     "priority": "high"
   },
   {
@@ -14,7 +14,7 @@
     "name": "MSIG Singapore",
     "niche": "medical indemnity / malpractice insurance",
     "countries": ["SG", "MY", "HK", "ID", "TH"],
-    "url": "https://www.msig.com.sg/",
+    "url": "https://www.msig.com.sg/commercial/professional-indemnity",
     "priority": "high"
   },
   {
@@ -23,7 +23,7 @@
     "name": "AIG Singapore",
     "niche": "high-value goods / cargo and transit insurance",
     "countries": ["SG", "MY", "HK", "ID", "TH"],
-    "url": "https://www.aig.sg/home",
+    "url": "https://www.aig.sg/home/solutions/business-products-and-services/marine/marine-cargo",
     "priority": "high"
   }
 ]
