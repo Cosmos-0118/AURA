@@ -31,7 +31,7 @@ import type {
 const PRESETS = {
   jade: {
     id: 'jade',
-    name: 'J Jewellers',
+    name: 'Jade',
     badge: 'Luxury Jewellery',
     prompt:
       'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.'
@@ -45,8 +45,8 @@ const PRESETS = {
   },
   jaguar: {
     id: 'jaguar',
-    name: 'Jagrut Trust',
-    badge: 'Trust & Community',
+    name: 'Jaguar Transit',
+    badge: 'Logistics & Security',
     prompt:
       'A heavy armored transit security vehicle departing a high-security community vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.'
   }

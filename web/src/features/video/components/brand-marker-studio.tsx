@@ -26,9 +26,9 @@ import { IconDownload, IconSparkles, IconUpload, IconTrash } from '@tabler/icons
 export const PRESET_LOGOS = [
   {
     id: 'jade',
-    name: 'J Jewellers',
-    badge: 'Luxury Jewellery',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%23061A12" fill-opacity="0.90"/><polygon points="24,10 35,24 24,38 13,24" fill="%2310B981" stroke="%23F59E0B" stroke-width="1.8"/><circle cx="24" cy="24" r="3.5" fill="%23FFFFFF"/><text x="44" y="27" fill="%23F59E0B" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1.2">J JEWELLERS</text><text x="44" y="38" fill="%2310B981" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">FINE CRAFT</text></svg>`
+    name: 'Jade',
+    badge: 'Luxury & High Value',
+    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%23061A12" fill-opacity="0.90"/><polygon points="24,10 35,24 24,38 13,24" fill="%2310B981" stroke="%23F59E0B" stroke-width="1.8"/><circle cx="24" cy="24" r="3.5" fill="%23FFFFFF"/><text x="44" y="27" fill="%23F59E0B" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1.5">JADE</text><text x="44" y="38" fill="%2310B981" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">SPECIALIST RISK</text></svg>`
   },
   {
     id: 'doctorshield',
@@ -38,9 +38,9 @@ export const PRESET_LOGOS = [
   },
   {
     id: 'jaguar',
-    name: 'Jagrut Trust',
-    badge: 'Trust & Community',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%231E170E" fill-opacity="0.90"/><polygon points="24,10 35,16 35,29 24,37 13,29 13,16" fill="%23D97706" stroke="%23FBBF24" stroke-width="1.8"/><circle cx="24" cy="23.5" r="4" fill="%23FFFFFF"/><text x="44" y="27" fill="%23FBBF24" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1">JAGRUT TRUST</text><text x="44" y="38" fill="%23FDE68A" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">COMMUNITY FIRST</text></svg>`
+    name: 'Jaguar Transit',
+    badge: 'Logistics & Security',
+    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%231E170E" fill-opacity="0.90"/><polygon points="24,10 35,16 35,29 24,37 13,29 13,16" fill="%23D97706" stroke="%23FBBF24" stroke-width="1.8"/><circle cx="24" cy="23.5" r="4" fill="%23FFFFFF"/><text x="44" y="27" fill="%23FBBF24" font-family="system-ui, sans-serif" font-weight="800" font-size="11.5" letter-spacing="0.8">JAGUAR TRANSIT</text><text x="44" y="38" fill="%23FDE68A" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">SECURE LOGISTICS</text></svg>`
   }
 ];
 

@@ -4,7 +4,7 @@ insert into brands (id, name, tone, audience, do_list, dont_list)
 values
   (
     'jade',
-    'J Jewellers',
+    'Jade',
     '["authoritative", "premium", "specialist", "B2B"]'::jsonb,
     'jewellery houses, gold dealers, watch retailers',
     '["Be precise", "Lead with expertise", "Use a premium specialist tone"]'::jsonb,
@@ -20,7 +20,7 @@ values
   ),
   (
     'jaguar',
-    'Jagrut Trust',
+    'Jaguar Transit',
     '["trustworthy", "community-focused", "security-focused", "operational"]'::jsonb,
     'trust logistics, community security, public services',
     '["Be operational", "Emphasise trust", "Use security-focused language"]'::jsonb,

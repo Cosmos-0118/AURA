@@ -22,9 +22,9 @@ import {
 const LOCAL_STORAGE_KEY = 'aura_video_generation_history_v2';
 
 const BRAND_LABELS: Record<string, string> = {
-  jade: 'J Jewellers',
+  jade: 'Jade',
   doctorshield: 'Doctor Shield',
-  jaguar: 'Jagrut Trust'
+  jaguar: 'Jaguar Transit'
 };
 
 const BRAND_COLORS: Record<string, string> = {
@@ -521,9 +521,9 @@ export function VideoHistory({
                 className='rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
               >
                 <option value='all'>All Brands</option>
-                <option value='jade'>J Jewellers</option>
+                <option value='jade'>Jade</option>
                 <option value='doctorshield'>Doctor Shield</option>
-                <option value='jaguar'>Jagrut Trust</option>
+                <option value='jaguar'>Jaguar Transit</option>
               </select>
             </div>
 
