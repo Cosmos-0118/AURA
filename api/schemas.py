@@ -238,6 +238,8 @@ class CampaignPlatformContentItem(BaseModel):
     script: str | None = None
     visual_concept: str | None = None
     generation_prompt: str | None = None
+    version: int = 1
+    is_current: bool = True
 
 
 class CampaignMediaItem(BaseModel):
@@ -256,6 +258,7 @@ class CampaignMediaItem(BaseModel):
     logo_scale: float | None = None
     logo_opacity: float | None = None
     parent_media_id: str | None = None
+    watermark_config: Any | None = None
 
 
 class CampaignFacts(BaseModel):
@@ -423,3 +426,69 @@ class VideoGenerationRecord(BaseModel):
     error_msg: str | None = None
     request_id: str | None = None
     created_at: datetime
+
+
+class WatermarkLogoItem(BaseModel):
+    id: str | None = None
+    logo_path: str
+    anchor: str = "bottom-right"
+    scale: float = 80.0
+    opacity: float = 90.0
+    x: float | None = None
+    y: float | None = None
+
+
+class HistoryCampaignSummary(BaseModel):
+    id: str
+    brand_id: str
+    title: str | None = None
+    thesis: str | None = None
+    objective: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime | None = None
+    platforms: list[str] = Field(default_factory=list)
+    has_final_image: bool = False
+    has_final_video: bool = False
+    has_original_image: bool = False
+    review_cycle: int = 1
+    review_status: str | None = None
+    publications_count: int = 0
+
+
+class AssistantChatRequest(BaseModel):
+    message: str
+    target_platform: str | None = None
+    regenerate_media: bool = False
+    media_type: str = "image"
+
+
+class AssistantChatResponse(BaseModel):
+    reply: str
+    campaign_id: str
+    regenerated_platforms: list[str] = Field(default_factory=list)
+    compliance_results: dict[str, Any] = Field(default_factory=dict)
+    new_media: CampaignMediaItem | None = None
+    updated_contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+
+
+class ResubmitReviewRequest(BaseModel):
+    note: str | None = None
+
+
+class ResubmitReviewResponse(BaseModel):
+    success: bool
+    campaign_id: str
+    status: str
+    review_cycle: int
+    message: str
+
+
+class CampaignWorkspaceHistory(BaseModel):
+    campaign: dict[str, Any]
+    contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+    media: list[CampaignMediaItem] = Field(default_factory=list)
+    review_cycles: list[dict[str, Any]] = Field(default_factory=list)
+    publications: list[CampaignPublicationItem] = Field(default_factory=list)
+    events: list[CampaignEventItem] = Field(default_factory=list)
+    lessons: list[dict[str, Any]] = Field(default_factory=list)

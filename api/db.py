@@ -383,9 +383,24 @@ def init_sqlite_db(conn: sqlite3.Connection):
         ("logo_scale", "REAL DEFAULT 100.0"),
         ("logo_opacity", "REAL DEFAULT 100.0"),
         ("parent_media_id", "TEXT"),
+        ("watermark_config", "TEXT"),
     ]:
         try:
             cursor.execute(f"ALTER TABLE campaign_media ADD COLUMN {col_def[0]} {col_def[1]}")
+            conn.commit()
+        except Exception:
+            pass
+
+    for tbl, col_def in [
+        ("campaign_platform_content", "version INTEGER DEFAULT 1"),
+        ("campaign_platform_content", "is_current INTEGER DEFAULT 1"),
+        ("review_queue", "review_cycle INTEGER DEFAULT 1"),
+        ("review_queue", "is_current INTEGER DEFAULT 1"),
+        ("campaign_publications", "provider TEXT DEFAULT 'buffer'"),
+        ("campaign_publications", "buffer_post_id TEXT"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN {col_def}")
             conn.commit()
         except Exception:
             pass
@@ -502,6 +517,11 @@ def get_db() -> Generator[Any, None, None]:
                 "ALTER TABLE campaign_media ADD COLUMN logo_scale FLOAT DEFAULT 100.0",
                 "ALTER TABLE campaign_media ADD COLUMN logo_opacity FLOAT DEFAULT 100.0",
                 "ALTER TABLE campaign_media ADD COLUMN parent_media_id VARCHAR(64)",
+                "ALTER TABLE campaign_media ADD COLUMN watermark_config LONGTEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN version INT DEFAULT 1",
+                "ALTER TABLE campaign_platform_content ADD COLUMN is_current TINYINT(1) DEFAULT 1",
+                "ALTER TABLE review_queue ADD COLUMN review_cycle INT DEFAULT 1",
+                "ALTER TABLE review_queue ADD COLUMN is_current TINYINT(1) DEFAULT 1",
                 "ALTER TABLE lessons ADD COLUMN reason_tag VARCHAR(64)",
                 "ALTER TABLE lessons ADD COLUMN original_body LONGTEXT",
                 "ALTER TABLE lessons ADD COLUMN edited_body LONGTEXT",
@@ -635,6 +655,13 @@ def get_db() -> Generator[Any, None, None]:
                 "ALTER TABLE campaign_media ADD COLUMN logo_scale FLOAT DEFAULT 100.0",
                 "ALTER TABLE campaign_media ADD COLUMN logo_opacity FLOAT DEFAULT 100.0",
                 "ALTER TABLE campaign_media ADD COLUMN parent_media_id VARCHAR(64)",
+                "ALTER TABLE campaign_media ADD COLUMN watermark_config LONGTEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN version INT DEFAULT 1",
+                "ALTER TABLE campaign_platform_content ADD COLUMN is_current TINYINT(1) DEFAULT 1",
+                "ALTER TABLE review_queue ADD COLUMN review_cycle INT DEFAULT 1",
+                "ALTER TABLE review_queue ADD COLUMN is_current TINYINT(1) DEFAULT 1",
+                "ALTER TABLE campaign_publications ADD COLUMN provider VARCHAR(50) DEFAULT 'buffer'",
+                "ALTER TABLE campaign_publications ADD COLUMN buffer_post_id VARCHAR(255)",
             ]:
                 try:
                     with raw_conn.cursor() as cur:
