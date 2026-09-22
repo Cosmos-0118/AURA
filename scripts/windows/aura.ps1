@@ -369,11 +369,11 @@ function Start-Processes($frontendMode) {
 
     # Resolve the executable and args based on available package manager
     if ($jsPm -eq "bun") {
-        $webExe  = "bun"
+        $webExe  = "bun.exe"
         $devArgs = "run dev"
         $prodArgs = "run start"
     } else {
-        $webExe  = "npm"
+        $webExe  = "npm.cmd"
         $devArgs = "run dev"
         $prodArgs = "run start"
     }
