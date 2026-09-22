@@ -179,6 +179,42 @@ export type VideoAttachRequest = {
   video_url: string;
 };
 
+export type BufferShareMode = 'shareNow' | 'addToQueue' | 'shareNext' | 'customScheduled';
+export type BufferInstagramType = 'post' | 'story' | 'reel';
+
+export type BufferStatus = {
+  configured: boolean;
+  endpoint: string;
+};
+
+export type BufferChannel = {
+  id: string;
+  name: string;
+  display_name: string;
+  service: string;
+  avatar: string;
+  is_queue_paused: boolean;
+  organization_id: string;
+  organization_name: string;
+};
+
+export type BufferPublishRequest = {
+  channel_id: string;
+  text: string;
+  mode?: BufferShareMode;
+  due_at?: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
+  instagram_type?: BufferInstagramType | null;
+};
+
+export type BufferPublishResult = {
+  ok: boolean;
+  post_id: string | null;
+  due_at: string | null;
+  message: string;
+};
+
 export type VideoConfig = {
   model: string;
   max_duration_seconds: number;
