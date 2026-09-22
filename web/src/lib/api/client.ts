@@ -64,12 +64,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-
-
 function jsonBody(body: unknown): RequestInit {
   return { method: 'POST', body: JSON.stringify(body) };
 }
-
 
 export async function getBrands(): Promise<Brand[]> {
   try {
@@ -107,9 +104,7 @@ export async function getCompetitors(brandId?: string): Promise<Competitor[]> {
     const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
     return await request<Competitor[]>(`/api/competitors${query}`);
   } catch {
-    return COMPETITOR_INTEL.filter(
-      (c) => !brandId || c.target_brand === brandId
-    ).map((c) => ({
+    return COMPETITOR_INTEL.filter((c) => !brandId || c.target_brand === brandId).map((c) => ({
       id: c.id,
       brand_id: c.target_brand,
       name: c.competitor_name,
@@ -240,7 +235,10 @@ export async function getCompetitorEventDiff(eventId: string): Promise<{
   return request(`/api/competitors/events/${encodeURIComponent(eventId)}/diff`);
 }
 
-export async function syncCompetitorChangedetection(): Promise<{ imported: number; errors: string[] }> {
+export async function syncCompetitorChangedetection(): Promise<{
+  imported: number;
+  errors: string[];
+}> {
   return request('/api/competitors/sync-changedetection', { method: 'POST' });
 }
 
@@ -456,7 +454,10 @@ export function getLeadEmailDraft(leadId: string): Promise<import('./types').Lea
 }
 
 export function sendLeadEmail(leadId: string): Promise<import('./types').LeadEmailResult> {
-  return request<import('./types').LeadEmailResult>('/api/leads/send', jsonBody({ lead_id: leadId }));
+  return request<import('./types').LeadEmailResult>(
+    '/api/leads/send',
+    jsonBody({ lead_id: leadId })
+  );
 }
 
 export async function getMetrics(): Promise<Metrics> {
@@ -605,10 +606,9 @@ export async function uploadWatermarkedMedia(
 }
 
 export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
-  return await request<CampaignSubmitResult>(
-    `/api/campaigns/${encodeURIComponent(id)}/submit`,
-    { method: 'POST' }
-  );
+  return await request<CampaignSubmitResult>(`/api/campaigns/${encodeURIComponent(id)}/submit`, {
+    method: 'POST'
+  });
 }
 
 export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
@@ -667,7 +667,6 @@ export async function getBrandLogos(): Promise<BrandLogoItem[]> {
   }
 }
 
-
 export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
   const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
   return await request<CampaignReviewCard[]>(`/api/campaigns/review-queue${query}`);
@@ -721,27 +720,21 @@ export async function publishCampaignPlatform(
   );
 }
 
-export async function publishToLinkedIn(
-  campaignId: string
-): Promise<PublishResponse> {
+export async function publishToLinkedIn(campaignId: string): Promise<PublishResponse> {
   return await request<PublishResponse>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/publish/linkedin`,
     { method: 'POST' }
   );
 }
 
-export async function publishToInstagram(
-  campaignId: string
-): Promise<PublishResponse> {
+export async function publishToInstagram(campaignId: string): Promise<PublishResponse> {
   return await request<PublishResponse>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/publish/instagram`,
     { method: 'POST' }
   );
 }
 
-export async function publishToX(
-  campaignId: string
-): Promise<PublishResponse> {
+export async function publishToX(campaignId: string): Promise<PublishResponse> {
   return await request<PublishResponse>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/publish/x`,
     { method: 'POST' }
@@ -756,17 +749,13 @@ export async function getCampaignPublications(
   );
 }
 
-export async function getCampaignHistory(
-  campaignId: string
-): Promise<CampaignEventItem[]> {
+export async function getCampaignHistory(campaignId: string): Promise<CampaignEventItem[]> {
   return await request<CampaignEventItem[]>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/history`
   );
 }
 
-export async function getCampaignMediaList(
-  campaignId: string
-): Promise<CampaignMediaItem[]> {
+export async function getCampaignMediaList(campaignId: string): Promise<CampaignMediaItem[]> {
   return await request<CampaignMediaItem[]>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/media`
   );
@@ -782,44 +771,6 @@ export async function resetAllCampaignData(): Promise<{
     message: string;
     deleted?: Record<string, number>;
   }>('/api/campaigns/reset-data', { method: 'POST' });
-}
-
-export function generateVideo(
-  body: import('./types').VideoGenerateRequest
-): Promise<import('./types').VideoGenerateResponse> {
-  return request<import('./types').VideoGenerateResponse>('/api/video/generate', jsonBody(body));
-}
-
-export function getVideoConfig(): Promise<import('./types').VideoConfig> {
-  return request<import('./types').VideoConfig>('/api/video/config');
-}
-
-export function attachVideoToAsset(
-  body: import('./types').VideoAttachRequest
-): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
-  return request<{ ok: boolean; asset_id: string; media_url: string }>(
-    '/api/video/attach',
-    jsonBody(body)
-  );
-}
-
-export function listVideoHistory(
-  params: { limit?: number; brand_id?: string } = {}
-): Promise<import('./types').VideoGenerationRecord[]> {
-  const query = new URLSearchParams();
-  if (params.limit) query.set('limit', String(params.limit));
-  if (params.brand_id) query.set('brand_id', params.brand_id);
-  const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<import('./types').VideoGenerationRecord[]>(`/api/video/history${suffix}`);
-}
-
-export function saveVideoExport(
-  body: import('./types').VideoSaveExportRequest
-): Promise<{ ok: boolean; id: string; branded_video_url: string }> {
-  return request<{ ok: boolean; id: string; branded_video_url: string }>(
-    '/api/video/export-record',
-    jsonBody(body)
-  );
 }
 
 export function getBufferStatus(): Promise<import('./types').BufferStatus> {

@@ -48,10 +48,6 @@ try:
     )
     from ..services.publisher import publish_campaign_platform
     from ..publishing import publish_to_platform
-    from ..services.video_generator import (
-        generate_video as service_generate_video,
-        save_watermarked_video_bytes,
-    )
 except ImportError:
     from db import get_db, reset_campaign_data, transaction
     from graph import run_pipeline
@@ -94,10 +90,6 @@ except ImportError:
     )
     from services.publisher import publish_campaign_platform
     from publishing import publish_to_platform
-    from services.video_generator import (
-        generate_video as service_generate_video,
-        save_watermarked_video_bytes,
-    )
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
