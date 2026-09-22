@@ -5,17 +5,18 @@ try:
     from ..agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
     from ..agents.lead_mail import LeadMailError, draft_for, send_for
     from ..db import get_connection
-    from ..schemas import BrandId, Lead, LeadOutreachRequest, LeadSearchRequest
+    from ..schemas import BrandId, Lead
 except ImportError:
     from agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
     from agents.lead_mail import LeadMailError, draft_for, send_for
     from db import get_connection
-    from schemas import BrandId, Lead, LeadOutreachRequest, LeadSearchRequest
+    from schemas import BrandId, Lead
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
 class LeadInsight(Lead):
+    country: str | None = None
     email: str | None = None
     phone: str | None = None
     requirements: str | None = None
@@ -82,7 +83,10 @@ def list_leads(brand_id: BrandId | None = None) -> list[LeadInsight]:
     if scraped:
         return [_insight(row) for row in scraped]
     try:
-        query = "select id, brand_id, name, url, country, fit_score, why from leads"
+        query = (
+            "select id, brand_id, name, url, country, fit_score, why,"
+            " email, phone, requirements, source_url, source_title from leads"
+        )
         params: tuple[str, ...] = ()
         if brand_id:
             query += " where brand_id = %s"
@@ -93,27 +97,3 @@ def list_leads(brand_id: BrandId | None = None) -> list[LeadInsight]:
         return [_insight(row) for row in rows]
     except Exception:
         return []
-
-
-@router.post('/search', response_model=list[Lead])
-def search_leads(request: LeadSearchRequest) -> list[Lead]:
-    try:
-        from ..agents.leads import discover_and_enrich_leads
-    except ImportError:
-        from agents.leads import discover_and_enrich_leads
-    return discover_and_enrich_leads(request)
-
-
-@router.post('/{lead_id}/outreach')
-def generate_outreach(lead_id: str, request: LeadOutreachRequest) -> dict[str, str]:
-    try:
-        from ..agents.leads import generate_personalized_outreach
-    except ImportError:
-        from agents.leads import generate_personalized_outreach
-    try:
-        generate_personalized_outreach(lead_id, request.brand_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {'status': 'success', 'message': 'Draft created and sent to review'}
