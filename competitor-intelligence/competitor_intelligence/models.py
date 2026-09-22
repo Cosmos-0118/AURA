@@ -5,8 +5,27 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+RELATIONSHIP_TYPES = frozenset(
+    {
+        "DIRECT_COMPETITOR",
+        "INDIRECT_COMPETITOR",
+        "PARTNER",
+        "UNDERWRITER",
+        "DISTRIBUTOR",
+        "SECURE_LOGISTICS_COMPETITOR",
+        "ADJACENT",
+    }
+)
+PRIORITY_TYPES = frozenset({"high", "medium", "low"})
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _organization_slug(name: str) -> str:
+    slug = "".join(character.lower() if character.isalnum() else "-" for character in name)
+    return "-".join(part for part in slug.split("-") if part)
 
 
 @dataclass(slots=True)
@@ -18,6 +37,25 @@ class Competitor:
     countries: list[str]
     url: str
     priority: str = "medium"
+    organization_id: str = ""
+    relationship: str = "DIRECT_COMPETITOR"
+    market: str = ""
+    product_category: str = ""
+    monitor: bool = True
+    retired: bool = False
+
+    def __post_init__(self) -> None:
+        if self.relationship not in RELATIONSHIP_TYPES:
+            allowed = ", ".join(sorted(RELATIONSHIP_TYPES))
+            raise ValueError(f"Unsupported competitor relationship {self.relationship!r}; expected one of {allowed}")
+        if self.priority not in PRIORITY_TYPES:
+            raise ValueError(f"Unsupported competitor priority {self.priority!r}")
+        if not self.organization_id:
+            self.organization_id = _organization_slug(self.name)
+        if not self.market:
+            self.market = ", ".join(self.countries)
+        if not self.product_category:
+            self.product_category = self.niche
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -53,8 +53,8 @@ services are optional: the direct website collector and webhook endpoint still
 work when only the intelligence container is running.
 
 The compose setup also enables changedetection.io's `Visual / Image screenshot
-change detection` processor. The three AURA-provisioned watches intentionally
-remain `Webpage Text/HTML, JSON and PDF changes` because the intelligence
+change detection` processor. The AURA-provisioned watchlist intentionally
+remains `Webpage Text/HTML, JSON and PDF changes` because the intelligence
 webhook needs text for deterministic classification. Use the visual processor
 for a separate watch when you need before/after screenshot diffs; it requires
 the configured Playwright browser backend.
@@ -82,7 +82,7 @@ Run the persistent collector worker:
 python -m competitor_intelligence worker
 ```
 
-Provision the three product watches in changedetection.io. The API key is
+Provision the active competitor watchlist in changedetection.io. The API key is
 available under changedetection.io Settings → API; it is not stored in this
 repository:
 
@@ -108,11 +108,30 @@ SEARXNG_URL=http://localhost:8080
 DISABLED_PROCESSORS=
 ```
 
-The initial URL registry contains product-specific Singapore pages for Chubb
-Fine Art and Valuable Goods, MSIG Professional Indemnity, and AIG Marine
-Cargo. Replace these with the exact public pricing, product, and market pages
-JA wants to monitor.
+The registry contains twelve active monitor relationships across Jade,
+DoctorShield, and Jaguar Transit, plus a non-scanned Liberty relationship that
+records Jaguar's partner/market-overlap context. Repeated organizations such as
+Howden, Chubb, and Liberty have separate brand relationships rather than being
+flattened into a boolean `competitor` flag.
 The service never sends credentials to monitored sites.
+
+## Registry model
+
+Each entry in `config/competitors.json` is a monitor relationship, not a unique
+company record. `organization_id` groups a company across brands, while
+`relationship` captures the role it plays for that JA brand:
+
+```text
+organization_id + name + website
+        |
+        +-- brand_id + relationship + market + product_category + priority
+```
+
+Supported relationship values are `DIRECT_COMPETITOR`, `INDIRECT_COMPETITOR`,
+`PARTNER`, `UNDERWRITER`, `DISTRIBUTOR`, `SECURE_LOGISTICS_COMPETITOR`, and
+`ADJACENT`. Set `monitor` to `false` when a relationship should remain visible
+as strategic context without creating a changedetection watch or participating
+in the active scan-all operation.
 
 ## changedetection.io webhook
 
@@ -130,7 +149,7 @@ notification body:
 
 ```json
 {
-  "competitor_id": "jade-competitor-1",
+  "competitor_id": "jade-howden",
   "watch_url": "{{watch_url}}",
   "current_snapshot": "{{current_snapshot}}",
   "diff": "{{diff}}"
