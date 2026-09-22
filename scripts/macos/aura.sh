@@ -259,7 +259,7 @@ start_processes() {
   fi
   capture_listener_pid "backend" "$API_PORT" "$API_PID_FILE"
 
-  if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/overview"; then
+  if ! wait_for_http "frontend" "http://localhost:$WEB_PORT/dashboard/studio"; then
     log "Frontend failed to become ready. Recent log:"
     tail -n 40 "$WEB_LOG" >&2 || true
     capture_listener_pid "frontend" "$WEB_PORT" "$WEB_PID_FILE"

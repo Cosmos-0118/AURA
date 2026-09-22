@@ -698,7 +698,7 @@ export default function ReviewQueuePage() {
       {/* COMPREHENSIVE CAMPAIGN REVIEW WORKSPACE MODAL */}
       {selectedCard && (
         <Dialog open={Boolean(selectedCard)} onOpenChange={(open) => !open && setSelectedCard(null)}>
-          <DialogContent className='max-w-5xl max-h-[92vh] overflow-y-auto p-6 flex flex-col gap-5'>
+          <DialogContent className='max-w-[95vw] xl:max-w-7xl 2xl:max-w-[1600px] w-full max-h-[95vh] overflow-y-auto p-6 sm:p-8 flex flex-col gap-6'>
             {/* Modal Header */}
             <DialogHeader className='border-b pb-4'>
               <div className='flex items-start justify-between gap-4 flex-wrap'>
@@ -1366,7 +1366,7 @@ export default function ReviewQueuePage() {
       {/* LINKEDIN PUBLISHING CONFIRMATION MODAL */}
       {selectedCard && (
         <Dialog open={showLinkedInConfirmModal} onOpenChange={setShowLinkedInConfirmModal}>
-          <DialogContent className='max-w-lg p-6 flex flex-col gap-4'>
+          <DialogContent className='max-w-2xl p-6 flex flex-col gap-4'>
             <DialogHeader className='border-b pb-3'>
               <div className='flex items-center gap-2 text-[#0077B5] font-bold text-sm'>
                 <PlatformIcon platform='linkedin' className='size-5 text-[#0077B5]' />

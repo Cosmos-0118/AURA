@@ -337,7 +337,7 @@ function Start-Processes($frontendMode) {
     }
     Capture-ListenerPid "backend" $ApiPort $ApiPidFile
 
-    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/overview")) {
+    if (-not (Wait-ForHttp "frontend" "http://localhost:$WebPort/dashboard/studio")) {
         Log "Frontend failed to become ready. Recent log:"
         if (Test-Path $WebLog) { Get-Content $WebLog -Tail 40 | Write-Host }
         Capture-ListenerPid "frontend" $WebPort $WebPidFile

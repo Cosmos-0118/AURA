@@ -587,10 +587,11 @@ def get_campaign_review_queue(status: str | None = None) -> list[CampaignReviewC
 
 
 @router.post("/{campaign_id}/approve")
-def approve_campaign_route(campaign_id: str, body: ReviewApproveRequest = ReviewApproveRequest()):
+def approve_campaign_route(campaign_id: str, body: ReviewApproveRequest | None = None):
     """Approve campaign in review queue, unlocking multi-platform publishing."""
+    reviewer_note = body.reviewer_note if body else None
     with transaction() as db:
-        return review_repo.approve_campaign(db, campaign_id, reviewer_note=body.reviewer_note)
+        return review_repo.approve_campaign(db, campaign_id, reviewer_note=reviewer_note)
 
 
 @router.post("/{campaign_id}/reject")
