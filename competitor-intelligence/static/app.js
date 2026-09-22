@@ -114,9 +114,13 @@ function escapeHtml(value) {
 }
 
 function renderSummary(summary) {
-  $('#summary-high').textContent = summary.high;
-  $('#summary-total').textContent = summary.total;
-  $('#summary-competitors').textContent = summary.competitors;
+  if (!summary) return;
+  const high = $('#summary-high');
+  const total = $('#summary-total');
+  const competitors = $('#summary-competitors');
+  if (high) high.textContent = summary.high;
+  if (total) total.textContent = summary.total;
+  if (competitors) competitors.textContent = summary.competitors;
 }
 
 function renderEvents(events) {

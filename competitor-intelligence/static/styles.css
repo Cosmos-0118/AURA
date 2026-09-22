@@ -114,13 +114,6 @@ h1, h2, p { margin-top: 0; }
 h1 { max-width: 720px; margin-bottom: 15px; font-size: clamp(36px, 6vw, 76px); line-height: .98; letter-spacing: -.065em; font-weight: 750; }
 h2 { margin-bottom: 0; font-size: 18px; letter-spacing: -.025em; }
 .hero-copy { max-width: 590px; margin-bottom: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 26px 0 46px; }
-.summary-card { display: flex; flex-direction: column; min-height: 128px; justify-content: space-between; padding: 17px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); box-shadow: var(--shadow); }
-.summary-card-accent { border-color: color-mix(in oklab, var(--signal) 28%, var(--line)); background: linear-gradient(135deg, var(--signal-dim), var(--panel) 62%); }
-.summary-label { color: var(--muted); font-size: 11px; }
-.summary-card strong { font-size: 34px; letter-spacing: -.06em; }
-.summary-card small { color: var(--muted); font-size: 11px; }
-.summary-word { font-size: 24px !important; }
 .toast-container { position: fixed; z-index: 50; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; max-width: min(380px, calc(100vw - 32px)); }
 .toast { display: flex; align-items: flex-start; gap: 10px; padding: 12px 12px 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 13px; line-height: 1.5; box-shadow: 0 12px 40px rgb(0 0 0 / .22); animation: toast-in .22s ease; }
 .toast-message { flex: 1; min-width: 0; }
@@ -132,7 +125,7 @@ h2 { margin-bottom: 0; font-size: 18px; letter-spacing: -.025em; }
 .toast.is-leaving { opacity: 0; transform: translateY(6px); transition: .25s ease; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr); gap: 36px; }
-.feed { display: block; min-width: 0; }
+.feed { display: block; min-width: 0; padding-top: 26px; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 30px 0 20px; }
 .page-header h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.04em; line-height: 1.05; }
 .page-copy { margin: 0; color: var(--muted); font-size: 13px; }
@@ -249,5 +242,5 @@ select { cursor: pointer; }
 @media (max-width: 900px) { .detail-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .watch-url { flex-direction: column; align-items: stretch; } .watch-scan { width: 100%; } }
 @media (max-width: 980px) { .workspace-grid { grid-template-columns: 1fr; } .side-column { display: grid; grid-template-columns: repeat(2, 1fr); align-items: start; } .digest-panel { grid-column: span 2; } }
-@media (max-width: 720px) { .shell { padding-inline: 16px; } .topbar, .hero { align-items: flex-start; flex-direction: column; } .topbar-actions { width: 100%; justify-content: space-between; } .hero { padding-top: 58px; } .summary-grid { grid-template-columns: repeat(2, 1fr); padding-bottom: 32px; } .filters { display: flex; } .filters .search-field { flex-basis: 100%; } .filters .button { flex: 1 1 100%; } .side-column { display: flex; } .digest-panel { grid-column: auto; } .event-card { grid-template-columns: 5px minmax(0, 1fr); } .event-value { grid-column: 2; grid-row: 2; text-align: left; } .event-value small { display: inline; margin-right: 7px; } h1 { font-size: 48px; } }
-@media (max-width: 420px) { .summary-card { min-height: 112px; } .summary-card strong { font-size: 28px; } .detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .shell { padding-inline: 16px; } .topbar, .hero { align-items: flex-start; flex-direction: column; } .topbar-actions { width: 100%; justify-content: space-between; } .hero { padding-top: 58px; } .filters { display: flex; } .filters .search-field { flex-basis: 100%; } .filters .button { flex: 1 1 100%; } .side-column { display: flex; } .digest-panel { grid-column: auto; } .event-card { grid-template-columns: 5px minmax(0, 1fr); } .event-value { grid-column: 2; grid-row: 2; text-align: left; } .event-value small { display: inline; margin-right: 7px; } h1 { font-size: 48px; } }
+@media (max-width: 420px) { .detail-grid { grid-template-columns: 1fr; } }
