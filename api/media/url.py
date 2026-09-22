@@ -33,6 +33,9 @@ class MediaUnreachableError(RuntimeError):
 
 def get_configured_media_base_url() -> str:
     """Retrieve and validate MEDIA_PUBLIC_BASE_URL from the environment."""
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        load_dotenv(_ROOT_ENV, override=True)
+        load_dotenv(override=True)
     base_url = os.getenv("MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/")
     if not base_url:
         raise MediaConfigurationError(
@@ -192,6 +195,9 @@ def validate_public_media_url_sync(url: str, timeout: float = 10.0) -> bool:
 
 def get_media_config() -> dict[str, Any]:
     """Safe diagnostic information about public media configuration."""
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        load_dotenv(_ROOT_ENV, override=True)
+        load_dotenv(override=True)
     raw_base = os.getenv("MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/")
     is_configured = False
     base_url = None
