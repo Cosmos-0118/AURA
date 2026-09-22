@@ -500,12 +500,12 @@ function StudioContent() {
       {/* STEP 1: CAMPAIGN SETUP FORM */}
       {!isGenerating && currentWorkflowStep === 1 && (
         <div className='flex flex-col gap-6'>
-          {/* Brand Selection Card */}
+          {/* 1. Brand Selection Card (Full Width Row) */}
           <Card className='shadow-xs'>
             <CardHeader className='pb-3'>
               <div className='flex items-center justify-between'>
                 <CardTitle className='text-base font-bold text-foreground'>
-                  Select Brand Portfolio
+                  1. Select Brand Portfolio
                 </CardTitle>
                 <Badge variant='outline' className='text-xs'>
                   Step 1 of 3
@@ -553,109 +553,12 @@ function StudioContent() {
             </CardContent>
           </Card>
 
-          {/* Objective & Language Grid */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            {/* Objective Selector */}
-            <Card className='shadow-xs'>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-sm font-bold'>Campaign Objective</CardTitle>
-                <CardDescription className='text-xs'>
-                  Sets marketing intent and call-to-action framing.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className='grid grid-cols-2 gap-2'>
-                  {OBJECTIVES.map((obj) => (
-                    <Button
-                      key={obj}
-                      type='button'
-                      variant={objective === obj ? 'default' : 'outline'}
-                      size='sm'
-                      onClick={() => setObjective(obj)}
-                      className='justify-start text-xs h-9'
-                    >
-                      {obj}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Language Selector */}
-            <Card className='shadow-xs'>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-sm font-bold'>Target Language</CardTitle>
-                <CardDescription className='text-xs'>
-                  Localized idioms and regulatory tone per region.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className='grid grid-cols-2 gap-2'>
-                  {LANGUAGES.map((lang) => (
-                    <Button
-                      key={lang.code}
-                      type='button'
-                      variant={language === lang.code ? 'default' : 'outline'}
-                      size='sm'
-                      onClick={() => setLanguage(lang.code)}
-                      className='justify-start text-xs h-9'
-                    >
-                      {lang.label}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Platforms Selector */}
+          {/* 2. Campaign Working Angle & Audience Card (Full Width Row) */}
           <Card className='shadow-xs'>
             <CardHeader className='pb-3'>
-              <CardTitle className='text-sm font-bold'>Target Platform Channels</CardTitle>
+              <CardTitle className='text-base font-bold'>2. Campaign Working Angle &amp; Audience</CardTitle>
               <CardDescription className='text-xs'>
-                Select the platforms for which copy and media prompts will be produced.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className='grid grid-cols-2 sm:grid-cols-5 gap-3'>
-                {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((p) => {
-                  const isSelected = selectedPlatforms.includes(p);
-                  const info = PLATFORM_INFO[p];
-                  return (
-                    <button
-                      key={p}
-                      type='button'
-                      onClick={() => togglePlatform(p)}
-                      className={`flex flex-col p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-primary bg-primary/5 text-foreground'
-                          : 'border-muted hover:border-foreground/20 text-muted-foreground'
-                      }`}
-                    >
-                      <div className='flex items-center justify-between'>
-                        <span className='font-bold text-xs'>{info.label}</span>
-                        {isSelected ? (
-                          <Icons.circleCheck className='size-3.5 text-primary shrink-0' />
-                        ) : (
-                          <span className='size-3.5 rounded-full border border-muted-foreground/30' />
-                        )}
-                      </div>
-                      <span className='text-[10px] text-muted-foreground mt-1 line-clamp-2'>
-                        {info.desc}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Thesis & Audience */}
-          <Card className='shadow-xs'>
-            <CardHeader className='pb-3'>
-              <CardTitle className='text-base font-bold'>Campaign Working Angle &amp; Audience</CardTitle>
-              <CardDescription className='text-xs'>
-                Provide your core educational subject, event facts, and audience specification.
+                Provide your core educational subject, event facts, and target audience specification.
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4 text-xs'>
@@ -685,13 +588,153 @@ function StudioContent() {
                   className='text-xs'
                 />
               </div>
+            </CardContent>
+          </Card>
 
-              <div className='pt-3 border-t flex justify-end'>
+          {/* 3. Campaign Objective (Full Width Row) */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-base font-bold'>3. Campaign Objective</CardTitle>
+              <CardDescription className='text-xs'>
+                Sets marketing intent and call-to-action framing across all generated assets.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2'>
+                {OBJECTIVES.map((obj) => (
+                  <Button
+                    key={obj}
+                    type='button'
+                    variant={objective === obj ? 'default' : 'outline'}
+                    size='sm'
+                    onClick={() => setObjective(obj)}
+                    className='justify-center text-xs h-9 font-semibold'
+                  >
+                    {obj}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 4. Target Market Language (Full Width Row) */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-base font-bold'>4. Target Market Language</CardTitle>
+              <CardDescription className='text-xs'>
+                Calibrates localized idioms, regional cultural context, and jurisdiction-specific disclaimers.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2'>
+                {LANGUAGES.map((lang) => (
+                  <Button
+                    key={lang.code}
+                    type='button'
+                    variant={language === lang.code ? 'default' : 'outline'}
+                    size='sm'
+                    onClick={() => setLanguage(lang.code)}
+                    className='justify-center text-xs h-9 font-semibold'
+                  >
+                    {lang.label}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 5. Target Delivery Channels (Full Width Row) */}
+          <Card className='shadow-xs'>
+            <CardHeader className='pb-3'>
+              <CardTitle className='text-base font-bold'>5. Target Delivery Channels</CardTitle>
+              <CardDescription className='text-xs'>
+                Select which platforms to generate dedicated content copy variants and media prompts for.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid grid-cols-2 sm:grid-cols-5 gap-3'>
+                {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((p) => {
+                  const isSelected = selectedPlatforms.includes(p);
+                  const info = PLATFORM_INFO[p];
+                  return (
+                    <button
+                      key={p}
+                      type='button'
+                      onClick={() => togglePlatform(p)}
+                      className={`flex flex-col p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary/30 text-foreground'
+                          : 'border-muted hover:border-foreground/20 text-muted-foreground bg-card'
+                      }`}
+                    >
+                      <div className='flex items-center justify-between'>
+                        <span className='font-bold text-xs capitalize'>{info.label}</span>
+                        {isSelected ? (
+                          <Icons.circleCheck className='size-4 text-primary shrink-0' />
+                        ) : (
+                          <span className='size-4 rounded-full border border-muted-foreground/30' />
+                        )}
+                      </div>
+                      <span className='text-[10px] text-muted-foreground mt-1.5 line-clamp-2 leading-tight'>
+                        {info.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 6. Ready to Generate? (Full Width Row Directly Below Delivery Channels) */}
+          <Card className='shadow-xs border-primary/30 bg-primary/[0.03]'>
+            <CardHeader className='pb-3'>
+              <div className='flex items-center justify-between flex-wrap gap-2'>
+                <div className='flex items-center gap-2'>
+                  <Icons.sparkles className='size-4 text-primary' />
+                  <CardTitle className='text-base font-bold text-foreground'>
+                    Ready to generate?
+                  </CardTitle>
+                </div>
+                <Badge variant='outline' className='text-xs font-mono border-primary/30 text-primary'>
+                  {selectedPlatforms.length} Channel Pipeline
+                </Badge>
+              </div>
+              <CardDescription className='text-xs'>
+                Produces {selectedPlatforms.length} cross-channel copy variants, image concept prompt, and 9:16 vertical video prompt.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4 pt-1'>
+              <div className='grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-muted/40 border text-xs'>
+                <div className='flex flex-col'>
+                  <span className='text-[10px] text-muted-foreground uppercase font-semibold'>Brand</span>
+                  <span className='font-bold text-foreground capitalize mt-0.5'>{brandId}</span>
+                </div>
+                <div className='flex flex-col'>
+                  <span className='text-[10px] text-muted-foreground uppercase font-semibold'>Channels</span>
+                  <span className='font-bold text-foreground mt-0.5'>{selectedPlatforms.length} selected</span>
+                </div>
+                <div className='flex flex-col'>
+                  <span className='text-[10px] text-muted-foreground uppercase font-semibold'>Language</span>
+                  <span className='font-bold text-foreground mt-0.5'>
+                    {LANGUAGES.find((l) => l.code === language)?.label || language.toUpperCase()}
+                  </span>
+                </div>
+                <div className='flex flex-col'>
+                  <span className='text-[10px] text-muted-foreground uppercase font-semibold'>Objective</span>
+                  <span className='font-bold text-foreground mt-0.5'>{objective}</span>
+                </div>
+              </div>
+
+              <div className='flex items-center justify-between pt-2 border-t flex-wrap gap-3'>
+                <p className='text-[11px] text-muted-foreground'>
+                  Calibrated for <strong>{DEMO_BRANDS[brandId].name}</strong> compliance and ASEAN regulatory guidelines.
+                </p>
                 <Button
                   size='lg'
                   onClick={handleGenerate}
-                  className='font-bold gap-2 px-8'
+                  className='font-bold gap-2 px-8 shadow-xs'
                 >
+                  <Icons.sparkles className='size-4' />
                   <span>Continue to Content Generation</span>
                   <Icons.arrowRight className='size-4' />
                 </Button>
