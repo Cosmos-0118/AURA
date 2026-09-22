@@ -433,7 +433,7 @@ Output ONLY JSON."""
     # Using Groq's high-speed reasoning / production model with automatic fallback
     preferred_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
     candidate_models = [preferred_model]
-    for fallback in ["openai/gpt-oss-20b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"]:
+    for fallback in ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"]:
         if fallback not in candidate_models:
             candidate_models.append(fallback)
 
@@ -448,18 +448,32 @@ Output ONLY JSON."""
                 ],
                 temperature=0.7,
                 response_format={"type": "json_object"},
+                max_tokens=4096,
             )
             raw_content = response.choices[0].message.content or "{}"
             parsed = json.loads(raw_content)
             if "campaign_facts" not in parsed or not isinstance(parsed.get("campaign_facts"), dict):
                 parsed["campaign_facts"] = _normalize_campaign_facts(parsed, brand_id, thesis)
+            if not parsed.get("image_generation_prompt"):
+                facts = parsed.get("campaign_facts", {})
+                event_name = facts.get("event_name") or parsed.get("campaign_title") or thesis[:60] or "Executive Briefing"
+                date = facts.get("date", "2026")
+                loc = facts.get("location", "Singapore")
+                bname = BRAND_KNOWLEDGE.get(brand_id, {}).get("name", brand_id.upper())
+                parsed["image_generation_prompt"] = (
+                    f'Commercial advertising poster with bold typography text overlay for {bname} by JA Assure. '
+                    f'Large prominent headline text overlay across the top reads: "{str(event_name).upper()}". '
+                    f'Secondary sub-headline text overlay reads: "{str(date).upper()} | {str(loc).upper()}". '
+                    f'High-contrast graphic design poster layout with clean typography text overlay, corporate aesthetic.'
+                )
+            if not parsed.get("video_generation_prompt"):
+                bname = BRAND_KNOWLEDGE.get(brand_id, {}).get("name", brand_id.title())
+                parsed["video_generation_prompt"] = (
+                    f"Cinematic vertical 9:16 corporate documentary footage illustrating {bname} by JA Assure, professional lighting, modern architecture, 4k 60fps."
+                )
             return parsed
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Groq returned non-JSON response: {exc}") from exc
         except Exception as exc:
             last_exc = exc
-            if "model_not_found" in str(exc) or "404" in str(exc):
-                continue
-            raise RuntimeError(f"Groq content generation failed: {exc}") from exc
+            continue
 
-    raise RuntimeError(f"Groq content generation failed: {last_exc}") from last_exc
+    raise RuntimeError(f"Groq content generation failed on all candidate models: {last_exc}") from last_exc

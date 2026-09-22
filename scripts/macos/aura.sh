@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 API_DIR="$ROOT_DIR/api"
@@ -203,7 +204,8 @@ ensure_production_build() {
 wait_for_http() {
   local name="$1"
   local url="$2"
-  for _ in {1..60}; do
+  local max_attempts="${3:-120}"
+  for _ in $(seq 1 "$max_attempts"); do
     if curl --silent --show-error --fail --max-time 10 "$url" >/dev/null 2>&1; then
       log "$name is ready at $url"
       return 0
@@ -308,11 +310,12 @@ interactive_menu() {
   printf '============\n'
   printf '1) Build only\n'
   printf '2) Build + run\n'
-  printf '3) Just run\n'
+  printf '3) Just run (production)\n'
+  printf '4) Dev mode (hot reload)\n'
   printf 'q) Exit\n\n'
 
   local choice
-  read -r -p 'Choose an option [1-3/q]: ' choice
+  read -r -p 'Choose an option [1-4/q]: ' choice
   case "$choice" in
     1)
       clean_generated
@@ -326,11 +329,14 @@ interactive_menu() {
     3)
       start_processes "production"
       ;;
+    4)
+      start_processes "development"
+      ;;
     q|Q|"")
       log "Nothing started"
       ;;
     *)
-      fail "Unknown option '$choice'. Choose 1, 2, 3, or q."
+      fail "Unknown option '$choice'. Choose 1, 2, 3, 4, or q."
       ;;
   esac
 }
