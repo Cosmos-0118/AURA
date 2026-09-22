@@ -91,6 +91,7 @@ function StudioContent() {
   const [editableImagePrompt, setEditableImagePrompt] = useState('');
   const [editableVideoPrompt, setEditableVideoPrompt] = useState('');
   const [showPromptsAccordion, setShowPromptsAccordion] = useState(false);
+  const [mediaTimestamp, setMediaTimestamp] = useState<number>(Date.now());
 
   useEffect(() => {
     if (campaignIdFromQuery) {
@@ -183,13 +184,14 @@ function StudioContent() {
 
       setCampaignSnapshot((prev) => {
         if (!prev) return null;
-        const otherMedia = prev.media.filter((m) => m.media_type !== 'image');
+        const otherMedia = prev.media.filter((m) => m.id !== updatedMedia.id && m.media_type !== 'image');
         return {
           ...prev,
           media: [...otherMedia, updatedMedia]
         };
       });
-      toast.success('Image asset generated and stored locally in storage/campaigns!');
+      setMediaTimestamp(Date.now());
+      toast.success('Campaign poster asset generated and stored locally in storage/campaigns!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Image generation failed: ${msg}`);
@@ -210,12 +212,13 @@ function StudioContent() {
 
       setCampaignSnapshot((prev) => {
         if (!prev) return null;
-        const otherMedia = prev.media.filter((m) => m.media_type !== 'video');
+        const otherMedia = prev.media.filter((m) => m.id !== updatedMedia.id && m.media_type !== 'video');
         return {
           ...prev,
           media: [...otherMedia, updatedMedia]
         };
       });
+      setMediaTimestamp(Date.now());
       toast.success('Reel video asset generated and stored locally in storage/campaigns!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -245,13 +248,24 @@ function StudioContent() {
     router.push('/dashboard/studio');
   };
 
-
   // Active brand lessons
   const brandLessons = store.lessons.filter((l) => l.brand_id === brandId);
 
-  // Media items from current snapshot
-  const imageMedia = campaignSnapshot?.media.find((m) => m.media_type === 'image');
-  const videoMedia = campaignSnapshot?.media.find((m) => m.media_type === 'video');
+  // Helper to reliably construct absolute media URLs that bypass port differences
+  const resolveMediaUrl = (path?: string | null) => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+      return path;
+    }
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const separator = cleanPath.includes('?') ? '&' : '?';
+    return `${apiBase}${cleanPath}${separator}t=${mediaTimestamp}`;
+  };
+
+  // Media items from current snapshot (guarantee latest generated version)
+  const imageMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'image').slice(-1)[0];
+  const videoMedia = campaignSnapshot?.media?.filter((m) => m.media_type === 'video').slice(-1)[0];
 
   return (
     <div className='flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full'>
@@ -884,6 +898,86 @@ function StudioContent() {
                         if (!item) return <p className='text-xs text-muted-foreground'>No Instagram content generated.</p>;
                         return (
                           <div className='flex flex-col gap-4'>
+                            {/* Prominent Marketing Poster Display Card */}
+                            {imageMedia && imageMedia.local_path ? (
+                              <div className='rounded-xl border border-primary/20 bg-card p-4 flex flex-col gap-3 shadow-xs'>
+                                <div className='flex items-center justify-between'>
+                                  <div className='flex items-center gap-2'>
+                                    <Icons.media className='size-4 text-primary' />
+                                    <span className='text-xs font-bold text-foreground'>
+                                      Campaign Marketing Poster Asset
+                                    </span>
+                                    <Badge variant='outline' className='text-[10px] text-emerald-600 dark:text-emerald-400 font-mono'>
+                                      ✓ Local Stored
+                                    </Badge>
+                                  </div>
+                                  <div className='flex items-center gap-2'>
+                                    <Button
+                                      size='xs'
+                                      variant='outline'
+                                      onClick={() => window.open(resolveMediaUrl(imageMedia.local_path), '_blank')}
+                                    >
+                                      <Icons.externalLink className='size-3 mr-1' />
+                                      Full Size
+                                    </Button>
+                                    <Button
+                                      size='xs'
+                                      onClick={handleGenerateImage}
+                                      disabled={isGeneratingImage}
+                                    >
+                                      {isGeneratingImage ? (
+                                        <>
+                                          <Icons.spinner className='size-3 animate-spin mr-1' />
+                                          Regenerating...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Icons.sparkles className='size-3 mr-1' />
+                                          Regenerate Poster
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className='relative rounded-lg overflow-hidden border bg-black/5 aspect-16/10 max-h-[380px] flex items-center justify-center'>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={resolveMediaUrl(imageMedia.local_path)}
+                                    alt='Campaign Marketing Poster'
+                                    className='w-full h-full object-contain'
+                                  />
+                                </div>
+                                <div className='flex items-center justify-between text-[11px] text-muted-foreground'>
+                                  <span className='font-mono truncate max-w-xs'>{imageMedia.local_path}</span>
+                                  <span className='font-medium text-foreground'>{imageMedia.model || 'Marketing Poster'}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className='rounded-xl border-2 border-dashed bg-muted/10 p-5 flex flex-col items-center justify-center text-center gap-2'>
+                                <div className='h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center'>
+                                  <Icons.media className='size-4.5' />
+                                </div>
+                                <div className='text-xs font-bold text-foreground'>Marketing Poster Not Generated Yet</div>
+                                <p className='text-[11px] text-muted-foreground max-w-md'>
+                                  Synthesize a commercial marketing poster with bold typography headline text matching this campaign.
+                                </p>
+                                <Button size='sm' onClick={handleGenerateImage} disabled={isGeneratingImage} className='mt-1'>
+                                  {isGeneratingImage ? (
+                                    <>
+                                      <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
+                                      Generating Poster...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Icons.sparkles className='size-3.5 mr-1.5' />
+                                      Generate Marketing Poster
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+
                             {item.visual_concept && (
                               <div className='rounded-lg border border-primary/20 bg-primary/5 p-3 flex flex-col gap-1 text-xs'>
                                 <span className='font-bold text-primary flex items-center gap-1.5'>
@@ -919,24 +1013,45 @@ function StudioContent() {
                               </div>
                             )}
 
-                            {/* Direct Action */}
-                            <div className='flex items-center justify-between border-t pt-3'>
-                              <span className='text-xs text-muted-foreground'>
-                                Need image asset for this post?
-                              </span>
-                              <Button size='sm' onClick={handleGenerateImage} disabled={isGeneratingImage}>
-                                {isGeneratingImage ? (
-                                  <>
-                                    <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                                    Generating Image...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Icons.media className='size-3.5 mr-1.5' />
-                                    Generate Image
-                                  </>
-                                )}
-                              </Button>
+                            {/* Instagram Social Feed Mockup Preview Card */}
+                            <div className='mt-2 rounded-xl border bg-card p-4 shadow-sm text-xs'>
+                              <div className='flex items-center justify-between mb-3'>
+                                <div className='flex items-center gap-2.5'>
+                                  <div className='h-8 w-8 rounded-full bg-gradient-to-tr from-amber-500 to-primary text-white flex items-center justify-center font-bold text-[11px]'>
+                                    JA
+                                  </div>
+                                  <div>
+                                    <div className='font-bold text-foreground flex items-center gap-1.5'>
+                                      jaassure_group
+                                      <Badge variant='outline' className='text-[9px] py-0 text-primary border-primary/30'>Verified</Badge>
+                                    </div>
+                                    <div className='text-[10px] text-muted-foreground'>
+                                      Singapore · Sponsored
+                                    </div>
+                                  </div>
+                                </div>
+                                <Icons.dots className='size-4 text-muted-foreground' />
+                              </div>
+
+                              {/* Embedded Poster Image in Mockup */}
+                              {imageMedia && imageMedia.local_path && (
+                                <div className='relative rounded-lg overflow-hidden border bg-muted/30 aspect-16/10 mb-3'>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={resolveMediaUrl(imageMedia.local_path)}
+                                    alt='Instagram Feed Creative'
+                                    className='w-full h-full object-cover'
+                                  />
+                                </div>
+                              )}
+
+                              <p className='text-xs leading-relaxed text-foreground/90 font-sans line-clamp-3'>
+                                <span className='font-bold text-foreground mr-1.5'>jaassure_group</span>
+                                {item.content}
+                              </p>
+                              <div className='mt-1.5 text-primary text-[11px] font-medium'>
+                                {item.hashtags.join(' ')}
+                              </div>
                             </div>
                           </div>
                         );
@@ -981,6 +1096,90 @@ function StudioContent() {
                         if (!item) return <p className='text-xs text-muted-foreground'>No Reel script generated.</p>;
                         return (
                           <div className='flex flex-col gap-4'>
+                            {/* Prominent Vertical Video Display Card */}
+                            {videoMedia && videoMedia.local_path ? (
+                              <div className='rounded-xl border border-purple-500/20 bg-card p-4 flex flex-col gap-3 shadow-xs'>
+                                <div className='flex items-center justify-between'>
+                                  <div className='flex items-center gap-2'>
+                                    <Icons.video className='size-4 text-purple-600 dark:text-purple-400' />
+                                    <span className='text-xs font-bold text-foreground'>
+                                      Rendered Reel Video Asset (9:16)
+                                    </span>
+                                    <Badge variant='outline' className='text-[10px] text-emerald-600 dark:text-emerald-400 font-mono'>
+                                      ✓ Local Stored
+                                    </Badge>
+                                  </div>
+                                  <div className='flex items-center gap-2'>
+                                    <Button
+                                      size='xs'
+                                      variant='outline'
+                                      onClick={() => window.open(resolveMediaUrl(videoMedia.local_path), '_blank')}
+                                    >
+                                      <Icons.externalLink className='size-3 mr-1' />
+                                      Open Video
+                                    </Button>
+                                    <Button
+                                      size='xs'
+                                      onClick={handleGenerateVideo}
+                                      disabled={isGeneratingVideo}
+                                    >
+                                      {isGeneratingVideo ? (
+                                        <>
+                                          <Icons.spinner className='size-3 animate-spin mr-1' />
+                                          Rendering...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Icons.sparkles className='size-3 mr-1' />
+                                          Regenerate Video
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className='relative rounded-xl overflow-hidden border bg-black aspect-9/16 max-h-[420px] max-w-xs mx-auto flex items-center justify-center shadow-md w-full'>
+                                  <video
+                                    key={`reel-tab-player-${mediaTimestamp}`}
+                                    controls
+                                    playsInline
+                                    className='w-full h-full object-contain'
+                                    src={resolveMediaUrl(videoMedia.local_path)}
+                                  >
+                                    <track kind='captions' />
+                                    Your browser does not support HTML video playback.
+                                  </video>
+                                </div>
+                                <div className='flex items-center justify-between text-[11px] text-muted-foreground'>
+                                  <span className='font-mono truncate max-w-xs'>{videoMedia.local_path}</span>
+                                  <span className='font-medium text-foreground'>{videoMedia.model || 'Vertical Reel'}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className='rounded-xl border-2 border-dashed bg-muted/10 p-5 flex flex-col items-center justify-center text-center gap-2'>
+                                <div className='h-9 w-9 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center'>
+                                  <Icons.video className='size-4.5' />
+                                </div>
+                                <div className='text-xs font-bold text-foreground'>Vertical Video Not Rendered Yet</div>
+                                <p className='text-[11px] text-muted-foreground max-w-md'>
+                                  Generate a vertical 9:16 video matching this campaign's storyboard and voiceover script.
+                                </p>
+                                <Button size='sm' onClick={handleGenerateVideo} disabled={isGeneratingVideo} className='mt-1'>
+                                  {isGeneratingVideo ? (
+                                    <>
+                                      <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
+                                      Rendering Video...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Icons.sparkles className='size-3.5 mr-1.5' />
+                                      Generate Vertical Video
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+
                             <div className='flex items-center justify-between'>
                               <div className='flex items-center gap-2'>
                                 <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
@@ -1012,26 +1211,6 @@ function StudioContent() {
                               <p className='text-foreground/90 font-serif leading-relaxed italic'>
                                 "{item.script || item.content}"
                               </p>
-                            </div>
-
-                            {/* Direct Action */}
-                            <div className='flex items-center justify-between border-t pt-3'>
-                              <span className='text-xs text-muted-foreground'>
-                                Render vertical video with Minimax Falcon model?
-                              </span>
-                              <Button size='sm' onClick={handleGenerateVideo} disabled={isGeneratingVideo}>
-                                {isGeneratingVideo ? (
-                                  <>
-                                    <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                                    Rendering Video...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Icons.video className='size-3.5 mr-1.5' />
-                                    Generate Video
-                                  </>
-                                )}
-                              </Button>
                             </div>
                           </div>
                         );
@@ -1098,7 +1277,7 @@ function StudioContent() {
                     <div className='flex items-center gap-2'>
                       <Icons.media className='size-4 text-primary' />
                       <CardTitle className='text-sm font-bold text-foreground'>
-                        Campaign Image Asset
+                        Campaign Marketing Poster
                       </CardTitle>
                     </div>
                     <Badge variant='outline' className='text-[10px] font-mono'>
@@ -1112,8 +1291,9 @@ function StudioContent() {
                       <div className='relative rounded-lg overflow-hidden border bg-muted/40 aspect-16/10 flex items-center justify-center'>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={imageMedia.local_path}
-                          alt='Campaign creative visual render'
+                          key={`right-img-${mediaTimestamp}`}
+                          src={resolveMediaUrl(imageMedia.local_path)}
+                          alt='Campaign marketing poster creative render'
                           className='w-full h-full object-cover'
                         />
                       </div>
@@ -1121,7 +1301,7 @@ function StudioContent() {
                         <span className='text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1'>
                           <Icons.circleCheck className='size-3.5' /> Stored locally: ✓
                         </span>
-                        <span className='text-[10px] font-mono text-muted-foreground'>
+                        <span className='text-[10px] font-mono text-muted-foreground truncate max-w-[200px]'>
                           {imageMedia.local_path}
                         </span>
                       </div>
@@ -1129,7 +1309,7 @@ function StudioContent() {
                         <Button
                           size='xs'
                           variant='outline'
-                          onClick={() => window.open(imageMedia.local_path || '#', '_blank')}
+                          onClick={() => window.open(resolveMediaUrl(imageMedia.local_path), '_blank')}
                         >
                           <Icons.externalLink className='size-3 mr-1' />
                           View Full Size
@@ -1145,7 +1325,7 @@ function StudioContent() {
                               Regenerating...
                             </>
                           ) : (
-                            'Regenerate Image'
+                            'Regenerate Poster'
                           )}
                         </Button>
                       </div>
@@ -1155,9 +1335,9 @@ function StudioContent() {
                       <div className='h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-2'>
                         <Icons.media className='size-5' />
                       </div>
-                      <h5 className='text-xs font-bold text-foreground'>No Image Generated Yet</h5>
+                      <h5 className='text-xs font-bold text-foreground'>No Poster Generated Yet</h5>
                       <p className='text-[11px] text-muted-foreground max-w-xs mt-1 mb-3'>
-                        Synthesize an editorial commercial photo matching this campaign's prompt.
+                        Synthesize a commercial marketing poster with bold typography headline text matching this campaign.
                       </p>
                       <Button
                         size='sm'
@@ -1167,12 +1347,12 @@ function StudioContent() {
                         {isGeneratingImage ? (
                           <>
                             <Icons.spinner className='size-3.5 animate-spin mr-1.5' />
-                            Generating Image...
+                            Generating Poster...
                           </>
                         ) : (
                           <>
                             <Icons.sparkles className='size-3.5 mr-1.5' />
-                            Generate Image
+                            Generate Marketing Poster
                           </>
                         )}
                       </Button>
@@ -1201,10 +1381,11 @@ function StudioContent() {
                     <div className='flex flex-col gap-3'>
                       <div className='relative rounded-lg overflow-hidden border bg-black/90 aspect-9/16 max-h-[380px] mx-auto flex items-center justify-center w-full'>
                         <video
+                          key={`right-vid-${mediaTimestamp}`}
                           controls
                           playsInline
                           className='w-full h-full object-contain'
-                          src={videoMedia.local_path}
+                          src={resolveMediaUrl(videoMedia.local_path)}
                         >
                           <track kind='captions' />
                           Your browser does not support HTML video playback.
@@ -1214,7 +1395,7 @@ function StudioContent() {
                         <span className='text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1'>
                           <Icons.circleCheck className='size-3.5' /> Stored locally: ✓
                         </span>
-                        <span className='text-[10px] font-mono text-muted-foreground'>
+                        <span className='text-[10px] font-mono text-muted-foreground truncate max-w-[200px]'>
                           {videoMedia.local_path}
                         </span>
                       </div>
@@ -1222,7 +1403,7 @@ function StudioContent() {
                         <Button
                           size='xs'
                           variant='outline'
-                          onClick={() => window.open(videoMedia.local_path || '#', '_blank')}
+                          onClick={() => window.open(resolveMediaUrl(videoMedia.local_path), '_blank')}
                         >
                           <Icons.externalLink className='size-3 mr-1' />
                           Open Video

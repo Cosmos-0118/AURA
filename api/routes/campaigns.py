@@ -384,7 +384,13 @@ def generate_campaign_image(
                     prompt = c["image_generation_prompt"]
                     break
         if not prompt:
-            prompt = f"Editorial commercial photography for {detail['campaign']['brand_id']} on {detail['campaign']['thesis']}"
+            brand_title = detail["campaign"]["brand_id"].upper()
+            thesis = detail["campaign"]["thesis"]
+            prompt = (
+                f'A sleek commercial marketing poster for {brand_title}. '
+                f'The poster prominently features bold typography text "{thesis}" in elegant lettering across the top, '
+                f'with graphic design advertising poster layout and high-end typography hierarchy.'
+            )
 
     # 2. Record media generating in MySQL
     media_id = str(uuid4())

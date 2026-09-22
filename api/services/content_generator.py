@@ -98,9 +98,11 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Don't let policy exclusions blindside your atelier. Speak with Jade by JA Assure.",
         },
         "image_generation_prompt": (
-            "Hyper-realistic editorial architectural photograph of a luxury high-security private jewellery vault, "
-            "warm ambient lighting illuminating velvet trays with rare diamond necklaces, dark titanium steel safe door slightly ajar in background, "
-            "ultra-sharp detail, cinematic corporate 8k"
+            "A luxury commercial marketing poster for Jade jewellery risk protection. "
+            "The poster prominently features bold typography text \"JADE VAULT AUDIT\" in elegant gold serif letters across the top, "
+            "and sub-headline text \"INSTITUTIONAL JEWELLERY SECURITY · SINGAPORE\" below it. "
+            "In the center is an editorial photograph of a high-security titanium vault with sparkling diamonds on dark velvet. "
+            "High-end graphic design poster layout, crisp typography hierarchy, award-winning luxury advertising poster."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 shot of an armoured courier in elegant black uniform locking a biometric titanium transit case, "
@@ -156,8 +158,11 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Calm, experienced medical defense. DoctorShield by JA Assure.",
         },
         "image_generation_prompt": (
-            "Warm and trustworthy editorial photograph of a senior doctor and legal advisor reviewing documents in a modern sunlit clinic office, "
-            "subtle blue tones, human empathy, cinematic depth of field, 8k"
+            "A professional commercial marketing poster for DoctorShield medical indemnity. "
+            "The poster prominently features bold, clean typography text \"STAND PROTECTED\" in refined navy lettering at the top, "
+            "with sub-headline text \"PEER-GUIDED MEDICO-LEGAL DEFENSE\" in crisp sans-serif below. "
+            "In the center is an empathetic editorial photograph of a clinician in a modern sunlit clinic office. "
+            "Minimalist graphic design poster layout, trustworthy medical branding poster."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 slow push-in shot of a modern medical clinic consultation room, daylight through large windows, "
@@ -211,8 +216,11 @@ DEMO_CAMPAIGNS: dict[str, dict[str, Any]] = {
             "captions": "Real-time telemetry cargo protection. Jaguar Transit by JA Assure.",
         },
         "image_generation_prompt": (
-            "Action photograph of a modern cargo logistics terminal at twilight, illuminated container cranes in background, "
-            "close-up on an electronic digital tamper seal glowing blue on an armoured freight truck, hyper-detailed commercial photography"
+            "A high-impact commercial logistics marketing poster for Jaguar Transit. "
+            "The poster prominently features bold industrial typography text \"CHAIN OF CUSTODY ASSURED\" in sharp electric blue letters across the top, "
+            "with sub-headline text \"REAL-TIME TELEMETRY FREIGHT PROTECTION\" below. "
+            "In the center is a high-tech container freight truck with glowing digital security seals at a twilight port terminal. "
+            "Dynamic graphic poster design, editorial typography, supply chain advertising poster."
         ),
         "video_generation_prompt": (
             "Cinematic vertical 9:16 tracking shot alongside a sleek commercial freight truck driving across a modern cable-stayed bridge at night, "
@@ -288,9 +296,11 @@ The JSON must have this exact structure:
     "voiceover": "...",
     "captions": "..."
   }},
-  "image_generation_prompt": "...",
+  "image_generation_prompt": "MUST be a prompt for a commercial marketing poster with bold typography text embedded directly in the visual. Must explicitly include: 1) A primary bold headline text in quotes related to the campaign thesis (e.g. 'commercial advertising poster prominently featuring bold typography text \"HEADLINE\" across the top in elegant lettering'), 2) A secondary sub-headline text in quotes, 3) High-end graphic design poster layout with clear typography hierarchy, negative space, and premium brand aesthetics.",
   "video_generation_prompt": "..."
 }}
+
+IMPORTANT: The image_generation_prompt MUST always specify that the image is a commercial marketing poster featuring bold readable headline text in quotes related to the campaign thesis.
 """
 
 

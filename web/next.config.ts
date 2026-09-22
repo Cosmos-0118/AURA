@@ -14,6 +14,19 @@ const nextConfig: NextConfig = {
   transpilePackages: ['geist'],
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
+  },
+  async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    return [
+      {
+        source: '/storage/:path*',
+        destination: `${apiUrl}/storage/:path*`
+      },
+      {
+        source: '/media/:path*',
+        destination: `${apiUrl}/media/:path*`
+      }
+    ];
   }
 };
 

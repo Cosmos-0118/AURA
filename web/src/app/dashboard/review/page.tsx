@@ -323,6 +323,59 @@ export default function ReviewQueuePage() {
                   </Button>
                 </div>
 
+                {/* Media Attachment if available */}
+                {selectedAsset.media_url && (
+                  <div className='rounded-lg border bg-black/5 overflow-hidden flex flex-col gap-1.5 p-2 mb-2'>
+                    <div className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between'>
+                      <span>Associated Media Asset</span>
+                      <a
+                        href={
+                          selectedAsset.media_url.startsWith('http')
+                            ? selectedAsset.media_url
+                            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${
+                                selectedAsset.media_url.startsWith('/') ? '' : '/'
+                              }${selectedAsset.media_url}`
+                        }
+                        target='_blank'
+                        rel='noreferrer'
+                        className='text-primary hover:underline flex items-center gap-1'
+                      >
+                        <Icons.externalLink className='size-3' /> Open Original
+                      </a>
+                    </div>
+                    {selectedAsset.media_url.endsWith('.mp4') ? (
+                      <video
+                        controls
+                        playsInline
+                        aria-label='Video preview'
+                        className='max-h-56 w-full rounded object-contain bg-black'
+                        src={
+                          selectedAsset.media_url.startsWith('http')
+                            ? selectedAsset.media_url
+                            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${
+                                selectedAsset.media_url.startsWith('/') ? '' : '/'
+                              }${selectedAsset.media_url}`
+                        }
+                      >
+                        <track kind='captions' />
+                      </video>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={
+                          selectedAsset.media_url.startsWith('http')
+                            ? selectedAsset.media_url
+                            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${
+                                selectedAsset.media_url.startsWith('/') ? '' : '/'
+                              }${selectedAsset.media_url}`
+                        }
+                        alt='Campaign Asset'
+                        className='max-h-56 w-full rounded object-contain bg-black/5'
+                      />
+                    )}
+                  </div>
+                )}
+
                 {isEditing ? (
                   <div className='flex flex-col gap-2'>
                     <Textarea
