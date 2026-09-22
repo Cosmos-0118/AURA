@@ -23,24 +23,24 @@ import { Icons } from '@/components/icons';
 import { IconDownload, IconSparkles, IconUpload, IconTrash } from '@tabler/icons-react';
 
 // Pre-packaged SVGs for instantaneous 1-click branding
-const PRESET_LOGOS = [
+export const PRESET_LOGOS = [
   {
     id: 'jade',
-    name: 'Jade Luxury',
-    badge: 'Jewellery',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48" fill="none"><rect width="160" height="48" rx="8" fill="%23041F15" fill-opacity="0.85"/><path d="M24 12L34 24L24 36L14 24L24 12Z" fill="%2310B981" stroke="%2334D399" stroke-width="2"/><circle cx="24" cy="24" r="3" fill="%23FFFFFF"/><text x="44" y="29" fill="%23FFFFFF" font-family="system-ui, sans-serif" font-weight="700" font-size="14" letter-spacing="1.5">JADE</text><text x="92" y="29" fill="%2310B981" font-family="system-ui, sans-serif" font-weight="500" font-size="11">ASSURE</text></svg>`
+    name: 'J Jewellers',
+    badge: 'Luxury Jewellery',
+    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%23061A12" fill-opacity="0.90"/><polygon points="24,10 35,24 24,38 13,24" fill="%2310B981" stroke="%23F59E0B" stroke-width="1.8"/><circle cx="24" cy="24" r="3.5" fill="%23FFFFFF"/><text x="44" y="27" fill="%23F59E0B" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1.2">J JEWELLERS</text><text x="44" y="38" fill="%2310B981" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">FINE CRAFT</text></svg>`
   },
   {
     id: 'doctorshield',
-    name: 'DoctorShield',
-    badge: 'Clinics',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48" fill="none"><rect width="160" height="48" rx="8" fill="%23082F49" fill-opacity="0.85"/><path d="M24 12C24 12 33 14 33 21C33 29 24 35 24 35C24 35 15 29 15 21C15 14 24 12 24 12Z" fill="%230284C7" stroke="%2338BDF8" stroke-width="2"/><path d="M24 18V28M19 23H29" stroke="%23FFFFFF" stroke-width="2.5" stroke-linecap="round"/><text x="42" y="29" fill="%23FFFFFF" font-family="system-ui, sans-serif" font-weight="700" font-size="12" letter-spacing="0.5">DOCTOR</text><text x="96" y="29" fill="%2338BDF8" font-family="system-ui, sans-serif" font-weight="700" font-size="12">SHIELD</text></svg>`
+    name: 'Doctor Shield',
+    badge: 'Clinical Healthcare',
+    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%2308263B" fill-opacity="0.90"/><path d="M24 10C24 10 34 12 34 21C34 30 24 37 24 37C24 37 14 30 14 21C14 12 24 10 24 10Z" fill="%230284C7" stroke="%2338BDF8" stroke-width="1.8"/><path d="M24 17V29M18 23H30" stroke="%23FFFFFF" stroke-width="2.2" stroke-linecap="round"/><text x="44" y="27" fill="%23FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.8">DOCTOR</text><text x="100" y="27" fill="%2338BDF8" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.8">SHIELD</text><text x="44" y="38" fill="%237DD3FC" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">CLINICAL CARE</text></svg>`
   },
   {
     id: 'jaguar',
-    name: 'Jaguar Transit',
-    badge: 'Logistics',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48" fill="none"><rect width="160" height="48" rx="8" fill="%23271A0C" fill-opacity="0.85"/><polygon points="24,12 34,18 34,30 24,36 14,30 14,18" fill="%23D97706" stroke="%23FBBF24" stroke-width="2"/><path d="M19 24L23 28L29 20" stroke="%23FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="44" y="29" fill="%23FFFFFF" font-family="system-ui, sans-serif" font-weight="700" font-size="13" letter-spacing="1">JAGUAR</text><text x="105" y="29" fill="%23FBBF24" font-family="system-ui, sans-serif" font-weight="600" font-size="11">SECURE</text></svg>`
+    name: 'Jagrut Trust',
+    badge: 'Trust & Community',
+    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%231E170E" fill-opacity="0.90"/><polygon points="24,10 35,16 35,29 24,37 13,29 13,16" fill="%23D97706" stroke="%23FBBF24" stroke-width="1.8"/><circle cx="24" cy="23.5" r="4" fill="%23FFFFFF"/><text x="44" y="27" fill="%23FBBF24" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1">JAGRUT TRUST</text><text x="44" y="38" fill="%23FDE68A" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">COMMUNITY FIRST</text></svg>`
   }
 ];
 
@@ -57,9 +57,18 @@ const COLOR_SWATCHES = [
 interface BrandMarkerStudioProps {
   videoResult: VideoGenerateResponse | null;
   aspectRatio: VideoAspectRatio;
+  videoUrlOverride?: string | null;
+  activeRecordId?: string | null;
+  onExportSaved?: (recordId: string, brandedUrl: string, fileName: string) => void;
 }
 
-export function BrandMarkerStudio({ videoResult, aspectRatio }: BrandMarkerStudioProps) {
+export function BrandMarkerStudio({
+  videoResult,
+  aspectRatio,
+  videoUrlOverride,
+  activeRecordId,
+  onExportSaved
+}: BrandMarkerStudioProps) {
   const {
     logoSrc,
     setPresetLogo,
@@ -79,7 +88,7 @@ export function BrandMarkerStudio({ videoResult, aspectRatio }: BrandMarkerStudi
   const [activeTab, setActiveTab] = useState<'logo' | 'text'>('logo');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const videoUrl = videoResult?.video?.url;
+  const videoUrl = videoUrlOverride || videoResult?.video?.url;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,7 +99,12 @@ export function BrandMarkerStudio({ videoResult, aspectRatio }: BrandMarkerStudi
 
   const handleExport = () => {
     if (!videoUrl) return;
-    compositeAndExport(videoUrl, videoResult?.video?.file_name || 'aura_video.mp4');
+    const baseName = videoResult?.video?.file_name || 'aura_video.mp4';
+    compositeAndExport(videoUrl, baseName, (exportRes) => {
+      if (activeRecordId && onExportSaved) {
+        onExportSaved(activeRecordId, exportRes.url, exportRes.fileName);
+      }
+    });
   };
 
   const clearLogo = () => {
@@ -102,10 +116,10 @@ export function BrandMarkerStudio({ videoResult, aspectRatio }: BrandMarkerStudi
       <Card className='p-8 text-center border-dashed'>
         <div className='flex flex-col items-center justify-center space-y-3 py-6'>
           <Icons.video className='size-10 text-muted-foreground stroke-[1.2]' />
-          <h3 className='text-base font-semibold'>Generate a Video First</h3>
+          <h3 className='text-base font-semibold'>Select or Generate a Video First</h3>
           <p className='text-xs text-muted-foreground max-w-sm'>
-            Create or generate a video reel in the studio before applying company brand markers and
-            custom overlays.
+            Generate a new video reel or click &quot;Open in Brand Marker&quot; on any item in Video
+            History below to customize it with company logos and overlays.
           </p>
         </div>
       </Card>

@@ -15,13 +15,16 @@ import {
   IconAlertTriangle,
   IconPlayerPlay,
   IconVideoOff,
-  IconFilter
+  IconFilter,
+  IconCheck
 } from '@tabler/icons-react';
 
+const LOCAL_STORAGE_KEY = 'aura_video_generation_history_v2';
+
 const BRAND_LABELS: Record<string, string> = {
-  jade: 'Jade',
-  doctorshield: 'DoctorShield',
-  jaguar: 'Jaguar Transit'
+  jade: 'J Jewellers',
+  doctorshield: 'Doctor Shield',
+  jaguar: 'Jagrut Trust'
 };
 
 const BRAND_COLORS: Record<string, string> = {
@@ -82,7 +85,7 @@ function HistorySkeleton() {
 
 interface HistoryRowProps {
   record: VideoGenerationRecord;
-  onOpenInBrandMarker: (url: string, prompt: string) => void;
+  onOpenInBrandMarker: (url: string, prompt: string, recordId: string) => void;
   onRegenerate: (prompt: string) => void;
 }
 
@@ -90,14 +93,19 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
   const [isExpired, setIsExpired] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [videoMode, setVideoMode] = useState<'original' | 'branded'>(
+    record.branded_video_url ? 'branded' : 'original'
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const isCompleted = record.status === 'COMPLETED' && !!record.video_url;
+  const activeUrl = videoMode === 'branded' ? record.branded_video_url : record.video_url;
+  const isCompleted = record.status === 'COMPLETED' && !!activeUrl;
   const isFailed = record.status === 'FAILED';
   const isInProgress = record.status === 'IN_PROGRESS';
+  const hasBoth = Boolean(record.video_url && record.branded_video_url);
 
   const handleVideoError = () => {
-    if (record.video_url) setIsExpired(true);
+    if (activeUrl) setIsExpired(true);
   };
 
   const handleMouseEnter = () => {
@@ -124,7 +132,7 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
 
   return (
     <div className='flex items-start gap-4 p-4 border-b border-border/40 last:border-0 hover:bg-muted/25 transition-colors group'>
-      {/* Thumbnail / Status Area */}
+      {/* Thumbnail / Video Preview Area */}
       <div
         className={`relative shrink-0 rounded-lg overflow-hidden bg-zinc-900 shadow-md ${
           record.aspect_ratio === '9:16'
@@ -140,7 +148,8 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
           <>
             <video
               ref={videoRef}
-              src={record.video_url!}
+              key={activeUrl}
+              src={activeUrl!}
               muted
               playsInline
               preload='metadata'
@@ -152,6 +161,11 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
             {!isHovered && (
               <div className='absolute inset-0 flex items-center justify-center bg-black/30'>
                 <IconPlayerPlay className='size-4 text-white drop-shadow' />
+              </div>
+            )}
+            {videoMode === 'branded' && (
+              <div className='absolute top-1 left-1 bg-emerald-600/90 text-white text-[8px] font-bold px-1 rounded'>
+                BRANDED
               </div>
             )}
           </>
@@ -185,11 +199,11 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
         <div className='space-y-0.5'>
           <p className='text-sm text-foreground leading-snug'>
             <span className='font-mono text-[11px] text-muted-foreground select-none mr-1.5'>
-              "
+              &quot;
             </span>
             {promptDisplay}
             <span className='font-mono text-[11px] text-muted-foreground select-none ml-0.5'>
-              "
+              &quot;
             </span>
           </p>
           {record.prompt.length > 85 && (
@@ -203,8 +217,36 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
           )}
         </div>
 
-        {/* Metadata chips */}
+        {/* Dual Mode Switcher & Metadata Chips */}
         <div className='flex flex-wrap items-center gap-1.5'>
+          {/* Dual video switcher if both versions are available */}
+          {hasBoth && (
+            <div className='flex items-center rounded-md border border-input bg-muted/60 p-0.5 mr-1'>
+              <button
+                type='button'
+                onClick={() => setVideoMode('original')}
+                className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  videoMode === 'original'
+                    ? 'bg-background text-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Original (AI)
+              </button>
+              <button
+                type='button'
+                onClick={() => setVideoMode('branded')}
+                className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  videoMode === 'branded'
+                    ? 'bg-background text-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Final (Branded)
+              </button>
+            </div>
+          )}
+
           {record.brand_id && (
             <Badge variant='outline' className={`text-[10px] py-0 px-2 ${brandColorClass}`}>
               {brandLabel}
@@ -219,9 +261,13 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
           <Badge variant='secondary' className='text-[10px] py-0 px-2'>
             {record.duration_secs}s
           </Badge>
-          {record.file_size && (
-            <Badge variant='outline' className='text-[10px] py-0 px-2 text-muted-foreground'>
-              {formatBytes(record.file_size)}
+          {record.branded_video_url && (
+            <Badge
+              variant='outline'
+              className='text-[10px] py-0 px-2 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1'
+            >
+              <IconCheck className='size-3' />
+              Branded Export Ready
             </Badge>
           )}
 
@@ -270,29 +316,51 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
 
         {/* Action Buttons */}
         <div className='flex flex-wrap gap-2 pt-0.5'>
-          {isCompleted && !isExpired && record.video_url && (
-            <>
-              <a
-                href={record.video_url}
-                download={record.file_name || 'aura_reel_5s.mp4'}
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                <Button variant='outline' size='sm' className='h-7 text-xs gap-1.5'>
-                  <IconDownload className='size-3' />
-                  Download
-                </Button>
-              </a>
+          {/* Download Original Video */}
+          {record.video_url && !isExpired && (
+            <a
+              href={record.video_url}
+              download={record.file_name || 'aura_raw_video.mp4'}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              <Button variant='outline' size='sm' className='h-7 text-xs gap-1.5'>
+                <IconDownload className='size-3' />
+                Download Original (AI)
+              </Button>
+            </a>
+          )}
+
+          {/* Download Branded Video if exported */}
+          {record.branded_video_url && (
+            <a
+              href={record.branded_video_url}
+              download={record.branded_file_name || 'aura_branded_export.mp4'}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
               <Button
                 variant='outline'
                 size='sm'
-                className='h-7 text-xs gap-1.5 border-primary/40 hover:border-primary hover:bg-primary/5'
-                onClick={() => onOpenInBrandMarker(record.video_url!, record.prompt)}
+                className='h-7 text-xs gap-1.5 border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
               >
-                <IconSparkles className='size-3 text-primary' />
-                Open in Brand Marker
+                <IconDownload className='size-3' />
+                Download Final (Branded)
               </Button>
-            </>
+            </a>
+          )}
+
+          {/* Open in Brand Marker */}
+          {record.video_url && !isExpired && (
+            <Button
+              variant='outline'
+              size='sm'
+              className='h-7 text-xs gap-1.5 border-primary/40 hover:border-primary hover:bg-primary/5'
+              onClick={() => onOpenInBrandMarker(record.video_url!, record.prompt, record.id)}
+            >
+              <IconSparkles className='size-3 text-primary' />
+              {record.branded_video_url ? 'Re-apply Brand Marker' : 'Open in Brand Marker'}
+            </Button>
           )}
 
           {/* Re-generate shortcut — shown for expired AND failed entries */}
@@ -314,11 +382,8 @@ function HistoryRow({ record, onOpenInBrandMarker, onRegenerate }: HistoryRowPro
 }
 
 interface VideoHistoryProps {
-  /** When a new video is generated in the current session, pass the record here to prepend it instantly. */
   latestRecord?: VideoGenerationRecord | null;
-  /** Called when the user clicks "Open in Brand Marker" — parent should switch to the brand tab. */
-  onOpenInBrandMarker: (url: string) => void;
-  /** Called when the user clicks "Re-generate from prompt" — parent should set the prompt and trigger generation. */
+  onOpenInBrandMarker: (url: string, prompt?: string, recordId?: string) => void;
   onRegenerate: (prompt: string) => void;
 }
 
@@ -327,15 +392,34 @@ export function VideoHistory({
   onOpenInBrandMarker,
   onRegenerate
 }: VideoHistoryProps) {
-  const [records, setRecords] = useState<VideoGenerationRecord[]>([]);
+  const [records, setRecords] = useState<VideoGenerationRecord[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // Safe fallback
+      }
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(true);
-  const [isOffline, setIsOffline] = useState(false);
   const [brandFilter, setBrandFilter] = useState<string>('all');
-
   const [refreshTick, setRefreshTick] = useState(0);
 
   const fetchHistory = useCallback(() => {
     setRefreshTick((n) => n + 1);
+  }, []);
+
+  // Sync to localStorage whenever records change
+  const saveToLocalStorage = useCallback((items: VideoGenerationRecord[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items.slice(0, 50)));
+      } catch {
+        // Quota or storage unavailable
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -343,21 +427,39 @@ export function VideoHistory({
     (async () => {
       startTransition(() => {
         setIsLoading(true);
-        setIsOffline(false);
       });
       try {
-        const data = await listVideoHistory({ limit: 30 });
-        if (!cancelled) {
+        const data = await listVideoHistory({ limit: 50 });
+        if (!cancelled && Array.isArray(data)) {
           startTransition(() => {
-            setRecords(data);
+            setRecords((prev) => {
+              // Merge server and local records by ID
+              const map = new Map<string, VideoGenerationRecord>();
+              data.forEach((item) => map.set(item.id, item));
+              prev.forEach((item) => {
+                if (!map.has(item.id)) {
+                  map.set(item.id, item);
+                } else {
+                  // Merge local branded url if server doesn't have it
+                  const existing = map.get(item.id)!;
+                  if (item.branded_video_url && !existing.branded_video_url) {
+                    existing.branded_video_url = item.branded_video_url;
+                    existing.branded_file_name = item.branded_file_name;
+                  }
+                }
+              });
+              const merged = Array.from(map.values()).sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+              saveToLocalStorage(merged);
+              return merged;
+            });
             setIsLoading(false);
           });
         }
       } catch {
         if (!cancelled) {
           startTransition(() => {
-            setIsOffline(true);
-            setRecords([]);
             setIsLoading(false);
           });
         }
@@ -366,20 +468,26 @@ export function VideoHistory({
     return () => {
       cancelled = true;
     };
-    // refreshTick is the manual refresh signal; latestRecord is excluded — handled below
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTick]);
+  }, [refreshTick, saveToLocalStorage]);
 
-  // Prepend latest result from the current session instantly (no re-fetch)
+  // Prepend latest result from current session instantly
   useEffect(() => {
     if (!latestRecord) return;
     startTransition(() => {
       setRecords((prev) => {
-        if (prev.some((r) => r.id === latestRecord.id)) return prev;
-        return [latestRecord, ...prev];
+        const map = new Map<string, VideoGenerationRecord>();
+        map.set(latestRecord.id, latestRecord);
+        prev.forEach((r) => {
+          if (!map.has(r.id)) map.set(r.id, r);
+        });
+        const updated = Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        saveToLocalStorage(updated);
+        return updated;
       });
     });
-  }, [latestRecord]);
+  }, [latestRecord, saveToLocalStorage]);
 
   const filtered =
     brandFilter === 'all' ? records : records.filter((r) => r.brand_id === brandFilter);
@@ -399,7 +507,7 @@ export function VideoHistory({
               )}
             </div>
             <CardDescription className='mt-0.5'>
-              All video reels generated in this studio — newest first.
+              Access and download raw AI creations or exported branded videos — newest first.
             </CardDescription>
           </div>
 
@@ -413,9 +521,9 @@ export function VideoHistory({
                 className='rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
               >
                 <option value='all'>All Brands</option>
-                <option value='jade'>Jade</option>
-                <option value='doctorshield'>DoctorShield</option>
-                <option value='jaguar'>Jaguar Transit</option>
+                <option value='jade'>J Jewellers</option>
+                <option value='doctorshield'>Doctor Shield</option>
+                <option value='jaguar'>Jagrut Trust</option>
               </select>
             </div>
 
@@ -435,19 +543,8 @@ export function VideoHistory({
       </CardHeader>
 
       <CardContent className='pt-0 p-0'>
-        {/* Offline / DB unavailable notice */}
-        {isOffline && (
-          <div className='mx-4 mb-4 flex items-center gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400'>
-            <IconAlertTriangle className='size-4 shrink-0' />
-            <span>
-              History unavailable — database offline or table not yet created. Video generation
-              still works normally.
-            </span>
-          </div>
-        )}
-
         {/* Skeleton loading */}
-        {isLoading ? (
+        {isLoading && records.length === 0 ? (
           <div className='divide-y divide-border/40'>
             <HistorySkeleton />
             <HistorySkeleton />
@@ -473,7 +570,7 @@ export function VideoHistory({
               <HistoryRow
                 key={record.id}
                 record={record}
-                onOpenInBrandMarker={(url, _prompt) => onOpenInBrandMarker(url)}
+                onOpenInBrandMarker={onOpenInBrandMarker}
                 onRegenerate={onRegenerate}
               />
             ))}

@@ -19,7 +19,7 @@ import { IconCopy, IconDownload, IconSparkles } from '@tabler/icons-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { BrandMarkerStudio } from './brand-marker-studio';
 import { VideoHistory } from './video-history';
-import { generateVideo, attachVideoToAsset, listAssets } from '@/lib/api/client';
+import { generateVideo, attachVideoToAsset, listAssets, saveVideoExport } from '@/lib/api/client';
 import type {
   VideoAspectRatio,
   VideoResolution,
@@ -30,32 +30,40 @@ import type {
 
 const PRESETS = {
   jade: {
-    name: 'Jade (Jewellers)',
-    badge: 'Luxury / Specialist',
+    id: 'jade',
+    name: 'J Jewellers',
+    badge: 'Luxury Jewellery',
     prompt:
       'A luxury handcrafted emerald and diamond necklace resting on dark velvet in an exclusive boutique showcase, warm cinematic studio rim lighting, slow elegant camera tracking orbit, 8k hyper-realistic.'
   },
   doctorshield: {
-    name: 'DoctorShield (Clinics)',
-    badge: 'Medical / Professional',
+    id: 'doctorshield',
+    name: 'Doctor Shield',
+    badge: 'Clinical Healthcare',
     prompt:
       'A sunlit modern doctor consultation clinic, clean wooden desk with a stethoscope and medical journal, soft morning sunlight through large windows, calming professional healthcare ambiance, smooth cinematic pan.'
   },
   jaguar: {
-    name: 'Jaguar Transit (Secured)',
-    badge: 'Logistics / High-Tech',
+    id: 'jaguar',
+    name: 'Jagrut Trust',
+    badge: 'Trust & Community',
     prompt:
-      'A heavy armored transit security vehicle departing a high-security airport vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.'
+      'A heavy armored transit security vehicle departing a high-security community vault depot at twilight, subtle holographic telemetry data overlay, atmospheric rain reflections, cinematic tracking shot.'
   }
 };
 
 export default function VideoStudio() {
+  const [selectedBrand, setSelectedBrand] = useState<'jade' | 'doctorshield' | 'jaguar'>('jade');
   const [prompt, setPrompt] = useState(PRESETS.jade.prompt);
   const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>('9:16');
   const [resolution, setResolution] = useState<VideoResolution>('768P');
   const [promptExpansion, setPromptExpansion] = useState<'disabled' | 'balanced'>('disabled');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [assets, setAssets] = useState<Asset[]>([]);
+
+  const [activeTab, setActiveTab] = useState<'preview' | 'brand'>('preview');
+  const [brandMarkerVideoOverride, setBrandMarkerVideoOverride] = useState<string | null>(null);
+  const [activeRecordId, setActiveRecordId] = useState<string | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<VideoGenerateResponse | null>(null);
@@ -78,6 +86,11 @@ export default function VideoStudio() {
       });
   }, []);
 
+  const handleSelectPreset = (key: 'jade' | 'doctorshield' | 'jaguar') => {
+    setSelectedBrand(key);
+    setPrompt(PRESETS[key].prompt);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return;
 
@@ -97,7 +110,8 @@ export default function VideoStudio() {
         aspect_ratio: aspectRatio,
         resolution: resolution,
         prompt_expansion_mode: promptExpansion,
-        asset_id: selectedAssetId || null
+        asset_id: selectedAssetId || null,
+        brand_id: selectedBrand
       });
 
       setResult(response);
@@ -105,12 +119,16 @@ export default function VideoStudio() {
         setLogs((prev) => [...prev, ...response.logs]);
       }
 
+      const newRecId = response.request_id ?? `local-${Date.now()}`;
+      setActiveRecordId(newRecId);
+      setBrandMarkerVideoOverride(response.video?.url ?? null);
+
       if (response.status === 'COMPLETED') {
         setLogs((prev) => [...prev, 'Video generation successfully completed (5.0s MP4).']);
         // Build a VideoGenerationRecord from the response for instant history prepend
         setLatestRecord({
-          id: response.request_id ?? `local-${Date.now()}`,
-          brand_id: null,
+          id: newRecId,
+          brand_id: selectedBrand,
           asset_id: selectedAssetId || null,
           prompt: prompt.trim(),
           aspect_ratio: aspectRatio,
@@ -120,6 +138,8 @@ export default function VideoStudio() {
           video_url: response.video?.url ?? null,
           file_name: response.video?.file_name ?? null,
           file_size: response.video?.file_size ?? null,
+          branded_video_url: null,
+          branded_file_name: null,
           status: 'COMPLETED',
           error_msg: null,
           request_id: response.request_id ?? null,
@@ -129,8 +149,8 @@ export default function VideoStudio() {
         setLogs((prev) => [...prev, `Error: ${response.error}`]);
         // Also record failed generations in history
         setLatestRecord({
-          id: response.request_id ?? `local-${Date.now()}`,
-          brand_id: null,
+          id: newRecId,
+          brand_id: selectedBrand,
           asset_id: selectedAssetId || null,
           prompt: prompt.trim(),
           aspect_ratio: aspectRatio,
@@ -140,6 +160,8 @@ export default function VideoStudio() {
           video_url: null,
           file_name: null,
           file_size: null,
+          branded_video_url: null,
+          branded_file_name: null,
           status: 'FAILED',
           error_msg: response.error ?? null,
           request_id: response.request_id ?? null,
@@ -156,6 +178,27 @@ export default function VideoStudio() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleExportSaved = async (recordId: string, brandedUrl: string, fileName: string) => {
+    try {
+      await saveVideoExport({
+        id: recordId,
+        branded_video_url: brandedUrl,
+        branded_file_name: fileName
+      });
+    } catch {
+      // Offline fallback
+    }
+    // Update active record in memory/history
+    setLatestRecord((prev) => {
+      if (!prev || prev.id !== recordId) return prev;
+      return {
+        ...prev,
+        branded_video_url: brandedUrl,
+        branded_file_name: fileName
+      };
+    });
   };
 
   const handleAttach = async () => {
@@ -198,61 +241,79 @@ export default function VideoStudio() {
             </p>
           </div>
 
-          <div className='flex items-center gap-2'>
-            <Badge variant='secondary' className='flex items-center gap-1.5 py-1 px-3'>
-              <Icons.check className='size-3.5 text-emerald-500' />
-              <span>Strict 5s Max Duration Enforced</span>
+          <div className='flex items-center gap-3'>
+            <Badge variant='secondary' className='px-3 py-1 font-mono text-xs'>
+              Strict limit: 5.0s Max
             </Badge>
           </div>
         </div>
 
-        {/* Studio Layout */}
+        {/* Studio Grid (7 cols left input, 5 cols right output) */}
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-12'>
-          {/* Left: Input & Controls (7 Cols) */}
+          {/* Left: Generation Controls (7 Cols) */}
           <div className='space-y-6 lg:col-span-7'>
-            {/* Brand Presets */}
-            <Card>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-base font-semibold'>Brand Style Presets</CardTitle>
-                <CardDescription>
-                  Quickly load tested visual prompts tailored for JA Assure's brand personalities.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='flex flex-wrap gap-2.5 pt-0'>
-                {Object.entries(PRESETS).map(([key, preset]) => (
-                  <Button
-                    key={key}
-                    variant='outline'
-                    size='sm'
-                    className='h-auto flex-col items-start py-2 px-3 text-left hover:border-primary transition-all'
-                    onClick={() => setPrompt(preset.prompt)}
-                  >
-                    <span className='font-medium text-xs'>{preset.name}</span>
-                    <span className='text-[10px] text-muted-foreground'>{preset.badge}</span>
-                  </Button>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Prompt Editor */}
             <Card>
               <CardHeader className='pb-3'>
                 <div className='flex items-center justify-between'>
-                  <CardTitle className='text-base font-semibold'>Scene Prompt</CardTitle>
-                  <span className='text-xs text-muted-foreground'>{prompt.length} characters</span>
+                  <CardTitle className='text-base font-semibold'>
+                    Prompt &amp; Brand Settings
+                  </CardTitle>
+                  <Badge variant='outline' className='text-xs'>
+                    Prompt Engine
+                  </Badge>
                 </div>
                 <CardDescription>
-                  Describe the visual scene, subject motion, camera movement, and lighting.
+                  Choose a brand preset or craft a custom video scene prompt.
                 </CardDescription>
               </CardHeader>
-              <CardContent className='space-y-4'>
-                <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder='e.g. A luxury watch rotating slowly under ambient studio lighting, macro lens tracking...'
-                  className='min-h-[140px] resize-y text-sm font-mono leading-relaxed'
-                  disabled={isGenerating}
-                />
+
+              <CardContent className='space-y-4 pt-0'>
+                {/* Brand Presets */}
+                <div className='space-y-2'>
+                  <Label className='text-xs font-semibold'>Brand Presets</Label>
+                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                    {(Object.keys(PRESETS) as Array<keyof typeof PRESETS>).map((key) => {
+                      const item = PRESETS[key];
+                      const isSelected = selectedBrand === key && prompt === item.prompt;
+                      return (
+                        <Button
+                          key={key}
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          className={`h-auto flex-col items-start p-2.5 text-left transition-all ${
+                            isSelected
+                              ? 'border-primary ring-1 ring-primary bg-primary/5'
+                              : 'hover:border-primary/50'
+                          }`}
+                          onClick={() => handleSelectPreset(key)}
+                        >
+                          <span className='font-medium text-xs'>{item.name}</span>
+                          <span className='text-[10px] text-muted-foreground'>{item.badge}</span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Prompt Textarea */}
+                <div className='space-y-2'>
+                  <div className='flex items-center justify-between'>
+                    <Label htmlFor='video-prompt' className='text-xs font-semibold'>
+                      Video Prompt
+                    </Label>
+                    <span className='text-[11px] text-muted-foreground'>{prompt.length} chars</span>
+                  </div>
+                  <Textarea
+                    id='video-prompt'
+                    placeholder='Describe the subject, camera movement, lighting, style, and cinematic mood...'
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    rows={4}
+                    className='resize-none text-xs leading-relaxed'
+                    disabled={isGenerating}
+                  />
+                </div>
 
                 {/* Pre-fill from script selector */}
                 {assets.length > 0 && (
@@ -282,119 +343,80 @@ export default function VideoStudio() {
                     </select>
                   </div>
                 )}
-              </CardContent>
-            </Card>
 
-            {/* Video Parameters */}
-            <Card>
-              <CardHeader className='pb-3'>
-                <CardTitle className='text-base font-semibold'>Video Generation Settings</CardTitle>
-                <CardDescription>
-                  Configure aspect ratio and quality output parameters.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-5'>
-                {/* Aspect Ratio */}
-                <div className='space-y-2'>
-                  <Label className='text-xs font-medium'>Aspect Ratio</Label>
-                  <div className='grid grid-cols-3 gap-2.5'>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '9:16' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('9:16')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>9:16 (Vertical)</span>
-                      <span className='text-[10px] opacity-80'>Reels, TikTok, Shorts</span>
-                    </Button>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '16:9' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('16:9')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>16:9 (Landscape)</span>
-                      <span className='text-[10px] opacity-80'>Widescreen / Web</span>
-                    </Button>
-                    <Button
-                      type='button'
-                      variant={aspectRatio === '1:1' ? 'default' : 'outline'}
-                      size='sm'
-                      className='flex flex-col h-auto py-2.5'
-                      onClick={() => setAspectRatio('1:1')}
-                      disabled={isGenerating}
-                    >
-                      <span className='font-bold text-xs'>1:1 (Square)</span>
-                      <span className='text-[10px] opacity-80'>Feed & Carousel</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Duration & Resolution Controls */}
+                {/* Video Parameters */}
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1'>
-                  {/* Duration - Locked to strict 5s */}
+                  {/* Aspect Ratio */}
                   <div className='space-y-1.5'>
-                    <Label className='text-xs font-medium'>Duration</Label>
-                    <div className='flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
-                      <span>5 Seconds</span>
-                      <Badge variant='outline' className='text-[10px] border-emerald-500/40'>
-                        Max Cap
-                      </Badge>
-                    </div>
+                    <Label className='text-xs font-medium'>Aspect Ratio</Label>
+                    <select
+                      className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                      value={aspectRatio}
+                      onChange={(e) => setAspectRatio(e.target.value as VideoAspectRatio)}
+                      disabled={isGenerating}
+                    >
+                      <option value='9:16'>9:16 (Reel / TikTok / Shorts)</option>
+                      <option value='16:9'>16:9 (Landscape YouTube / Web)</option>
+                      <option value='1:1'>1:1 (Square Feed Post)</option>
+                      <option value='4:3'>4:3 (Classic Video)</option>
+                      <option value='3:4'>3:4 (Portrait Feed)</option>
+                      <option value='21:9'>21:9 (Cinematic Ultrawide)</option>
+                    </select>
                   </div>
 
                   {/* Resolution */}
                   <div className='space-y-1.5'>
                     <Label className='text-xs font-medium'>Resolution</Label>
                     <select
-                      className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                      className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
                       value={resolution}
                       onChange={(e) => setResolution(e.target.value as VideoResolution)}
                       disabled={isGenerating}
                     >
                       <option value='768P'>768P (Standard HD)</option>
-                      <option value='1080P'>1080P (FHD Refined)</option>
-                      <option value='480P'>480P (Draft Fast)</option>
+                      <option value='1080P'>1080P (Full HD)</option>
+                      <option value='480P'>480P (Fast Preview)</option>
                     </select>
                   </div>
 
                   {/* Prompt Expansion */}
                   <div className='space-y-1.5'>
-                    <Label className='text-xs font-medium'>Prompt Expansion</Label>
+                    <Label className='text-xs font-medium'>Prompt Enhancer</Label>
                     <select
-                      className='w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs focus:border-ring focus:outline-hidden'
+                      className='w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-xs focus:border-ring focus:outline-hidden'
                       value={promptExpansion}
                       onChange={(e) =>
                         setPromptExpansion(e.target.value as 'disabled' | 'balanced')
                       }
                       disabled={isGenerating}
                     >
-                      <option value='disabled'>Disabled (Exact prompt)</option>
-                      <option value='balanced'>Balanced (Enhanced)</option>
+                      <option value='disabled'>Disabled (Exact Prompt)</option>
+                      <option value='balanced'>Balanced Expansion</option>
                     </select>
                   </div>
                 </div>
               </CardContent>
-              <CardFooter className='border-t bg-muted/20 px-6 py-4'>
+
+              <CardFooter className='border-t bg-muted/20 px-6 py-3.5 flex items-center justify-between'>
+                <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                  <Icons.check className='size-3.5 text-emerald-500' />
+                  <span>Duration locked to 5.0s</span>
+                </div>
+
                 <Button
                   onClick={handleGenerate}
                   disabled={isGenerating || !prompt.trim()}
-                  className='w-full font-semibold gap-2'
-                  size='lg'
+                  className='font-semibold gap-2 min-w-[140px]'
                 >
                   {isGenerating ? (
                     <>
                       <Icons.spinner className='size-4 animate-spin' />
-                      Generating Video (5s)...
+                      Generating...
                     </>
                   ) : (
                     <>
-                      <Icons.video className='size-4' />
-                      Generate Video (Max 5s)
+                      <IconSparkles className='size-4' />
+                      Generate Video
                     </>
                   )}
                 </Button>
@@ -405,7 +427,11 @@ export default function VideoStudio() {
           {/* Right: Video Output & Live Feed (5 Cols) */}
           <div className='space-y-6 lg:col-span-5'>
             {/* Tabs for Video Preview and Brand Marker */}
-            <Tabs defaultValue='preview' className='w-full space-y-4'>
+            <Tabs
+              value={activeTab}
+              onValueChange={(val) => setActiveTab(val as 'preview' | 'brand')}
+              className='w-full space-y-4'
+            >
               <TabsList className='grid w-full grid-cols-2'>
                 <TabsTrigger value='preview' className='gap-2 text-xs font-medium'>
                   <Icons.video className='size-3.5' />
@@ -414,7 +440,7 @@ export default function VideoStudio() {
                 <TabsTrigger value='brand' className='gap-2 text-xs font-medium relative'>
                   <IconSparkles className='size-3.5' />
                   <span>Brand Marker</span>
-                  {result?.status === 'COMPLETED' && (
+                  {(result?.status === 'COMPLETED' || brandMarkerVideoOverride) && (
                     <span className='size-2 rounded-full bg-emerald-500 animate-pulse' />
                   )}
                 </TabsTrigger>
@@ -562,7 +588,8 @@ export default function VideoStudio() {
                         <Icons.video className='size-12 stroke-[1.2] mb-3 opacity-50' />
                         <p className='text-sm font-medium'>No video generated yet</p>
                         <p className='text-xs max-w-xs mt-1'>
-                          Select a brand preset or enter a scene prompt and click "Generate Video".
+                          Select a brand preset or enter a scene prompt and click &quot;Generate
+                          Video&quot;.
                         </p>
                       </div>
                     )}
@@ -572,7 +599,13 @@ export default function VideoStudio() {
 
               {/* Tab 2: Brand Marker Module */}
               <TabsContent value='brand' className='mt-0 space-y-4'>
-                <BrandMarkerStudio videoResult={result} aspectRatio={aspectRatio} />
+                <BrandMarkerStudio
+                  videoResult={result}
+                  aspectRatio={aspectRatio}
+                  videoUrlOverride={brandMarkerVideoOverride}
+                  activeRecordId={activeRecordId}
+                  onExportSaved={handleExportSaved}
+                />
               </TabsContent>
             </Tabs>
 
@@ -609,8 +642,12 @@ export default function VideoStudio() {
         {/* Video Generation History — full-width section below the studio grid */}
         <VideoHistory
           latestRecord={latestRecord}
-          onOpenInBrandMarker={(_url) => {
-            // TODO: switch to Brand Marker tab and load this URL
+          onOpenInBrandMarker={(url, promptText, recordId) => {
+            setBrandMarkerVideoOverride(url);
+            setActiveRecordId(recordId || null);
+            if (promptText) setPrompt(promptText);
+            setActiveTab('brand');
+            window.scrollTo({ top: 120, behavior: 'smooth' });
           }}
           onRegenerate={(p) => {
             setPrompt(p);

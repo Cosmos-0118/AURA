@@ -160,3 +160,12 @@ export function listVideoHistory(
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return request<import('./types').VideoGenerationRecord[]>(`/api/video/history${suffix}`);
 }
+
+export function saveVideoExport(
+  body: import('./types').VideoSaveExportRequest
+): Promise<{ ok: boolean; id: string; branded_video_url: string }> {
+  return request<{ ok: boolean; id: string; branded_video_url: string }>(
+    '/api/video/export-record',
+    jsonBody(body)
+  );
+}

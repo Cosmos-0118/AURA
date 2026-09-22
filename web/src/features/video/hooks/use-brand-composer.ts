@@ -92,7 +92,11 @@ export function useBrandComposer() {
   }, []);
 
   const compositeAndExport = useCallback(
-    async (videoSrc: string, originalFileName: string = 'aura_branded_reel.mp4') => {
+    async (
+      videoSrc: string,
+      originalFileName: string = 'aura_branded_reel.mp4',
+      onExportComplete?: (result: { blob: Blob; url: string; fileName: string }) => void
+    ) => {
       if (!videoSrc) {
         toast.error('No video source available for export');
         return;
@@ -195,16 +199,19 @@ export function useBrandComposer() {
                 const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
                 const blob = new Blob(chunks, { type: mimeType });
                 const url = URL.createObjectURL(blob);
+                const finalFileName = `branded_${originalFileName.replace(/\.[^/.]+$/, '')}.${extension}`;
 
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `branded_${originalFileName.replace(/\.[^/.]+$/, '')}.${extension}`;
+                link.download = finalFileName;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
 
-                setTimeout(() => URL.revokeObjectURL(url), 5000);
                 toast.success('Branded video exported successfully!');
+                if (onExportComplete) {
+                  onExportComplete({ blob, url, fileName: finalFileName });
+                }
                 resolve();
               } catch (err) {
                 reject(err);

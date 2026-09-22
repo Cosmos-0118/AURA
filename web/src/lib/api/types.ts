@@ -149,6 +149,7 @@ export type VideoGenerateRequest = {
   resolution?: VideoResolution;
   prompt_expansion_mode?: VideoPromptExpansion;
   asset_id?: string | null;
+  brand_id?: string | null;
 };
 
 export type VideoFile = {
@@ -173,6 +174,12 @@ export type VideoAttachRequest = {
   video_url: string;
 };
 
+export type VideoSaveExportRequest = {
+  id: string;
+  branded_video_url: string;
+  branded_file_name?: string | null;
+};
+
 export type VideoConfig = {
   model: string;
   max_duration_seconds: number;
@@ -194,6 +201,8 @@ export type VideoGenerationRecord = {
   video_url?: string | null;
   file_name?: string | null;
   file_size?: number | null;
+  branded_video_url?: string | null;
+  branded_file_name?: string | null;
   status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS';
   error_msg?: string | null;
   request_id?: string | null;

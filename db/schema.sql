@@ -121,23 +121,28 @@ create index if not exists idx_checks_asset on compliance_checks(asset_id);
 -- brand/asset removal.  video_url may become stale (Fal.ai CDN expiry);
 -- the UI detects expiry client-side and shows a ⚠ badge.
 create table if not exists video_generations (
-  id            uuid        primary key default gen_random_uuid(),
-  brand_id      text        references brands(id) on delete set null,
-  asset_id      uuid        references content_assets(id) on delete set null,
-  prompt        text        not null,
-  aspect_ratio  text        not null default '9:16',
-  resolution    text        not null default '768P',
-  duration_secs int         not null default 5,
-  model         text        not null default 'minimax/h3-max-turbo/text-to-video',
-  video_url     text,
-  file_name     text,
-  file_size     bigint,
-  status        text        not null default 'COMPLETED'
-                check (status in ('COMPLETED', 'FAILED', 'IN_PROGRESS')),
-  error_msg     text,
-  request_id    text,
-  created_at    timestamptz not null default now()
+  id                 uuid        primary key default gen_random_uuid(),
+  brand_id           text        references brands(id) on delete set null,
+  asset_id           uuid        references content_assets(id) on delete set null,
+  prompt             text        not null,
+  aspect_ratio       text        not null default '9:16',
+  resolution         text        not null default '768P',
+  duration_secs      int         not null default 5,
+  model              text        not null default 'minimax/h3-max-turbo/text-to-video',
+  video_url          text,
+  file_name          text,
+  file_size          bigint,
+  branded_video_url  text,
+  branded_file_name  text,
+  status             text        not null default 'COMPLETED'
+                     check (status in ('COMPLETED', 'FAILED', 'IN_PROGRESS')),
+  error_msg          text,
+  request_id         text,
+  created_at         timestamptz not null default now()
 );
 
 create index if not exists idx_video_gen_created on video_generations(created_at desc);
 create index if not exists idx_video_gen_brand   on video_generations(brand_id);
+create index if not exists idx_video_gen_branded on video_generations(branded_video_url)
+  where branded_video_url is not null;
+
