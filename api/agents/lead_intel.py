@@ -32,7 +32,7 @@ logger = logging.getLogger("aura.lead_intel")
 REFRESH_HOURS = 24
 SEARCH_HOST = "api.search.tinyfish.ai"
 SEARCH_URL = f"https://{SEARCH_HOST}"
-MAX_CANDIDATES = 18
+MAX_CANDIDATES = 60
 RESULTS_PER_QUERY = 8
 _STATE_PATH = Path(__file__).resolve().parents[2] / ".aura" / "lead-refresh.json"
 _LEADS_PATH = Path(__file__).resolve().parents[2] / ".aura" / "leads.json"
@@ -331,7 +331,7 @@ def discover_candidates(
                 if on_candidate is not None:
                     on_candidate(candidate)
                 added += 1
-                if added >= 1 or len(found) >= MAX_CANDIDATES:
+                if added >= 3 or len(found) >= MAX_CANDIDATES:
                     break
             time.sleep(0.2)
     return found, errors
@@ -565,19 +565,34 @@ def _upsert(connection, row: dict) -> None:
     updated = connection.execute(
         """
         update leads
-        set name = %s, country = %s, fit_score = %s, why = %s
+        set name = %s, country = %s, fit_score = %s, why = %s,
+            url = %s, email = %s, phone = %s, requirements = %s,
+            source_url = %s, source_title = %s
         where brand_id = %s and url = %s
         """,
-        (row["name"], row["country"], row["fit_score"], row["why"], row["brand_id"], row["url"]),
+        (
+            row["name"], row["country"], row["fit_score"], row["why"],
+            row.get("url"), row.get("email"), row.get("phone"),
+            row.get("requirements"), row.get("source_url"), row.get("source_title"),
+            row["brand_id"], row["url"],
+        ),
     )
-    if updated.rowcount:
+    changed = getattr(updated, "rowcount", None)
+    if changed is None:
+        changed = getattr(getattr(updated, "cursor", None), "rowcount", 0)
+    if changed:
         return
     connection.execute(
         """
-        insert into leads (brand_id, name, url, country, fit_score, why)
-        values (%s, %s, %s, %s, %s, %s)
+        insert into leads (id, brand_id, name, url, country, fit_score, why,
+                           email, phone, requirements, source_url, source_title)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (row["brand_id"], row["name"], row["url"], row["country"], row["fit_score"], row["why"]),
+        (
+            row["id"], row["brand_id"], row["name"], row["url"], row["country"],
+            row["fit_score"], row["why"], row.get("email"), row.get("phone"),
+            row.get("requirements"), row.get("source_url"), row.get("source_title"),
+        ),
     )
 
 

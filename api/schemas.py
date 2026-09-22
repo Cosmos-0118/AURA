@@ -195,18 +195,6 @@ class Lead(BaseModel):
     updated_at: datetime | None = None
 
 
-class LeadSearchRequest(BaseModel):
-    brand_id: BrandId
-    category: str
-    location: str
-    keywords: str | None = None
-
-
-class LeadOutreachRequest(BaseModel):
-    brand_id: BrandId
-    lead_id: str
-
-
 class Metrics(BaseModel):
     rejection_rate: float
     avg_edits_per_post: float
