@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuraStore } from '@/lib/demo/store';
 import { DEMO_BRANDS } from '@/lib/demo/brands';
 import {
@@ -15,9 +16,14 @@ import { Badge } from '@/components/ui/badge';
 import { Icons } from '@/components/icons';
 
 export default function DashboardOverviewPage() {
+  const router = useRouter();
   const store = useAuraStore();
   const [greeting, setGreeting] = useState('Good day');
   const [currentDateStr, setCurrentDateStr] = useState('');
+
+  useEffect(() => {
+    router.replace('/dashboard/studio');
+  }, [router]);
 
   useEffect(() => {
     const hour = new Date().getHours();

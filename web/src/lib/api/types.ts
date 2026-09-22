@@ -219,3 +219,66 @@ export type OperationalModeInfo = {
   video_model: string;
 };
 
+export type CampaignPublicationItem = {
+  id: string;
+  campaign_id: string;
+  platform: string;
+  status: "queued" | "publishing" | "published" | "failed";
+  external_post_id?: string | null;
+  external_post_url?: string | null;
+  published_content?: string | null;
+  media_id?: string | null;
+  error_message?: string | null;
+  published_at?: string | null;
+  created_at?: string | null;
+};
+
+export type CampaignEventItem = {
+  id: string;
+  campaign_id: string;
+  event_type: string;
+  actor: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type CampaignReviewCard = {
+  review_id: string;
+  campaign_id: string;
+  review_status: string;
+  campaign_status: string;
+  reviewer_note?: string | null;
+  feedback_tag?: string | null;
+  reviewed_at?: string | null;
+  queued_at: string;
+  brand_id: BrandId;
+  campaign_title: string;
+  objective: string;
+  language: Language;
+  thesis: string;
+  target_audience?: string | null;
+  campaign_facts?: CampaignFacts | null;
+  latest_image_url?: string | null;
+  latest_image_prompt?: string | null;
+  has_video: boolean;
+  latest_video_url?: string | null;
+  linkedin_content: string;
+  linkedin_hashtags: string[];
+  publications: Record<string, unknown>;
+  events_count: number;
+  compliance_passed: boolean;
+  lessons_applied_count: number;
+};
+
+export type PublishResponse = {
+  success: boolean;
+  campaign_id: string;
+  platform: string;
+  status: string;
+  external_post_id?: string | null;
+  external_post_url?: string | null;
+  published_at?: string | null;
+  message: string;
+};
+

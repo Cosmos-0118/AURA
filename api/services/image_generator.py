@@ -149,13 +149,87 @@ def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
         f.write(svg_content)
 
 
+def find_logo_path(logo_filename: str) -> Path | None:
+    """Locate brand or group logo in web/public/logo, public/logo, or storage/logo."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    variants = [logo_filename, logo_filename.lower(), logo_filename.capitalize()]
+    for fn in variants:
+        candidate_paths = [
+            project_root / "web" / "public" / "logo" / fn,
+            project_root / "public" / "logo" / fn,
+            project_root / "web" / "public" / fn,
+            project_root / "storage" / "logo" / fn,
+        ]
+        for p in candidate_paths:
+            if p.exists() and p.is_file():
+                return p
+    return None
+
+
+def apply_watermark_logos(image_path: Path, brand_id: str | None = None) -> None:
+    """Overlay ja.png on bottom-left and {brand_id}.png on bottom-right using Pillow."""
+    if not image_path.exists() or image_path.suffix.lower() == ".svg":
+        return
+
+    try:
+        from PIL import Image
+
+        with Image.open(image_path) as base_img:
+            base_img = base_img.convert("RGBA")
+            w, h = base_img.size
+
+            target_h = max(40, int(h * 0.08))
+            padding_x = max(24, int(w * 0.04))
+            padding_y = max(24, int(h * 0.04))
+
+            # 1. JA Assure Logo on Bottom-Left
+            ja_path = find_logo_path("ja.png")
+            if ja_path:
+                try:
+                    with Image.open(ja_path) as ja_img:
+                        ja_rgba = ja_img.convert("RGBA")
+                        scale = target_h / float(ja_rgba.height)
+                        target_w = int(ja_rgba.width * scale)
+                        ja_resized = ja_rgba.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                        pos_x = padding_x
+                        pos_y = h - target_h - padding_y
+                        base_img.paste(ja_resized, (pos_x, pos_y), ja_resized)
+                except Exception as e:
+                    logger.warning(f"Failed to overlay ja.png: {e}")
+
+            # 2. Brand Logo on Bottom-Right
+            bid = (brand_id or "jade").lower()
+            brand_path = find_logo_path(f"{bid}.png") or find_logo_path("jade.png")
+            if brand_path:
+                try:
+                    with Image.open(brand_path) as brand_img:
+                        brand_rgba = brand_img.convert("RGBA")
+                        scale = target_h / float(brand_rgba.height)
+                        target_w = int(brand_rgba.width * scale)
+                        brand_resized = brand_rgba.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                        pos_x = w - target_w - padding_x
+                        pos_y = h - target_h - padding_y
+                        base_img.paste(brand_resized, (pos_x, pos_y), brand_resized)
+                except Exception as e:
+                    logger.warning(f"Failed to overlay brand logo: {e}")
+
+            # Save back to disk
+            if image_path.suffix.lower() in [".jpg", ".jpeg"]:
+                base_img.convert("RGB").save(image_path, "JPEG", quality=95)
+            else:
+                base_img.save(image_path, "PNG")
+    except Exception as exc:
+        logger.warning(f"Logo watermarking skipped: {exc}")
+
+
 def generate_image(
     campaign_id: str,
     prompt: str,
     model: str | None = None,
     demo_mode: bool = False,
+    brand_id: str | None = None,
 ) -> dict[str, Any]:
-    """Generate image and persist locally to storage/campaigns/{campaign_id}/image/{filename}."""
+    """Generate image, watermark logos, and persist locally to storage/campaigns/{campaign_id}/image/{filename}."""
     target_path, filename, rel_path = determine_next_media_path(campaign_id, "image")
     chosen_model = model or os.environ.get("IMAGE_MODEL", "google/nano-banana-2-lites")
 
@@ -164,6 +238,7 @@ def generate_image(
 
     if demo_mode:
         create_demo_image(target_path, effective_prompt, rel_path)
+        apply_watermark_logos(target_path, brand_id)
         file_size = target_path.stat().st_size if target_path.exists() else 1024
         return {
             "local_path": rel_path,
@@ -176,27 +251,29 @@ def generate_image(
             "status": "completed",
         }
 
-    # Live generation
+    # Live generation via FAL AI
     fal_key = os.environ.get("FAL_KEY") or os.environ.get("FAL_AI_API_KEY")
     if fal_key:
         os.environ["FAL_KEY"] = fal_key
         try:
             import fal_client
 
-            fal_primary = resolve_fal_model(chosen_model)
-            models_to_try = [fal_primary]
+            candidate_models = [resolve_fal_model(chosen_model)]
             for fallback in ["fal-ai/nano-banana-2", "fal-ai/flux/schnell", "fal-ai/ideogram/v2"]:
-                if fallback not in models_to_try:
-                    models_to_try.append(fallback)
+                if fallback not in candidate_models:
+                    candidate_models.append(fallback)
 
             last_exc = None
-            for m in models_to_try:
+            for m in candidate_models:
                 try:
-                    logger.info(f"Attempting image generation with model endpoint: {m}")
-                    if "nano-banana" in m or "ideogram" in m:
-                        args = {"prompt": effective_prompt, "aspect_ratio": "16:9"}
-                    else:
-                        args = {"prompt": effective_prompt, "image_size": "landscape_16_9"}
+                    logger.info(f"Dispatching image generation to FAL AI model: {m}")
+                    args = {
+                        "prompt": effective_prompt,
+                        "image_size": "landscape_16_9",
+                        "num_images": 1,
+                    }
+                    if "flux/schnell" in m:
+                        args["num_inference_steps"] = 4
 
                     result = fal_client.subscribe(
                         m,
@@ -212,6 +289,9 @@ def generate_image(
                             target_path.parent.mkdir(parents=True, exist_ok=True)
                             with open(target_path, "wb") as f:
                                 f.write(resp.content)
+
+                        # Apply dual logo watermark
+                        apply_watermark_logos(target_path, brand_id)
 
                         file_size = target_path.stat().st_size
                         return {

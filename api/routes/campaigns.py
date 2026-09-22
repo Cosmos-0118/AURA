@@ -7,54 +7,66 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel
 
 try:
-    from ..db import get_db, transaction
+    from ..db import get_db, reset_campaign_data, transaction
     from ..graph import run_pipeline
     from ..repositories import (
         campaigns as campaign_repo,
         events as event_repo,
         lessons as lesson_repo,
         media as media_repo,
+        publications as publication_repo,
         reviews as review_repo,
     )
     from ..schemas import (
         BrandId,
         Campaign,
         CampaignCreate,
+        CampaignEventItem,
         CampaignFacts,
         CampaignMediaItem,
         CampaignPlatformContentItem,
+        CampaignPublicationItem,
+        CampaignReviewCard,
         CampaignSubmitResult,
         MediaGenerateRequest,
+        PublishResponse,
         StudioCampaignCreate,
         StudioCampaignDetail,
     )
     from ..services.content_generator import generate_campaign_content
     from ..services.image_generator import generate_image as service_generate_image
+    from ..services.publisher import publish_campaign_platform
     from ..services.video_generator import generate_video as service_generate_video
 except ImportError:
-    from db import get_db, transaction
+    from db import get_db, reset_campaign_data, transaction
     from graph import run_pipeline
     from repositories import (
         campaigns as campaign_repo,
         events as event_repo,
         lessons as lesson_repo,
         media as media_repo,
+        publications as publication_repo,
         reviews as review_repo,
     )
     from schemas import (
         BrandId,
         Campaign,
         CampaignCreate,
+        CampaignEventItem,
         CampaignFacts,
         CampaignMediaItem,
         CampaignPlatformContentItem,
+        CampaignPublicationItem,
+        CampaignReviewCard,
         CampaignSubmitResult,
         MediaGenerateRequest,
+        PublishResponse,
         StudioCampaignCreate,
         StudioCampaignDetail,
     )
     from services.content_generator import generate_campaign_content
     from services.image_generator import generate_image as service_generate_image
+    from services.publisher import publish_campaign_platform
     from services.video_generator import generate_video as service_generate_video
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
@@ -444,6 +456,7 @@ def generate_campaign_image(
             prompt=prompt,
             model=chosen_model,
             demo_mode=demo_mode,
+            brand_id=detail["campaign"]["brand_id"],
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {exc}")
@@ -565,16 +578,17 @@ def submit_campaign_review(campaign_id: str) -> CampaignSubmitResult:
 # --- Review Decision Endpoints ---
 
 
-@router.get("/review-queue")
-def get_campaign_review_queue(status: str | None = None):
-    """Retrieve campaigns in the Review Queue."""
+@router.get("/review-queue", response_model=list[CampaignReviewCard])
+def get_campaign_review_queue(status: str | None = None) -> list[CampaignReviewCard]:
+    """Retrieve unified campaign review cards for Review Queue."""
     with get_db() as db:
-        return review_repo.get_review_queue(db, status=status)
+        items = review_repo.get_review_queue(db, status=status)
+    return [CampaignReviewCard(**it) for it in items]
 
 
 @router.post("/{campaign_id}/approve")
 def approve_campaign_route(campaign_id: str, body: ReviewApproveRequest = ReviewApproveRequest()):
-    """Approve campaign in review queue."""
+    """Approve campaign in review queue, unlocking multi-platform publishing."""
     with transaction() as db:
         return review_repo.approve_campaign(db, campaign_id, reviewer_note=body.reviewer_note)
 
@@ -601,6 +615,109 @@ def edit_campaign_content_route(campaign_id: str, body: ReviewEditRequest):
             tag=body.tag,
             note=body.note,
         )
+
+
+@router.post("/{campaign_id}/publish/{platform}", response_model=PublishResponse)
+def publish_campaign_platform_route(campaign_id: str, platform: str) -> PublishResponse:
+    """Publish approved campaign asset to specific platform (e.g. linkedin, instagram, x, blog, reel)."""
+    try:
+        with transaction() as db:
+            res = publish_campaign_platform(db, campaign_id, platform)
+        return PublishResponse(**res)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/{campaign_id}/publications", response_model=list[CampaignPublicationItem])
+def get_campaign_publications_route(campaign_id: str) -> list[CampaignPublicationItem]:
+    """Get publishing status for all platforms for a given campaign."""
+    with get_db() as db:
+        rows = publication_repo.get_campaign_publications(db, campaign_id)
+    return [
+        CampaignPublicationItem(
+            id=str(r["id"]),
+            campaign_id=str(r["campaign_id"]),
+            platform=r["platform"],
+            status=r["status"],
+            external_post_id=r.get("external_post_id"),
+            external_post_url=r.get("external_post_url"),
+            published_content=r.get("published_content"),
+            media_id=str(r["media_id"]) if r.get("media_id") else None,
+            error_message=r.get("error_message"),
+            published_at=r.get("published_at"),
+            created_at=r.get("created_at"),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/{campaign_id}/history", response_model=list[CampaignEventItem])
+def get_campaign_history_route(campaign_id: str) -> list[CampaignEventItem]:
+    """Retrieve full chronological audit trail of events for this campaign."""
+    with get_db() as db:
+        rows = event_repo.list_events_for_campaign(db, campaign_id)
+    items = []
+    for r in rows:
+        meta = r.get("metadata")
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except Exception:
+                meta = {"raw": meta}
+        items.append(
+            CampaignEventItem(
+                id=str(r["id"]),
+                campaign_id=str(r["campaign_id"]),
+                event_type=r["event_type"],
+                actor=r.get("actor", "system"),
+                description=r.get("description"),
+                metadata=meta,
+                created_at=r["created_at"],
+            )
+        )
+    return items
+
+
+@router.get("/{campaign_id}/media", response_model=list[CampaignMediaItem])
+def get_campaign_media_route(campaign_id: str) -> list[CampaignMediaItem]:
+    """Retrieve complete versioned media history (v1, v2, v3...) for this campaign."""
+    with get_db() as db:
+        rows = media_repo.get_media_for_campaign(db, campaign_id)
+    items = []
+    for m in rows:
+        lp = m.get("local_path")
+        m_url = f"/{lp}" if lp and not lp.startswith("/") else lp
+        items.append(
+            CampaignMediaItem(
+                id=str(m["id"]),
+                campaign_id=str(m["campaign_id"]),
+                media_type=m["media_type"],
+                prompt=m["prompt"],
+                local_path=m_url,
+                provider=m.get("provider") or "local",
+                model=m["model"],
+                status=m.get("status") or "completed",
+            )
+        )
+    return items
+
+
+@router.post("/reset-data")
+def reset_campaign_data_route():
+    """Delete all test campaign data, media files, publications, and events for a fresh start."""
+    import shutil
+    from pathlib import Path
+
+    with transaction() as db:
+        counts = reset_campaign_data(db)
+
+    # Clean local media storage
+    storage_camp = Path(__file__).resolve().parent.parent.parent / "storage" / "campaigns"
+    if storage_camp.exists():
+        shutil.rmtree(storage_camp, ignore_errors=True)
+        storage_camp.mkdir(parents=True, exist_ok=True)
+
+    return {"success": True, "message": "All test campaigns and media files wiped clean.", "deleted": counts}
 
 
 @router.get("/{campaign_id}/events")

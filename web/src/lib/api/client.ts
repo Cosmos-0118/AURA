@@ -15,7 +15,11 @@ import type {
   Snapshot,
   StudioCampaignCreate,
   StudioCampaignDetail,
-  CampaignSubmitResult
+  CampaignSubmitResult,
+  CampaignReviewCard,
+  CampaignPublicationItem,
+  CampaignEventItem,
+  PublishResponse
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
@@ -450,5 +454,94 @@ export async function submitCampaign(id: string): Promise<CampaignSubmitResult> 
 
 export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
   return submitCampaign(id);
+}
+
+export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
+  const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
+  return await request<CampaignReviewCard[]>(`/api/campaigns/review-queue${query}`);
+}
+
+export async function approveCampaignReview(
+  campaignId: string,
+  reviewerNote?: string
+): Promise<{ success: boolean; status: string; campaign_id: string }> {
+  return await request<{ success: boolean; status: string; campaign_id: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/approve`,
+    jsonBody({ reviewer_note: reviewerNote })
+  );
+}
+
+export async function rejectCampaignReview(
+  campaignId: string,
+  tag: string,
+  note: string,
+  platform?: string
+): Promise<{ success: boolean; status: string; campaign_id: string }> {
+  return await request<{ success: boolean; status: string; campaign_id: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/reject`,
+    jsonBody({ tag, note, platform })
+  );
+}
+
+export async function editCampaignContent(
+  campaignId: string,
+  payload: {
+    platform: string;
+    new_content: string;
+    new_title?: string;
+    tag?: string;
+    note?: string;
+  }
+): Promise<{ success: boolean; status: string }> {
+  return await request<{ success: boolean; status: string }>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/edit`,
+    jsonBody(payload)
+  );
+}
+
+export async function publishCampaignPlatform(
+  campaignId: string,
+  platform: string
+): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/${encodeURIComponent(platform)}`,
+    { method: 'POST' }
+  );
+}
+
+export async function getCampaignPublications(
+  campaignId: string
+): Promise<CampaignPublicationItem[]> {
+  return await request<CampaignPublicationItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publications`
+  );
+}
+
+export async function getCampaignHistory(
+  campaignId: string
+): Promise<CampaignEventItem[]> {
+  return await request<CampaignEventItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/history`
+  );
+}
+
+export async function getCampaignMediaList(
+  campaignId: string
+): Promise<CampaignMediaItem[]> {
+  return await request<CampaignMediaItem[]>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/media`
+  );
+}
+
+export async function resetAllCampaignData(): Promise<{
+  success: boolean;
+  message: string;
+  deleted?: Record<string, number>;
+}> {
+  return await request<{
+    success: boolean;
+    message: string;
+    deleted?: Record<string, number>;
+  }>('/api/campaigns/reset-data', { method: 'POST' });
 }
 

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -249,5 +249,68 @@ class CampaignSubmitResult(BaseModel):
     success: bool = True
     campaign_id: str
     status: str = "pending_review"
+    message: str
+
+
+class CampaignPublicationItem(BaseModel):
+    id: str
+    campaign_id: str
+    platform: str
+    status: str  # queued, publishing, published, failed
+    external_post_id: str | None = None
+    external_post_url: str | None = None
+    published_content: str | None = None
+    media_id: str | None = None
+    error_message: str | None = None
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class CampaignEventItem(BaseModel):
+    id: str
+    campaign_id: str
+    event_type: str
+    actor: str = "system"
+    description: str | None = None
+    metadata: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class CampaignReviewCard(BaseModel):
+    review_id: str
+    campaign_id: str
+    review_status: str
+    campaign_status: str
+    reviewer_note: str | None = None
+    feedback_tag: str | None = None
+    reviewed_at: datetime | None = None
+    queued_at: datetime
+    brand_id: BrandId
+    campaign_title: str
+    objective: str
+    language: Language
+    thesis: str
+    target_audience: str | None = None
+    campaign_facts: CampaignFacts | None = None
+    latest_image_url: str | None = None
+    latest_image_prompt: str | None = None
+    has_video: bool = False
+    latest_video_url: str | None = None
+    linkedin_content: str = ""
+    linkedin_hashtags: list[str] = Field(default_factory=list)
+    publications: dict[str, Any] = Field(default_factory=dict)
+    events_count: int = 0
+    compliance_passed: bool = True
+    lessons_applied_count: int = 2
+
+
+class PublishResponse(BaseModel):
+    success: bool = True
+    campaign_id: str
+    platform: str
+    status: str
+    external_post_id: str | None = None
+    external_post_url: str | None = None
+    published_at: str | None = None
     message: str
 

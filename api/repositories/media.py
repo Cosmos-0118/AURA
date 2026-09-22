@@ -29,13 +29,12 @@ def determine_next_media_path(campaign_id: str, media_type: str) -> tuple[Path, 
     """
     target_dir = ensure_media_dir(campaign_id, media_type)
     ext = ".png" if media_type == "image" else ".mp4"
-    base_name = "instagram-image" if media_type == "image" else "reel-video"
+    base_name = "poster" if media_type == "image" else "reel"
 
     # Check for existing versions
     v = 1
     while True:
-        suffix = "" if v == 1 else f"-v{v}"
-        filename = f"{base_name}{suffix}{ext}"
+        filename = f"{base_name}_v{v}{ext}"
         candidate_path = target_dir / filename
         if not candidate_path.exists():
             break

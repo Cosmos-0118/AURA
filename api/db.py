@@ -249,6 +249,21 @@ def init_sqlite_db(conn: sqlite3.Connection):
           metadata TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS campaign_publications (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL,
+          platform TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'queued',
+          external_post_id TEXT,
+          external_post_url TEXT,
+          published_content TEXT,
+          media_id TEXT,
+          error_message TEXT,
+          published_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     conn.commit()
@@ -349,6 +364,31 @@ def get_db() -> Generator[Any, None, None]:
             try:
                 with raw_conn.cursor() as cur:
                     cur.execute("ALTER TABLE campaigns ADD COLUMN campaign_facts TEXT")
+            except Exception:
+                pass
+            try:
+                with raw_conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS campaign_publications (
+                            id CHAR(36) PRIMARY KEY,
+                            campaign_id CHAR(36) NOT NULL,
+                            platform VARCHAR(50) NOT NULL,
+                            status VARCHAR(50) NOT NULL DEFAULT 'queued',
+                            external_post_id VARCHAR(255),
+                            external_post_url TEXT,
+                            published_content TEXT,
+                            media_id CHAR(36),
+                            error_message TEXT,
+                            published_at DATETIME NULL,
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            INDEX idx_publication_campaign (campaign_id),
+                            INDEX idx_publication_platform (platform),
+                            INDEX idx_publication_status (status)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                        """
+                    )
                 raw_conn.commit()
             except Exception:
                 pass
@@ -375,6 +415,26 @@ def get_db() -> Generator[Any, None, None]:
         raise
     finally:
         wrapper.close()
+
+
+def reset_campaign_data(db: Any) -> dict[str, int]:
+    """Wipe all test campaign data, media, review items, publications, and events for a fresh start."""
+    counts = {}
+    tables = [
+        "campaign_publications",
+        "review_queue",
+        "campaign_platform_content",
+        "campaign_media",
+        "campaign_events",
+        "campaigns",
+    ]
+    for tbl in tables:
+        try:
+            res = db.execute(f"DELETE FROM {tbl}")
+            counts[tbl] = getattr(res, "rowcount", 0)
+        except Exception:
+            pass
+    return counts
 
 
 get_connection = get_db
