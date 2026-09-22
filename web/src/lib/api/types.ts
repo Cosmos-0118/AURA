@@ -142,6 +142,11 @@ export type Lead = {
   status: string;
   fit_score: number;
   why: string | null;
+  external_place_id?: string | null;
+  products?: string[];
+  specialties?: string[];
+  fit_reasons?: string[];
+  last_verified_at?: string | null;
   created_at: string;
   updated_at: string;
 };

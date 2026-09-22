@@ -117,6 +117,11 @@ create table if not exists leads (
   status       text not null default 'new',
   fit_score    int not null default 0,
   why          text,
+  external_place_id text unique,
+  products     jsonb not null default '[]',
+  specialties  jsonb not null default '[]',
+  fit_reasons  jsonb not null default '[]',
+  last_verified_at timestamptz,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );

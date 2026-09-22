@@ -1,22 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import type { Lead, BrandId } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { useState } from "react";
 
 interface LeadSearchProps {
-  leads: Lead[];
+  filteredLeads: Lead[];
   loading: boolean;
   onSearch: (query: string) => void;
+  brandFit: "All" | BrandId;
+  setBrandFit: (fit: "All" | BrandId) => void;
 }
 
-export function LeadSearch({ leads, loading, onSearch }: LeadSearchProps) {
+export function LeadSearch({ filteredLeads, loading, onSearch, brandFit, setBrandFit }: LeadSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [brandFit, setBrandFit] = useState<"All" | BrandId>("All");
 
   const handleSearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -24,12 +25,6 @@ export function LeadSearch({ leads, loading, onSearch }: LeadSearchProps) {
       onSearch(searchQuery);
     }
   };
-
-  // Filter leads locally based on the selected brand pill
-  const filteredLeads = leads.filter(lead => {
-    if (brandFit === "All") return true;
-    return lead.brand_id === brandFit.toLowerCase();
-  });
 
   const renderBrandFit = (brand_id: string) => {
     const isJade = brand_id === "jade";

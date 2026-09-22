@@ -97,11 +97,16 @@ export function LeadDetail({ leadId }: { leadId: string }) {
                 <MapPin className="w-4 h-4 text-slate-400" />
                 {lead.location}
               </div>
-              {lead.url && (
+              {lead.url ? (
                 <a href={lead.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline transition-all">
                   <Globe className="w-4 h-4" />
                   {new URL(lead.url).hostname}
                 </a>
+              ) : (
+                <div className="flex items-center gap-1 text-slate-400">
+                  <Globe className="w-4 h-4" />
+                  Official website: Not available
+                </div>
               )}
             </div>
             
@@ -164,15 +169,25 @@ export function LeadDetail({ leadId }: { leadId: string }) {
               <div>
                 <p className="font-medium text-slate-700">Identified Services</p>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {lead.services.map((svc, i) => (
+                  {lead.services && lead.services.length > 0 ? lead.services.map((svc, i) => (
                     <Badge key={i} variant="secondary" className="font-normal text-xs">{svc}</Badge>
-                  ))}
+                  )) : (
+                    <span className="text-muted-foreground">None identified</span>
+                  )}
                 </div>
+              </div>
+              <div className="pt-2 border-t border-slate-50">
+                <p className="font-medium text-slate-700">Research Verified</p>
+                <p className="text-muted-foreground mt-1">
+                  {lead.last_verified_at 
+                    ? new Date(lead.last_verified_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                    : "Not verified"}
+                </p>
               </div>
               <div className="pt-2 border-t border-slate-50">
                 <p className="font-medium text-slate-700">Data Source</p>
                 <p className="text-muted-foreground mt-1">{lead.source}</p>
-                <a href={lead.source_url} target="_blank" className="text-primary hover:underline text-xs mt-1 inline-block">
+                <a href={lead.source_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-xs mt-1 inline-block">
                   View Source Reference &rarr;
                 </a>
               </div>
@@ -197,9 +212,20 @@ export function LeadDetail({ leadId }: { leadId: string }) {
               <Badge variant="outline" className={lead.fit_score >= 80 ? "bg-emerald-100 text-emerald-800 border-emerald-200" : ""}>
                 {lead.fit_score >= 80 ? "HIGH PRIORITY" : lead.fit_score >= 50 ? "MEDIUM PRIORITY" : "LOW PRIORITY"}
               </Badge>
-              <div className="text-sm text-slate-600 pt-2 border-t border-slate-200/60 w-full text-left">
-                <p className="font-medium text-slate-800 mb-1">Why this fits:</p>
-                {lead.why}
+              <div className="text-sm text-slate-600 pt-4 border-t border-slate-200/60 w-full text-left">
+                <p className="font-medium text-slate-800 mb-3 text-center">Score Breakdown:</p>
+                <ul className="space-y-2">
+                  {lead.fit_reasons && lead.fit_reasons.length > 0 ? (
+                    lead.fit_reasons.map((reason, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                        <span className="leading-tight">{reason}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-muted-foreground text-center text-xs">Legacy score ({lead.why})</li>
+                  )}
+                </ul>
               </div>
             </div>
           </CardContent>

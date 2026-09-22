@@ -174,6 +174,11 @@ class Lead(BaseModel):
     status: str = "new"
     fit_score: int
     why: str | None = None
+    external_place_id: str | None = None
+    products: list[str] = Field(default_factory=list)
+    specialties: list[str] = Field(default_factory=list)
+    fit_reasons: list[str] = Field(default_factory=list)
+    last_verified_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

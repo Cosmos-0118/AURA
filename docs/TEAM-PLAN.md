@@ -71,7 +71,7 @@ not an AURA requirement and must not be expanded.
 
 ### Do not build
 
-Competitor crawling, lead discovery, localization, reels/video, X, blog,
+Competitor crawling,  localization, reels/video, X, blog,
 publishing, auth, Docker deployment, LangGraph, Redis, queues, or a second DB.
 Existing list endpoints or 501 placeholders for these areas may remain.
 

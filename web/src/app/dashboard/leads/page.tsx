@@ -11,13 +11,11 @@ import type { Lead, BrandId } from "@/lib/api/types";
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({ scanned: 184, qualified: 5, highFit: 17, drafts: 26 });
+  const [brandFit, setBrandFit] = useState<"All" | BrandId>("All");
 
   // Load cached leads on mount
   useEffect(() => {
     const cachedLeads = localStorage.getItem("aura_leads_cache");
-    const cachedStats = localStorage.getItem("aura_stats_cache");
-    
     if (cachedLeads) {
       try {
         setLeads(JSON.parse(cachedLeads));
@@ -25,35 +23,16 @@ export default function LeadsPage() {
         console.error("Failed to parse cached leads", e);
       }
     }
-    
-    if (cachedStats) {
-      try {
-        setStats(JSON.parse(cachedStats));
-      } catch (e) {
-        console.error("Failed to parse cached stats", e);
-      }
-    }
   }, []);
 
-  const updateStatsAndCache = (newLeads: Lead[]) => {
+  const updateCache = (newLeads: Lead[]) => {
     setLeads(newLeads);
     localStorage.setItem("aura_leads_cache", JSON.stringify(newLeads));
-    
-    const scanned = newLeads.length > 0 ? (newLeads.length * 37) + 12 : 184; // Simulated multiplier
-    const qualified = newLeads.filter(l => l.status === "Qualified" || l.status === "Draft Generated").length;
-    const highFit = newLeads.filter(l => l.fit_score >= 85).length;
-    const drafts = newLeads.filter(l => l.status === "Draft Generated" || l.status === "Draft Ready").length;
-    
-    const newStats = { scanned, qualified, highFit, drafts };
-    setStats(newStats);
-    localStorage.setItem("aura_stats_cache", JSON.stringify(newStats));
   };
 
   const handleRunDiscovery = async () => {
     setLoading(true);
-    
     try {
-      // Run targeted discovery for all 3 brands simultaneously
       const brandQueries = [
         { brand_id: "jade", category: "Jewellery & Luxury Retail", location: "Singapore" },
         { brand_id: "doctorshield", category: "Healthcare Clinics", location: "Singapore" },
@@ -65,8 +44,9 @@ export default function LeadsPage() {
       );
       
       const allLeads = results.flat();
-      updateStatsAndCache(allLeads);
-      
+      updateCache(allLeads);
+      // Reset filter to All to show full results
+      setBrandFit("All");
     } catch (err) {
       console.error(err);
       alert("Discovery Agent failed to run. Check console.");
@@ -88,8 +68,8 @@ export default function LeadsPage() {
         location,
         keywords: query
       });
-      // A custom search typically replaces the current view
-      updateStatsAndCache(results);
+      updateCache(results);
+      setBrandFit("All");
     } catch (err) {
       console.error(err);
       alert("Custom search failed. Check console.");
@@ -97,6 +77,23 @@ export default function LeadsPage() {
       setLoading(false);
     }
   };
+
+  // Derive filtered leads
+  const filteredLeads = leads.filter(lead => {
+    if (brandFit === "All") return true;
+    return lead.brand_id === brandFit.toLowerCase();
+  });
+
+  // Dynamically calculate stats based ONLY on the filtered view!
+  const getStats = () => {
+    const scanned = filteredLeads.length;
+    const qualified = filteredLeads.filter(l => l.status === "Qualified" || l.status === "Draft Generated" || l.status === "draft_generated").length;
+    const highFit = filteredLeads.filter(l => l.fit_score >= 85).length;
+    const drafts = filteredLeads.filter(l => l.status === "Draft Generated" || l.status === "draft_generated" || l.status === "Draft Ready").length;
+    return { scanned, qualified, highFit, drafts };
+  };
+  
+  const stats = getStats();
 
   return (
     <div className="space-y-8 pb-10">
@@ -141,7 +138,7 @@ export default function LeadsPage() {
         <Card className="p-5 border-slate-200 rounded-xl shadow-sm bg-white">
           <p className="text-[13px] font-medium text-slate-600 mb-3">Qualified Leads</p>
           <div className="text-[32px] font-bold text-emerald-600 leading-none">{stats.qualified}</div>
-          <p className="text-[12px] font-semibold text-emerald-600 mt-2">+21% this month</p>
+          <p className="text-[12px] font-semibold text-emerald-600 mt-2">Target profiles</p>
         </Card>
 
         {/* Card 3 */}
@@ -161,9 +158,11 @@ export default function LeadsPage() {
 
       {/* Search and Table Area */}
       <LeadSearch 
-        leads={leads}
+        filteredLeads={filteredLeads}
         loading={loading}
         onSearch={handleCustomSearch}
+        brandFit={brandFit}
+        setBrandFit={setBrandFit}
       />
     </div>
   );
