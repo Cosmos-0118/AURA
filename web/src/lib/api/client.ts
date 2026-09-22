@@ -59,7 +59,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.detail ?? `AURA API request failed (${response.status})`);
+    const msg = error?.detail ?? error?.error ?? error?.message ?? `AURA API request failed (${response.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
   return (await response.json()) as T;
 }
@@ -835,3 +836,14 @@ export function publishToBuffer(
 ): Promise<import('./types').BufferPublishResult> {
   return request<import('./types').BufferPublishResult>('/api/buffer/publish', jsonBody(body));
 }
+
+export interface MediaConfig {
+  configured: boolean;
+  base_url: string | null;
+  media_endpoint_available: boolean;
+}
+
+export async function getMediaConfig(): Promise<MediaConfig> {
+  return await request<MediaConfig>('/api/media/config');
+}
+
