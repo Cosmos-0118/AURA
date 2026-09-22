@@ -83,6 +83,35 @@ CREATE TABLE IF NOT EXISTS review_queue (
   FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS leads (
+  id VARCHAR(64) PRIMARY KEY,
+  brand_id VARCHAR(64) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(255),
+  location VARCHAR(255),
+  url TEXT,
+  country VARCHAR(100),
+  phone VARCHAR(64),
+  public_email VARCHAR(255),
+  social_links JSON,
+  description TEXT,
+  services JSON,
+  source VARCHAR(100) NOT NULL DEFAULT 'unknown',
+  source_url TEXT,
+  status VARCHAR(64) NOT NULL DEFAULT 'new',
+  fit_score INT NOT NULL DEFAULT 0,
+  why TEXT,
+  external_place_id VARCHAR(255),
+  products JSON,
+  specialties JSON,
+  fit_reasons JSON,
+  last_verified_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_leads_brand (brand_id),
+  INDEX idx_leads_external_place (external_place_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS video_generations (
   id VARCHAR(64) PRIMARY KEY,
   brand_id VARCHAR(64),

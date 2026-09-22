@@ -13,6 +13,7 @@ dependencies = [
   "python-dotenv",
   "python-multipart",
   "openai",
+  "google-genai>=2.24.0",
   "fal-client>=1.0.3",
 ]
 

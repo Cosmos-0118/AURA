@@ -206,13 +206,30 @@ CREATE TABLE IF NOT EXISTS leads (
     id CHAR(36) PRIMARY KEY,
     brand_id VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    category VARCHAR(255),
+    location VARCHAR(255),
     url TEXT,
     country VARCHAR(100),
+    phone VARCHAR(64),
+    public_email VARCHAR(255),
+    social_links JSON,
+    description TEXT,
+    services JSON,
+    source VARCHAR(100) NOT NULL DEFAULT 'unknown',
+    source_url TEXT,
+    status VARCHAR(64) NOT NULL DEFAULT 'new',
     fit_score INT NOT NULL DEFAULT 0,
     why TEXT,
+    external_place_id VARCHAR(255),
+    products JSON,
+    specialties JSON,
+    fit_reasons JSON,
+    last_verified_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
-    INDEX idx_leads_brand (brand_id)
+    INDEX idx_leads_brand (brand_id),
+    INDEX idx_leads_external_place (external_place_id)
 );
 
 -- 15. VIDEO GENERATION HISTORY

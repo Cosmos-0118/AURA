@@ -161,10 +161,38 @@ class Lead(BaseModel):
     id: str
     brand_id: BrandId
     name: str
+    category: str = "Unknown"
+    location: str = "Unknown"
     url: str | None = None
-    country: str | None = None
-    fit_score: int
+    phone: str | None = None
+    public_email: str | None = None
+    social_links: list[str] = Field(default_factory=list)
+    description: str | None = None
+    services: list[str] = Field(default_factory=list)
+    source: str = "unknown"
+    source_url: str = ""
+    status: str = "new"
+    fit_score: int = 0
     why: str | None = None
+    external_place_id: str | None = None
+    products: list[str] = Field(default_factory=list)
+    specialties: list[str] = Field(default_factory=list)
+    fit_reasons: list[str] = Field(default_factory=list)
+    last_verified_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LeadSearchRequest(BaseModel):
+    brand_id: BrandId
+    category: str
+    location: str
+    keywords: str | None = None
+
+
+class LeadOutreachRequest(BaseModel):
+    brand_id: BrandId
+    lead_id: str
 
 
 class Metrics(BaseModel):
@@ -383,4 +411,3 @@ class VideoGenerationRecord(BaseModel):
     error_msg: str | None = None
     request_id: str | None = None
     created_at: datetime
-

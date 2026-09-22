@@ -129,6 +129,8 @@ export type Lead = {
   id: string;
   brand_id: BrandId;
   name: string;
+  category?: string | null;
+  location?: string | null;
   url: string | null;
   country: string | null;
   fit_score: number;
@@ -138,6 +140,31 @@ export type Lead = {
   requirements?: string | null;
   source_url?: string | null;
   source_title?: string | null;
+  public_email?: string | null;
+  social_links?: string[];
+  description?: string | null;
+  services?: string[];
+  source?: string;
+  status?: string;
+  external_place_id?: string | null;
+  products?: string[];
+  specialties?: string[];
+  fit_reasons?: string[];
+  last_verified_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type LeadSearchRequest = {
+  brand_id: BrandId;
+  category: string;
+  location: string;
+  keywords?: string | null;
+};
+
+export type LeadOutreachRequest = {
+  brand_id: BrandId;
+  lead_id: string;
 };
 
 export type LeadRefreshStatus = {

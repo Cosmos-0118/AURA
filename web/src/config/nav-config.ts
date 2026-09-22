@@ -45,6 +45,12 @@ export const navGroups: NavGroup[] = [
         url: '/dashboard/competitor-intelligence',
         icon: 'search',
         items: []
+      },
+      {
+        title: 'Lead Generation',
+        url: '/dashboard/leads',
+        icon: 'user',
+        items: []
       }
     ]
   }

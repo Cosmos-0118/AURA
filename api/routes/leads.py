@@ -5,12 +5,12 @@ try:
     from ..agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
     from ..agents.lead_mail import LeadMailError, draft_for, send_for
     from ..db import get_connection
-    from ..schemas import BrandId, Lead
+    from ..schemas import BrandId, Lead, LeadOutreachRequest, LeadSearchRequest
 except ImportError:
     from agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
     from agents.lead_mail import LeadMailError, draft_for, send_for
     from db import get_connection
-    from schemas import BrandId, Lead
+    from schemas import BrandId, Lead, LeadOutreachRequest, LeadSearchRequest
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -93,3 +93,22 @@ def list_leads(brand_id: BrandId | None = None) -> list[LeadInsight]:
         return [_insight(row) for row in rows]
     except Exception:
         return []
+
+
+@router.post('/search', response_model=list[Lead])
+def search_leads(request: LeadSearchRequest) -> list[Lead]:
+    try:
+        from ..agents.leads import discover_and_enrich_leads
+    except ImportError:
+        from agents.leads import discover_and_enrich_leads
+    return discover_and_enrich_leads(request)
+
+
+@router.post('/{lead_id}/outreach')
+def generate_outreach(lead_id: str, request: LeadOutreachRequest) -> dict[str, str]:
+    try:
+        from ..agents.leads import generate_personalized_outreach
+    except ImportError:
+        from agents.leads import generate_personalized_outreach
+    generate_personalized_outreach(lead_id, request.brand_id)
+    return {'status': 'success', 'message': 'Draft created and sent to review'}
