@@ -16,16 +16,16 @@ def get_metrics() -> Metrics:
         row = connection.execute(
             """
             select
-              count(*)::int as assets_total,
-              count(*) filter (where status in ('pending_review', 'compliance_failed'))::int
+              count(*) as assets_total,
+              coalesce(sum(case when status in ('pending_review', 'compliance_failed') then 1 else 0 end), 0)
                 as assets_pending,
-              (select count(*)::int from reviews where action = 'reject') as rejected,
-              (select count(*)::int from reviews where action = 'approve') as approved,
-              (select count(*)::int from reviews where edited_body is not null) as edits,
-              (select count(distinct asset_id)::int from reviews) as reviewed_assets,
-              (select count(distinct asset_id)::int from compliance_checks where result = 'FAIL')
+              (select count(*) from reviews where action = 'reject') as rejected,
+              (select count(*) from reviews where action = 'approve') as approved,
+              (select count(*) from reviews where edited_body is not null) as edits,
+              (select count(distinct asset_id) from reviews) as reviewed_assets,
+              (select count(distinct asset_id) from compliance_checks where result = 'FAIL')
                 as failed_assets,
-              (select count(*)::int from lessons) as lessons_count
+              (select count(*) from lessons) as lessons_count
             from content_assets
             """
         ).fetchone()

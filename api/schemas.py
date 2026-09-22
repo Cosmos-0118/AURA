@@ -15,7 +15,19 @@ AssetStatus = Literal[
     "scheduled",
     "published",
 ]
-CampaignStatus = Literal["queued", "running", "completed", "failed"]
+CampaignStatus = Literal[
+    "draft",
+    "generating",
+    "generated",
+    "pending_review",
+    "approved",
+    "rejected",
+    "edited",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+]
 ComplianceVerdict = Literal["PASS", "REVIEW", "FAIL"]
 Risk = Literal["LOW", "MEDIUM", "HIGH"]
 ReasonTag = Literal[

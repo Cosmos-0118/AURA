@@ -11,10 +11,14 @@ USE aura;
 CREATE TABLE IF NOT EXISTS brands (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
+    tagline VARCHAR(255),
     category VARCHAR(100),
     description TEXT,
     voice TEXT,
+    tone JSON,
     audience TEXT,
+    do_list JSON,
+    dont_list JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP
@@ -25,19 +29,18 @@ CREATE TABLE IF NOT EXISTS campaigns (
     id CHAR(36) PRIMARY KEY,
     brand_id VARCHAR(50) NOT NULL,
     title VARCHAR(255),
+    topic TEXT,
+    country VARCHAR(100),
+    goal VARCHAR(255),
+    platforms TEXT NOT NULL DEFAULT '["linkedin"]',
     objective VARCHAR(100) NOT NULL,
     language VARCHAR(100) NOT NULL,
     thesis TEXT NOT NULL,
     target_audience TEXT,
-    status ENUM(
-        'draft',
-        'generating',
-        'generated',
-        'pending_review',
-        'approved',
-        'rejected',
-        'edited'
-    ) NOT NULL DEFAULT 'draft',
+    status VARCHAR(32) NOT NULL DEFAULT 'draft',
+    error TEXT,
+    completed_at TIMESTAMP NULL,
+    campaign_facts JSON,
     generation_provider VARCHAR(100),
     generation_model VARCHAR(100),
     lessons_used JSON,
@@ -104,6 +107,13 @@ CREATE TABLE IF NOT EXISTS campaign_media (
     width INT,
     height INT,
     duration_seconds DECIMAL(10,2),
+    media_stage VARCHAR(32) NOT NULL DEFAULT 'final',
+    watermarked TINYINT(1) NOT NULL DEFAULT 0,
+    logo_path VARCHAR(512),
+    logo_position VARCHAR(64),
+    logo_scale FLOAT DEFAULT 100.0,
+    logo_opacity FLOAT DEFAULT 100.0,
+    parent_media_id CHAR(36),
     status ENUM(
         'generating',
         'completed',
@@ -126,10 +136,14 @@ CREATE TABLE IF NOT EXISTS lessons (
     id CHAR(36) PRIMARY KEY,
     brand_id VARCHAR(50),
     platform VARCHAR(50),
-    tag VARCHAR(100) NOT NULL,
+    tag VARCHAR(100),
+    reason_tag VARCHAR(100),
     note TEXT NOT NULL,
     original_content LONGTEXT,
     corrected_content LONGTEXT,
+    original_body LONGTEXT,
+    edited_body LONGTEXT,
+    asset_id CHAR(36),
     source_campaign_id CHAR(36),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (brand_id)
@@ -165,30 +179,61 @@ CREATE TABLE IF NOT EXISTS review_queue (
     INDEX idx_review_status (status)
 );
 
--- 12. COMPLIANCE CHECKS TABLE
-CREATE TABLE IF NOT EXISTS compliance_checks (
+-- 12. CONTENT ASSETS TABLE
+CREATE TABLE IF NOT EXISTS content_assets (
     id CHAR(36) PRIMARY KEY,
-    campaign_id CHAR(36) NOT NULL,
-    status ENUM(
-        'pass',
-        'review',
-        'fail'
-    ) NOT NULL,
-    risk_level ENUM(
-        'low',
-        'medium',
-        'high'
-    ),
-    issues JSON,
-    suggested_fixes JSON,
-    rules_checked INT DEFAULT 0,
+    campaign_id CHAR(36),
+    brand_id VARCHAR(50) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
+    content_type VARCHAR(50) NOT NULL,
+    variant VARCHAR(20) NOT NULL DEFAULT 'A',
+    language VARCHAR(20) NOT NULL DEFAULT 'en',
+    title TEXT,
+    body LONGTEXT NOT NULL,
+    hashtags JSON NOT NULL,
+    media_url TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending_review',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (campaign_id)
-        REFERENCES campaigns(id)
-        ON DELETE CASCADE
+    approved_at TIMESTAMP NULL,
+    approved_by VARCHAR(255),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    INDEX idx_assets_campaign (campaign_id),
+    INDEX idx_assets_brand (brand_id)
 );
 
--- 13. CAMPAIGN EVENTS TABLE
+-- 13. COMPLIANCE CHECKS TABLE
+CREATE TABLE IF NOT EXISTS compliance_checks (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36),
+    asset_id CHAR(36),
+    status VARCHAR(16),
+    result VARCHAR(16),
+    risk_level VARCHAR(16),
+    risk VARCHAR(16),
+    rules JSON,
+    issues JSON,
+    suggested_fixes JSON,
+    suggested_revision TEXT,
+    rules_checked INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (asset_id) REFERENCES content_assets(id) ON DELETE CASCADE
+);
+
+-- 14. REVIEWS TABLE
+CREATE TABLE IF NOT EXISTS reviews (
+    id CHAR(36) PRIMARY KEY,
+    asset_id CHAR(36) NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    reason_tag VARCHAR(100),
+    note TEXT,
+    original_body LONGTEXT,
+    edited_body LONGTEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (asset_id) REFERENCES content_assets(id) ON DELETE CASCADE
+);
+
+-- 15. CAMPAIGN EVENTS TABLE
 CREATE TABLE IF NOT EXISTS campaign_events (
     id CHAR(36) PRIMARY KEY,
     campaign_id CHAR(36) NOT NULL,
@@ -199,6 +244,24 @@ CREATE TABLE IF NOT EXISTS campaign_events (
     FOREIGN KEY (campaign_id)
         REFERENCES campaigns(id)
         ON DELETE CASCADE
+);
+
+-- 16. CAMPAIGN PUBLICATIONS TABLE
+CREATE TABLE IF NOT EXISTS campaign_publications (
+    id CHAR(36) PRIMARY KEY,
+    campaign_id CHAR(36) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'queued',
+    external_post_id VARCHAR(255),
+    external_post_url TEXT,
+    published_content LONGTEXT,
+    media_id CHAR(36),
+    error_message TEXT,
+    published_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    INDEX idx_publications_campaign (campaign_id)
 );
 
 -- 14. LEADS TABLE

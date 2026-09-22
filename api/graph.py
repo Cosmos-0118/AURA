@@ -1,8 +1,8 @@
 """The intentionally small AURA campaign pipeline."""
 
 import os
-
-from psycopg.types.json import Json
+import json
+from uuid import uuid4
 
 try:
     from .db import get_connection
@@ -45,7 +45,7 @@ def _set_campaign_status(campaign_id: str, status: str, error: str | None = None
             update campaigns
             set status = %s,
                 error = %s,
-                completed_at = case when %s in ('completed', 'failed') then now() else completed_at end
+                completed_at = case when %s in ('completed', 'failed') then CURRENT_TIMESTAMP else completed_at end
             where id = %s
             """,
             (status, error, status, campaign_id),
@@ -80,12 +80,18 @@ def run_pipeline(campaign_id: str) -> None:
         _set_campaign_status(campaign_id, "running")
         generate_content, check_compliance, get_relevant_lessons = _agent_functions()
         lessons = get_relevant_lessons(campaign["brand_id"], "linkedin")
+        platforms = campaign["platforms"]
+        if isinstance(platforms, str):
+            try:
+                platforms = json.loads(platforms)
+            except json.JSONDecodeError:
+                platforms = [platforms]
         request = ContentRequest(
             brand_id=campaign["brand_id"],
             topic=campaign["topic"],
             country=campaign["country"],
             goal=campaign["goal"],
-            platforms=campaign["platforms"],
+            platforms=platforms,
             language=campaign["language"],
             lessons=lessons,
             research_summary=None,
@@ -100,15 +106,16 @@ def run_pipeline(campaign_id: str) -> None:
                 asset_status = (
                     "compliance_failed" if compliance.result == "FAIL" else "pending_review"
                 )
-                asset = connection.execute(
+                asset_id = str(uuid4())
+                connection.execute(
                     """
                     insert into content_assets
-                      (campaign_id, brand_id, platform, content_type, variant, language,
+                      (id, campaign_id, brand_id, platform, content_type, variant, language,
                        title, body, hashtags, status)
-                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    returning id
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
+                        asset_id,
                         campaign_id,
                         campaign["brand_id"],
                         generated.platform,
@@ -117,22 +124,24 @@ def run_pipeline(campaign_id: str) -> None:
                         campaign["language"],
                         generated.title,
                         generated.body,
-                        Json(generated.hashtags),
+                        json.dumps(generated.hashtags),
                         asset_status,
                     ),
-                ).fetchone()
+                )
+                compliance_id = str(uuid4())
                 connection.execute(
                     """
                     insert into compliance_checks
-                      (asset_id, result, risk, rules, issues, suggested_revision)
-                    values (%s, %s, %s, %s, %s, %s)
+                      (id, asset_id, result, risk, rules, issues, suggested_revision)
+                    values (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        asset["id"],
+                        compliance_id,
+                        asset_id,
                         compliance.result,
                         compliance.risk,
-                        Json(compliance.rules),
-                        Json([issue.model_dump() for issue in compliance.issues]),
+                        json.dumps(compliance.rules),
+                        json.dumps([issue.model_dump() for issue in compliance.issues]),
                         compliance.suggested_revision,
                     ),
                 )

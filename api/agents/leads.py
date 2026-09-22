@@ -4,7 +4,6 @@ import json
 import httpx
 from datetime import datetime
 from pydantic import BaseModel
-from psycopg.types.json import Json
 from google import genai
 
 try:
@@ -230,56 +229,88 @@ def discover_and_enrich_leads(request: LeadSearchRequest) -> list[Lead]:
         with get_connection() as conn:
             for lead in leads:
                 try:
-                    conn.execute(
-                        """
-                        insert into leads (
-                            id, brand_id, name, category, location, url, phone, public_email, 
-                            description, source, source_url, status, fit_score, created_at, updated_at,
-                            external_place_id, products, specialties, fit_reasons, last_verified_at
-                        ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        on conflict (external_place_id) do update set
-                            name = EXCLUDED.name,
-                            fit_score = EXCLUDED.fit_score,
-                            updated_at = EXCLUDED.updated_at,
-                            last_verified_at = EXCLUDED.last_verified_at
-                        """,
-                        (
-                            lead.id, lead.brand_id, lead.name, lead.category, lead.location, lead.url,
-                            lead.phone, lead.public_email, lead.description, lead.source, lead.source_url,
-                            lead.status, lead.fit_score, lead.created_at, lead.updated_at,
-                            lead.external_place_id, Json(lead.products), Json(lead.specialties), 
-                            Json(lead.fit_reasons), lead.last_verified_at
-                        )
+                    lead_values = (
+                        lead.brand_id,
+                        lead.name,
+                        lead.category,
+                        lead.location,
+                        lead.url,
+                        lead.phone,
+                        lead.public_email,
+                        lead.description,
+                        lead.source,
+                        lead.source_url,
+                        lead.status,
+                        lead.fit_score,
+                        lead.created_at,
+                        lead.updated_at,
+                        lead.external_place_id,
+                        json.dumps(lead.products),
+                        json.dumps(lead.specialties),
+                        json.dumps(lead.fit_reasons),
+                        lead.last_verified_at,
                     )
-                except Exception as e:
-                    print(f"Failed to insert lead {lead.name}: {e}")
-                    # If conflict on external_place_id fails because column is missing, try fallback
-                    try:
+                    existing = None
+                    if lead.external_place_id:
+                        existing = conn.execute(
+                            "select id, status from leads where external_place_id = %s and brand_id = %s",
+                            (lead.external_place_id, lead.brand_id),
+                        ).fetchone()
+                    if existing:
+                        conn.execute(
+                            """
+                            update leads set brand_id = %s, name = %s, category = %s,
+                              location = %s, url = %s, phone = %s, public_email = %s,
+                              description = %s, source = %s, source_url = %s,
+                              fit_score = %s, status = %s, updated_at = %s, products = %s,
+                              specialties = %s, fit_reasons = %s, last_verified_at = %s
+                            where id = %s
+                            """,
+                            (
+                                lead.brand_id,
+                                lead.name,
+                                lead.category,
+                                lead.location,
+                                lead.url,
+                                lead.phone,
+                                lead.public_email,
+                                lead.description,
+                                lead.source,
+                                lead.source_url,
+                                lead.fit_score,
+                                existing.get("status") or lead.status,
+                                lead.updated_at,
+                                json.dumps(lead.products),
+                                json.dumps(lead.specialties),
+                                json.dumps(lead.fit_reasons),
+                                lead.last_verified_at,
+                                existing["id"],
+                            ),
+                        )
+                    else:
                         conn.execute(
                             """
                             insert into leads (
-                                id, brand_id, name, category, location, url, phone, public_email, 
-                                description, source, source_url, status, fit_score, created_at, updated_at
-                            ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            on conflict (id) do nothing
+                              id, brand_id, name, category, location, url, phone, public_email,
+                              description, source, source_url, status, fit_score, created_at,
+                              updated_at, external_place_id, products, specialties, fit_reasons,
+                              last_verified_at
+                            ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """,
-                            (
-                                lead.id, lead.brand_id, lead.name, lead.category, lead.location, lead.url,
-                                lead.phone, lead.public_email, lead.description, lead.source, lead.source_url,
-                                lead.status, lead.fit_score, lead.created_at, lead.updated_at
-                            )
+                            (lead.id,) + lead_values,
                         )
-                    except Exception as fallback_e:
-                        print(f"Fallback insert failed: {fallback_e}")
-                        pass
+                except Exception as e:
+                    raise RuntimeError(f"Failed to persist lead {lead.name}: {e}") from e
     except Exception as e:
-        print(f"Database connection failed, returning generated leads without saving: {e}")
+        raise RuntimeError(f"Database connection failed while saving discovered leads: {e}") from e
             
     return leads
 
 
 def generate_personalized_outreach(lead_id: str, brand_id: str) -> None:
     client = get_client()
+    if client is None:
+        raise ValueError("Real outreach is not configured. Set GEMINI_API_KEY before generating outreach.")
     
     try:
         with get_connection() as conn:
@@ -315,8 +346,8 @@ def generate_personalized_outreach(lead_id: str, brand_id: str) -> None:
             conn.execute(
                 """
                 insert into content_assets
-                  (id, brand_id, platform, content_type, variant, language, title, body, status)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                  (id, brand_id, platform, content_type, variant, language, title, body, hashtags, status)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     asset_id,
@@ -327,6 +358,7 @@ def generate_personalized_outreach(lead_id: str, brand_id: str) -> None:
                     "en",
                     f"Outreach to {lead['name']}",
                     draft_body,
+                    json.dumps([]),
                     "pending_review"
                 )
             )
@@ -335,13 +367,12 @@ def generate_personalized_outreach(lead_id: str, brand_id: str) -> None:
             conn.execute(
                 """
                 insert into compliance_checks
-                  (asset_id, result, risk, rules, issues, suggested_revision)
-                values (%s, %s, %s, %s, %s, %s)
+                  (id, asset_id, result, risk, rules, issues, suggested_revision)
+                values (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (asset_id, "PASS", "LOW", Json([]), Json([]), None)
+                (str(uuid.uuid4()), asset_id, "PASS", "LOW", json.dumps([]), json.dumps([]), None)
             )
             
             conn.execute("update leads set status = 'Draft Generated' where id = %s", (lead_id,))
     except Exception as e:
-        print(f"Database connection failed in outreach, cannot save draft: {e}")
-        return
+        raise RuntimeError(f"Could not save outreach draft: {e}") from e

@@ -118,6 +118,7 @@ def init_sqlite_db(conn: sqlite3.Connection):
         CREATE TABLE IF NOT EXISTS campaigns (
           id TEXT PRIMARY KEY,
           brand_id TEXT NOT NULL,
+          title TEXT,
           objective TEXT NOT NULL DEFAULT 'Awareness',
           language TEXT NOT NULL DEFAULT 'en',
           thesis TEXT NOT NULL DEFAULT '',
@@ -127,6 +128,9 @@ def init_sqlite_db(conn: sqlite3.Connection):
           platforms TEXT NOT NULL DEFAULT '["linkedin"]',
           target_audience TEXT,
           status TEXT NOT NULL DEFAULT 'draft',
+          generation_provider TEXT,
+          generation_model TEXT,
+          lessons_used TEXT,
           campaign_facts TEXT,
           error TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -141,9 +145,14 @@ def init_sqlite_db(conn: sqlite3.Connection):
           title TEXT,
           content TEXT NOT NULL,
           hashtags TEXT,
+          hook TEXT,
           script TEXT,
+          captions TEXT,
           visual_concept TEXT,
           generation_prompt TEXT,
+          image_generation_prompt TEXT,
+          video_generation_prompt TEXT,
+          language TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -170,11 +179,15 @@ def init_sqlite_db(conn: sqlite3.Connection):
           id TEXT PRIMARY KEY,
           brand_id TEXT NOT NULL,
           platform TEXT,
+          tag TEXT,
           reason_tag TEXT NOT NULL,
           note TEXT NOT NULL,
+          original_content TEXT,
+          corrected_content TEXT,
           original_body TEXT,
           edited_body TEXT,
           asset_id TEXT,
+          source_campaign_id TEXT,
           source TEXT NOT NULL DEFAULT 'human_review',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -233,11 +246,27 @@ def init_sqlite_db(conn: sqlite3.Connection):
           id TEXT PRIMARY KEY,
           brand_id TEXT NOT NULL,
           name TEXT NOT NULL,
+          category TEXT,
+          location TEXT,
           url TEXT,
           country TEXT,
+          phone TEXT,
+          public_email TEXT,
+          social_links TEXT,
+          description TEXT,
+          services TEXT,
+          source TEXT NOT NULL DEFAULT 'unknown',
+          source_url TEXT,
+          status TEXT NOT NULL DEFAULT 'new',
           fit_score INTEGER NOT NULL DEFAULT 0,
           why TEXT,
+          external_place_id TEXT,
+          products TEXT,
+          specialties TEXT,
+          fit_reasons TEXT,
+          last_verified_at DATETIME,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          ,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS video_generations (
@@ -273,6 +302,7 @@ def init_sqlite_db(conn: sqlite3.Connection):
           campaign_id TEXT NOT NULL,
           event_type TEXT NOT NULL,
           actor TEXT NOT NULL DEFAULT 'system',
+          description TEXT,
           metadata TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -295,11 +325,55 @@ def init_sqlite_db(conn: sqlite3.Connection):
     )
     conn.commit()
 
-    try:
-        cursor.execute("ALTER TABLE campaigns ADD COLUMN campaign_facts TEXT")
-        conn.commit()
-    except Exception:
-        pass
+    for table, col_def in [
+        ("campaigns", "title TEXT"),
+        ("campaigns", "generation_provider TEXT"),
+        ("campaigns", "generation_model TEXT"),
+        ("campaigns", "lessons_used TEXT"),
+        ("campaigns", "campaign_facts TEXT"),
+        ("campaign_platform_content", "hook TEXT"),
+        ("campaign_platform_content", "captions TEXT"),
+        ("campaign_platform_content", "image_generation_prompt TEXT"),
+        ("campaign_platform_content", "video_generation_prompt TEXT"),
+        ("campaign_platform_content", "language TEXT"),
+        ("lessons", "tag TEXT"),
+        ("lessons", "original_content TEXT"),
+        ("lessons", "corrected_content TEXT"),
+        ("lessons", "source_campaign_id TEXT"),
+        ("campaign_events", "description TEXT"),
+        ("leads", "category TEXT"),
+        ("leads", "location TEXT"),
+        ("leads", "phone TEXT"),
+        ("leads", "public_email TEXT"),
+        ("leads", "social_links TEXT"),
+        ("leads", "description TEXT"),
+        ("leads", "services TEXT"),
+        ("leads", "source TEXT NOT NULL DEFAULT 'unknown'"),
+        ("leads", "source_url TEXT"),
+        ("leads", "status TEXT NOT NULL DEFAULT 'new'"),
+        ("leads", "external_place_id TEXT"),
+        ("leads", "products TEXT"),
+        ("leads", "specialties TEXT"),
+        ("leads", "fit_reasons TEXT"),
+        ("leads", "last_verified_at DATETIME"),
+        ("leads", "updated_at DATETIME"),
+    ]:
+        existing_columns = {
+            row[1] for row in cursor.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        column_name = col_def.split()[0]
+        if column_name in existing_columns:
+            continue
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+            conn.commit()
+        except Exception as exc:
+            raise RuntimeError(f"Could not migrate SQLite table {table}.{column_name}") from exc
+
+    cursor.execute(
+        "UPDATE leads SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)"
+    )
+    conn.commit()
 
     for col_def in [
         ("media_stage", "TEXT DEFAULT 'final'"),
@@ -399,10 +473,129 @@ def get_db() -> Generator[Any, None, None]:
                 cursorclass=pymysql.cursors.DictCursor,
                 autocommit=False,
             )
-        except Exception:
+        except Exception as exc:
+            if get_db_mode() == "mysql":
+                raise RuntimeError("DB_ENGINE=mysql but the MySQL database could not be opened") from exc
             raw_conn = None
 
         if raw_conn is not None:
+            for col_sql in [
+                "ALTER TABLE brands ADD COLUMN tagline VARCHAR(255)",
+                "ALTER TABLE brands ADD COLUMN tone JSON",
+                "ALTER TABLE brands ADD COLUMN do_list JSON",
+                "ALTER TABLE brands ADD COLUMN dont_list JSON",
+                "ALTER TABLE campaigns ADD COLUMN topic TEXT",
+                "ALTER TABLE campaigns ADD COLUMN country VARCHAR(100)",
+                "ALTER TABLE campaigns ADD COLUMN goal VARCHAR(255)",
+                "ALTER TABLE campaigns ADD COLUMN platforms TEXT NOT NULL DEFAULT '[\"linkedin\"]'",
+                "ALTER TABLE campaigns ADD COLUMN error TEXT",
+                "ALTER TABLE campaigns ADD COLUMN completed_at DATETIME NULL",
+                "ALTER TABLE campaign_platform_content ADD COLUMN hook TEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN captions TEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN image_generation_prompt LONGTEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN video_generation_prompt LONGTEXT",
+                "ALTER TABLE campaign_platform_content ADD COLUMN language VARCHAR(32)",
+                "ALTER TABLE campaign_media ADD COLUMN media_stage VARCHAR(32) DEFAULT 'final'",
+                "ALTER TABLE campaign_media ADD COLUMN watermarked TINYINT(1) DEFAULT 0",
+                "ALTER TABLE campaign_media ADD COLUMN logo_path VARCHAR(512)",
+                "ALTER TABLE campaign_media ADD COLUMN logo_position VARCHAR(64)",
+                "ALTER TABLE campaign_media ADD COLUMN logo_scale FLOAT DEFAULT 100.0",
+                "ALTER TABLE campaign_media ADD COLUMN logo_opacity FLOAT DEFAULT 100.0",
+                "ALTER TABLE campaign_media ADD COLUMN parent_media_id VARCHAR(64)",
+                "ALTER TABLE lessons ADD COLUMN reason_tag VARCHAR(64)",
+                "ALTER TABLE lessons ADD COLUMN original_body LONGTEXT",
+                "ALTER TABLE lessons ADD COLUMN edited_body LONGTEXT",
+                "ALTER TABLE lessons ADD COLUMN asset_id VARCHAR(64)",
+                "ALTER TABLE compliance_checks ADD COLUMN asset_id VARCHAR(64)",
+                "ALTER TABLE compliance_checks ADD COLUMN result VARCHAR(16)",
+                "ALTER TABLE compliance_checks ADD COLUMN risk VARCHAR(16)",
+                "ALTER TABLE compliance_checks ADD COLUMN rules JSON",
+                "ALTER TABLE compliance_checks ADD COLUMN suggested_revision TEXT",
+                "ALTER TABLE compliance_checks MODIFY COLUMN campaign_id CHAR(36) NULL",
+                "ALTER TABLE compliance_checks MODIFY COLUMN status VARCHAR(16) NULL",
+            ]:
+                try:
+                    with raw_conn.cursor() as cur:
+                        cur.execute(col_sql)
+                    raw_conn.commit()
+                except Exception:
+                    pass
+            try:
+                with raw_conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS content_assets (
+                            id CHAR(36) PRIMARY KEY,
+                            campaign_id CHAR(36),
+                            brand_id VARCHAR(64) NOT NULL,
+                            platform VARCHAR(32) NOT NULL,
+                            content_type VARCHAR(64) NOT NULL,
+                            variant VARCHAR(16) NOT NULL DEFAULT 'A',
+                            language VARCHAR(32) NOT NULL DEFAULT 'en',
+                            title TEXT,
+                            body LONGTEXT NOT NULL,
+                            hashtags JSON NOT NULL,
+                            media_url TEXT,
+                            status VARCHAR(32) NOT NULL DEFAULT 'pending_review',
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            approved_at DATETIME NULL,
+                            approved_by VARCHAR(255),
+                            INDEX idx_assets_campaign (campaign_id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS reviews (
+                            id CHAR(36) PRIMARY KEY,
+                            asset_id CHAR(36) NOT NULL,
+                            action VARCHAR(32) NOT NULL,
+                            reason_tag VARCHAR(100),
+                            note TEXT,
+                            original_body LONGTEXT,
+                            edited_body LONGTEXT,
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            INDEX idx_reviews_asset (asset_id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS compliance_checks (
+                            id CHAR(36) PRIMARY KEY,
+                            campaign_id CHAR(36),
+                            asset_id CHAR(36),
+                            status VARCHAR(16),
+                            result VARCHAR(16),
+                            risk_level VARCHAR(16),
+                            risk VARCHAR(16),
+                            rules JSON,
+                            issues JSON,
+                            suggested_fixes JSON,
+                            suggested_revision TEXT,
+                            rules_checked INT DEFAULT 0,
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            INDEX idx_compliance_asset (asset_id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS campaign_events (
+                            id CHAR(36) PRIMARY KEY,
+                            campaign_id CHAR(36) NOT NULL,
+                            event_type VARCHAR(100) NOT NULL,
+                            actor VARCHAR(64) NOT NULL DEFAULT 'system',
+                            description TEXT,
+                            metadata JSON,
+                            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            INDEX idx_events_campaign (campaign_id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                        """
+                    )
+                raw_conn.commit()
+            except Exception:
+                pass
             try:
                 with raw_conn.cursor() as cur:
                     cur.execute("ALTER TABLE campaigns ADD COLUMN campaign_facts TEXT")
@@ -497,4 +690,3 @@ def reset_campaign_data(db: Any) -> dict[str, int]:
 
 get_connection = get_db
 transaction = get_db
-

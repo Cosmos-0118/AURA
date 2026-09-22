@@ -110,5 +110,10 @@ def generate_outreach(lead_id: str, request: LeadOutreachRequest) -> dict[str, s
         from ..agents.leads import generate_personalized_outreach
     except ImportError:
         from agents.leads import generate_personalized_outreach
-    generate_personalized_outreach(lead_id, request.brand_id)
+    try:
+        generate_personalized_outreach(lead_id, request.brand_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {'status': 'success', 'message': 'Draft created and sent to review'}

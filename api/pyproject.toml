@@ -9,6 +9,7 @@ dependencies = [
   "pydantic",
   "pydantic-settings",
   "psycopg[binary]",
+  "pymysql",
   "httpx",
   "python-dotenv",
   "python-multipart",

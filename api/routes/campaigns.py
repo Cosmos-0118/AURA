@@ -917,6 +917,9 @@ def reset_campaign_data_route():
     import shutil
     from pathlib import Path
 
+    if os.environ.get("AURA_ALLOW_RESET_DATA", "false").lower() not in {"1", "true", "yes", "on"}:
+        raise HTTPException(status_code=403, detail="Reset is disabled unless AURA_ALLOW_RESET_DATA is enabled.")
+
     with transaction() as db:
         counts = reset_campaign_data(db)
 

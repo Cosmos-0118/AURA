@@ -15,7 +15,18 @@ export type AssetStatus =
   | "rejected"
   | "scheduled"
   | "published";
-export type CampaignStatus = "queued" | "running" | "completed" | "failed";
+export type CampaignStatus =
+  | "draft"
+  | "generating"
+  | "generated"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "edited"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
 export type ComplianceVerdict = "PASS" | "REVIEW" | "FAIL";
 export type Risk = "LOW" | "MEDIUM" | "HIGH";
 export type ReasonTag =

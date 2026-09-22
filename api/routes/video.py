@@ -40,10 +40,9 @@ _INSERT_GENERATION = """
 insert into video_generations
   (brand_id, asset_id, prompt, aspect_ratio, resolution, duration_secs,
    model, video_url, file_name, file_size, branded_video_url, branded_file_name,
-   status, error_msg, request_id)
+   status, error_msg, request_id, id)
 values
-  (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-returning id, created_at
+  (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 _MODEL = "minimax/h3-max-turbo/text-to-video"
@@ -68,6 +67,7 @@ def _persist_generation(
 ) -> str:
     """Insert into video_generations (or memory fallback). Returns record ID."""
     rec_id = response.request_id or str(uuid.uuid4())
+    db_record_id = rec_id if _is_valid_uuid(rec_id) else str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
     # Safe asset_id: only pass to Postgres if it's a valid UUID
@@ -78,7 +78,7 @@ def _persist_generation(
 
     # 1. Update in-memory fallback list
     memory_record = VideoGenerationRecord(
-        id=rec_id,
+        id=db_record_id,
         brand_id=safe_brand_id,
         asset_id=safe_asset_id,
         prompt=body.prompt,
@@ -104,7 +104,7 @@ def _persist_generation(
     # 2. Persist to PostgreSQL if available
     try:
         with get_connection() as connection:
-            row = connection.execute(
+            connection.execute(
                 _INSERT_GENERATION,
                 (
                     safe_brand_id,
@@ -122,10 +122,9 @@ def _persist_generation(
                     response.status,
                     response.error or None,
                     response.request_id or None,
+                    db_record_id,
                 ),
-            ).fetchone()
-            if row:
-                rec_id = str(row["id"])
+            )
     except Exception as exc:
         logger.warning("Could not persist video generation to database: %s", exc)
 
@@ -182,9 +181,13 @@ def attach_video_to_asset(body: VideoAttachRequest) -> dict[str, Any]:
 
     try:
         with get_connection() as connection:
-            row = connection.execute(
-                "update content_assets set media_url = %s where id = %s returning id, title, media_url",
+            connection.execute(
+                "update content_assets set media_url = %s where id = %s",
                 (body.video_url, body.asset_id),
+            )
+            row = connection.execute(
+                "select id, title, media_url from content_assets where id = %s",
+                (body.asset_id,),
             ).fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Asset not found")
@@ -216,14 +219,17 @@ def save_video_export(body: VideoSaveExportRequest) -> dict[str, Any]:
     if _is_valid_uuid(body.id):
         try:
             with get_connection() as connection:
-                row = connection.execute(
+                connection.execute(
                     """
                     update video_generations
                     set branded_video_url = %s, branded_file_name = %s
                     where id = %s
-                    returning id
                     """,
                     (body.branded_video_url, body.branded_file_name, body.id),
+                )
+                row = connection.execute(
+                    "select id from video_generations where id = %s",
+                    (body.id,),
                 ).fetchone()
                 if row:
                     db_updated = True
@@ -327,4 +333,3 @@ def get_video_config() -> dict[str, Any]:
             ),
         },
     }
-

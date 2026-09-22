@@ -27,11 +27,22 @@ def create_campaign(
     db.execute(
         """
         INSERT INTO campaigns
-            (id, brand_id, title, objective, language, thesis, target_audience, status)
+            (id, brand_id, title, topic, goal, objective, language, thesis, target_audience, status)
         VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s)
+            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (campaign_id, brand_id, title or thesis[:100], objective, language, thesis, target_audience, status),
+        (
+            campaign_id,
+            brand_id,
+            title or thesis[:100],
+            thesis,
+            objective,
+            objective,
+            language,
+            thesis,
+            target_audience,
+            status,
+        ),
     )
 
     log_event(
@@ -124,39 +135,50 @@ def save_generated_campaign_package(
         elif isinstance(p_data, str):
             content_text = p_data
 
-        db.execute(
-            """
-            INSERT INTO campaign_platform_content
-                (id, campaign_id, platform, title, content, hashtags, hook, script, captions, visual_concept, image_generation_prompt, video_generation_prompt, language)
-            VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                title = VALUES(title),
-                content = VALUES(content),
-                hashtags = VALUES(hashtags),
-                hook = VALUES(hook),
-                script = VALUES(script),
-                captions = VALUES(captions),
-                visual_concept = VALUES(visual_concept),
-                image_generation_prompt = VALUES(image_generation_prompt),
-                video_generation_prompt = VALUES(video_generation_prompt)
-            """,
-            (
-                cpc_id,
-                campaign_id,
-                p,
-                p_title,
-                content_text,
-                json.dumps(hashtags),
-                hook,
-                script,
-                captions,
-                visual_concept,
-                img_prompt,
-                vid_prompt,
-                language,
-            ),
+        values = (
+            p_title,
+            content_text,
+            json.dumps(hashtags),
+            hook,
+            script,
+            captions,
+            visual_concept,
+            img_prompt,
+            vid_prompt,
+            language,
         )
+        existing_content = db.execute(
+            "SELECT id FROM campaign_platform_content WHERE campaign_id = %s AND platform = %s",
+            (campaign_id, p),
+        ).fetchone()
+        if existing_content:
+            db.execute(
+                """
+                UPDATE campaign_platform_content
+                SET title = %s,
+                    content = %s,
+                    hashtags = %s,
+                    hook = %s,
+                    script = %s,
+                    captions = %s,
+                    visual_concept = %s,
+                    image_generation_prompt = %s,
+                    video_generation_prompt = %s,
+                    language = %s
+                WHERE id = %s
+                """,
+                values + (existing_content["id"],),
+            )
+        else:
+            db.execute(
+                """
+                INSERT INTO campaign_platform_content
+                    (id, campaign_id, platform, title, content, hashtags, hook, script, captions, visual_concept, image_generation_prompt, video_generation_prompt, language)
+                VALUES
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (cpc_id, campaign_id, p) + values,
+            )
 
     log_event(
         db,
