@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -11,18 +12,71 @@ from .config import (
     CHANGEDETECTION_API_URL,
     WEBHOOK_TOKEN,
     load_competitors,
+    load_watches,
 )
 
 
 WEBHOOK_PATH = "/api/webhooks/changedetection"
 WATCH_TITLE_PREFIX = "JA Assure competitor intelligence ·"
-LEGACY_WATCH_URLS = frozenset(
-    {
-        "https://www.chubb.com/sg-en/business/fine-art-valuable-goods-insurance.html",
-        "https://www.msig.com.sg/commercial/professional-indemnity",
-        "https://www.aig.sg/home/solutions/business-products-and-services/marine/marine-cargo",
+
+
+def _fetch_backend(url: str) -> str:
+    """Prefer plain HTTP when the page does not need JavaScript.
+
+    Chrome CDP capacity is limited; routing static pages through html_requests
+    keeps sockpuppetbrowser free for bot-protected / JS-heavy origins (G4S, Chubb).
+    """
+    hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
+    http_ok = (
+        hostname.endswith("libertyinternational.com")
+        or hostname.endswith("libertyspecialtymarkets.com")
+        or hostname.endswith("income.com.sg")
+        or hostname.endswith("marsh.com")
+        or hostname.endswith("howdengroup.com")
+        or hostname.endswith("parcelpro.com")
+        or hostname.endswith("upscapital.com")
+        or hostname.endswith("malca-amit.com")
+        or hostname.endswith("malacamit.com")
+        or hostname.endswith("brinkssingapore.com")
+        or hostname.endswith("brinks.com")
+        or hostname.endswith("angloeast.com.hk")
+        or hostname.endswith("medicalprotection.org")
+    )
+    if http_ok:
+        return "html_requests"
+    return "html_webdriver"
+
+
+def _is_g4s(url: str) -> bool:
+    hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return hostname == "g4s.com" or hostname.endswith(".g4s.com")
+
+
+def _watch_fetch_options(url: str) -> dict[str, Any]:
+    """Extra changedetection fields for origins that need a real browser wait."""
+    if not _is_g4s(url):
+        return {}
+    # Radware returns HTTP 247 + a JS challenge. Ignore the interstitial status,
+    # wait for client-side navigation, and reject snapshots that are still the
+    # challenge page instead of product content.
+    return {
+        "ignore_status_codes": True,
+        "webdriver_delay": 25,
+        "headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+        },
+        # Fail the check (do not baseline) if Radware challenge markers remain.
+        "text_should_not_be_present": [
+            "kramericaindustries",
+            "rbzns",
+            "Access Denied",
+        ],
     }
-)
 
 
 def _canonical_url(url: str) -> str:
@@ -32,41 +86,15 @@ def _canonical_url(url: str) -> str:
 
 
 def _notification_url() -> str:
-    url = f"post://intelligence:8787{WEBHOOK_PATH}"
+    # Docker Compose intelligence service by default. Local `./run.sh --local`
+    # should set INTEL_WEBHOOK_HOST=host.docker.internal:8787 so changedetection
+    # can reach the host Python dashboard.
+    host = os.getenv("INTEL_WEBHOOK_HOST", "intelligence:8787").strip() or "intelligence:8787"
+    url = f"post://{host}{WEBHOOK_PATH}"
     if WEBHOOK_TOKEN:
         token = urllib.parse.quote(WEBHOOK_TOKEN, safe="")
         url += f"?+X-Webhook-Token={token}"
     return url
-
-
-def _is_aura_watch(watch: dict[str, Any]) -> bool:
-    title = str(watch.get("title") or "")
-    if title.startswith(WATCH_TITLE_PREFIX):
-        return True
-    notification_urls = watch.get("notification_urls") or []
-    if isinstance(notification_urls, str):
-        notification_urls = [notification_urls]
-    return any(
-        "intelligence:8787/api/webhooks/changedetection" in str(url)
-        for url in notification_urls
-    )
-
-
-def _legacy_watch_is_aura_owned(
-    watch: dict[str, Any], endpoint: str, headers: dict[str, str]
-) -> bool:
-    if _is_aura_watch(watch):
-        return True
-    watch_id = watch.get("uuid")
-    if not watch_id:
-        return False
-    try:
-        request = urllib.request.Request(f"{endpoint}/{watch_id}", headers=headers)
-        with urllib.request.urlopen(request, timeout=20) as response:
-            details = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError):
-        return False
-    return isinstance(details, dict) and _is_aura_watch({**watch, **details})
 
 
 def provision_changedetection() -> list[dict[str, Any]]:
@@ -97,26 +125,41 @@ def provision_changedetection() -> list[dict[str, Any]]:
             continue
         existing_by_url[_canonical_url(item["url"])] = {"uuid": watch_id, **item}
     results: list[dict[str, Any]] = []
-    active_competitors = [competitor for competitor in load_competitors() if competitor.monitor]
-    active_urls = {_canonical_url(competitor.url) for competitor in active_competitors}
-    notification_body = (
-        '{"competitor_id": "COMPETITOR_ID", '
-        '"watch_url": {{watch_url|tojson}}, '
-        '"current_snapshot": {{current_snapshot|tojson}}, '
-        '"diff": {{diff|tojson}}}'
-    )
-    for competitor in active_competitors:
+    active_competitors = {competitor.id: competitor for competitor in load_competitors() if competitor.monitor}
+    watches = load_watches()
+    watches_by_url: dict[str, list[Any]] = {}
+    for watch in watches:
+        watches_by_url.setdefault(_canonical_url(watch.url), []).append(watch)
+    for watch_group in watches_by_url.values():
+        watch = watch_group[0]
+        competitor = active_competitors.get(watch.competitor_id)
+        if competitor is None:
+            raise ValueError(f"Watch {watch.id} references an inactive competitor")
+        competitor_ids = [item.competitor_id for item in watch_group]
+        if any(item not in active_competitors for item in competitor_ids):
+            raise ValueError(f"Watch {watch.id} references an inactive competitor")
+        notification_body = (
+            '{"competitor_ids": ' + json.dumps(competitor_ids) + ', '
+            '"watch_url": {{watch_url|tojson}}, '
+            '"current_snapshot": {{current_snapshot|tojson}}, '
+            '"diff": {{diff|tojson}}}'
+        )
         payload = {
-            "url": competitor.url,
-            "title": f"{WATCH_TITLE_PREFIX} {competitor.name} · {competitor.niche}",
-            "fetch_backend": "html_webdriver",
+            "url": watch.url,
+            "title": f"{WATCH_TITLE_PREFIX} {competitor.name} · {watch.id}",
+            "fetch_backend": _fetch_backend(watch.url),
             "notification_urls": [_notification_url()],
-            "notification_body": notification_body.replace("COMPETITOR_ID", competitor.id),
+            "notification_body": notification_body,
             "notification_format": "text",
-            "time_between_check_use_default": True,
-            "paused": False,
+            "time_between_check_use_default": False,
+            "time_between_check": {"hours": watch.interval_hours, "minutes": 0, "seconds": 0},
+            # G4S serves Radware HTTP 247 from this runtime even with headful
+            # Chrome + stealth + long waits. Keep the watches visible but paused;
+            # LinkedIn/YouTube feeds in config/feeds.json remain the live G4S signal.
+            "paused": _is_g4s(watch.url),
+            **_watch_fetch_options(watch.url),
         }
-        existing_watch = existing_by_url.get(_canonical_url(competitor.url))
+        existing_watch = existing_by_url.get(_canonical_url(watch.url))
         method = "PUT" if existing_watch else "POST"
         target = f"{endpoint}/{existing_watch['uuid']}" if existing_watch else endpoint
         create_request = urllib.request.Request(
@@ -130,41 +173,13 @@ def provision_changedetection() -> list[dict[str, Any]]:
                 results.append(
                     {
                         "competitor_id": competitor.id,
+                        "watch_id": watch.id,
                         "status": "updated" if existing_watch else "created",
                         "http_status": response.status,
-                        "url": competitor.url,
+                        "url": watch.url,
                     }
                 )
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"failed to create watch for {competitor.id}: HTTP {exc.code}") from exc
+            raise RuntimeError(f"failed to create watch for {watch.id}: HTTP {exc.code}") from exc
 
-    for watch_url, existing_watch in existing_by_url.items():
-        if (
-            watch_url in active_urls
-            or watch_url not in LEGACY_WATCH_URLS
-            or not _legacy_watch_is_aura_owned(existing_watch, endpoint, headers)
-        ):
-            continue
-        watch_id = existing_watch.get("uuid")
-        if not watch_id:
-            continue
-        target = f"{endpoint}/{watch_id}"
-        pause_request = urllib.request.Request(
-            target,
-            data=json.dumps({"paused": True}).encode("utf-8"),
-            headers={**headers, "Content-Type": "application/json"},
-            method="PUT",
-        )
-        try:
-            with urllib.request.urlopen(pause_request, timeout=20) as response:
-                results.append(
-                    {
-                        "watch_id": watch_id,
-                        "status": "paused",
-                        "http_status": response.status,
-                        "url": watch_url,
-                    }
-                )
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"failed to pause legacy watch {watch_id}: HTTP {exc.code}") from exc
     return results

@@ -1,7 +1,17 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   intelligence:
-    build: .
+    build:
+      context: .
+      labels:
+        com.jaassure.cleanup: competitor-intelligence
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8787:8787"
     environment:
@@ -10,6 +20,10 @@ services:
       INTEL_DB_PATH: /app/data/intelligence.db
       INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      CHANGEDETECTION_API_URL: http://changedetection:5000
+      CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
     volumes:
       - intelligence-data:/app/data
       - ./config:/app/config:ro
@@ -17,9 +31,13 @@ services:
       - changedetection
 
   worker:
-    build: .
+    build:
+      context: .
+      labels:
+        com.jaassure.cleanup: competitor-intelligence
     command: ["python", "-m", "competitor_intelligence", "worker"]
     restart: unless-stopped
+    logging: *default-logging
     environment:
       INTEL_HOST: 0.0.0.0
       INTEL_PORT: 8787
@@ -27,6 +45,10 @@ services:
       INTEL_SCAN_INTERVAL: ${INTEL_SCAN_INTERVAL:-900}
       INTEL_WEBHOOK_TOKEN: ${INTEL_WEBHOOK_TOKEN:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
+      CHANGEDETECTION_API_URL: http://changedetection:5000
+      CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
     volumes:
       - intelligence-data:/app/data
       - ./config:/app/config:ro
@@ -37,30 +59,71 @@ services:
     build:
       context: ./changedetection-ui
       dockerfile: Dockerfile
+      labels:
+        com.jaassure.cleanup: competitor-intelligence
     restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "${CHANGEDETECTION_PORT:-5001}:5000"
+      # The unauthenticated changedetection UI is local-only by default. Set
+      # CHANGEDETECTION_BIND_HOST=0.0.0.0 only behind an access-controlled proxy.
+      - "${CHANGEDETECTION_BIND_HOST:-127.0.0.1}:${CHANGEDETECTION_PORT:-5001}:5000"
     environment:
       BASE_URL: ${CHANGEDETECTION_BASE_URL:-http://localhost:5001}
-      PLAYWRIGHT_DRIVER_URL: ws://browser-chrome:3000
+      # stealth=1 helps some bot managers; headful + disabled HTTP/2/QUIC are
+      # required for publishers that challenge headless/HTTP2 clients (e.g. G4S).
+      PLAYWRIGHT_DRIVER_URL: ${PLAYWRIGHT_DRIVER_URL:-ws://browser-chrome:3000/?headful=true&stealth=1&--disable-http2&--disable-quic&--window-size=1920,1080}
+      FETCH_WORKERS: ${FETCH_WORKERS:-1}
+      # Extra seconds before extracting text; G4S Radware challenges need time to clear.
+      WEBDRIVER_DELAY_BEFORE_CONTENT_READY: ${WEBDRIVER_DELAY_BEFORE_CONTENT_READY:-12}
+      # Required so webhooks can reach Intelligence on the Docker network
+      # (intelligence:8787) or the host dashboard (host.docker.internal:8787).
+      # Without this, AppRise refuses private/IANA-restricted notification targets.
+      ALLOW_IANA_RESTRICTED_ADDRESSES: ${ALLOW_IANA_RESTRICTED_ADDRESSES:-true}
       # The upstream image disables visual screenshot diffing by default.
       # Keep it available alongside the text processor used by AURA webhooks.
       DISABLED_PROCESSORS: ${DISABLED_PROCESSORS:-}
     volumes:
       - changedetection-data:/datastore
     depends_on:
-      - browser-chrome
+      browser-chrome:
+        condition: service_healthy
+    # So post://host.docker.internal:8787 works when Intelligence runs via ./run.sh --local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   browser-chrome:
     image: dgtlmoon/sockpuppetbrowser:latest
     hostname: browser-chrome
     restart: unless-stopped
+    logging: *default-logging
+    init: true
+    # sockpuppetbrowser creates one Chrome profile and scratch directory per
+    # CDP connection. Keep those short-lived files off the Docker overlay
+    # filesystem so an aborted session cannot exhaust the host disk.
+    tmpfs:
+      - /tmp:size=${BROWSER_TMPFS_SIZE:-1g},mode=1777
+      - /home/chrome:size=${BROWSER_HOME_TMPFS_SIZE:-512m},uid=1000,gid=1000,mode=0700
+    shm_size: 2gb
+    environment:
+      # Match FETCH_WORKERS=1. Extra concurrent Chrome slots race CDP sessions
+      # ("Target page, context or browser has been closed") under a long queue.
+      MAX_CONCURRENT_CHROME_PROCESSES: ${MAX_CONCURRENT_CHROME_PROCESSES:-1}
+      WS_PING_TIMEOUT: ${WS_PING_TIMEOUT:-60}
+      CONNECTION_QUEUE_TIMEOUT: ${CONNECTION_QUEUE_TIMEOUT:-300}
+      LOG_LEVEL: ${BROWSER_LOG_LEVEL:-INFO}
     cap_add:
       - SYS_ADMIN
+    healthcheck:
+      test: ["CMD", "python3", "/usr/src/app/docker-health-check.py", "--host", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   searxng:
     image: searxng/searxng:latest
     profiles: ["discovery"]
+    logging: *default-logging
     ports:
       - "8080:8080"
     environment:
@@ -73,12 +136,56 @@ services:
       - ./config/searxng/limiter.toml:/etc/searxng/limiter.toml:ro
 
   rsshub:
-    image: diygod/rsshub:latest
+    image: diygod/rsshub:chromium-bundled
     profiles: ["social"]
+    restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "1200:1200"
+      - "127.0.0.1:1200:1200"
+    environment:
+      NODE_ENV: production
+      CACHE_TYPE: redis
+      REDIS_URL: redis://rsshub-redis:6379/
+      CACHE_EXPIRE: "600"
+      REQUESTS_TIMEOUT: "60000"
+    depends_on:
+      rsshub-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1200/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  rsshub-redis:
+    image: redis:7-alpine
+    profiles: ["social"]
+    restart: unless-stopped
+    logging: *default-logging
+    # RSSHub only needs a hot cache. Disable RDB persistence so a Docker
+    # volume permission / disk issue cannot put Redis into MISCONF and 503
+    # every route (including /healthz).
+    command:
+      [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--stop-writes-on-bgsave-error",
+        "no",
+      ]
+    volumes:
+      - rsshub-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   intelligence-data:
   changedetection-data:
   searxng-data:
+  rsshub-redis-data:
