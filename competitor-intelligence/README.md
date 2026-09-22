@@ -52,6 +52,13 @@ website registry and polls configured feeds every 15 minutes by default. These
 services are optional: the direct website collector and webhook endpoint still
 work when only the intelligence container is running.
 
+The compose setup also enables changedetection.io's `Visual / Image screenshot
+change detection` processor. The three AURA-provisioned watches intentionally
+remain `Webpage Text/HTML, JSON and PDF changes` because the intelligence
+webhook needs text for deterministic classification. Use the visual processor
+for a separate watch when you need before/after screenshot diffs; it requires
+the configured Playwright browser backend.
+
 ## Run it
 
 From this directory, with Python 3.11 or newer:
@@ -98,6 +105,7 @@ INTEL_WEBHOOK_TOKEN=replace-with-a-long-random-value
 CHANGEDETECTION_API_URL=http://localhost:5001
 CHANGEDETECTION_API_KEY=replace-with-changedetection-api-key
 SEARXNG_URL=http://localhost:8080
+DISABLED_PROCESSORS=
 ```
 
 The initial URL registry contains product-specific Singapore pages for Chubb

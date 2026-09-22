@@ -34,13 +34,18 @@ services:
       - intelligence
 
   changedetection:
-    image: dgtlmoon/changedetection.io:latest
+    build:
+      context: ./changedetection-ui
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "${CHANGEDETECTION_PORT:-5001}:5000"
     environment:
       BASE_URL: ${CHANGEDETECTION_BASE_URL:-http://localhost:5001}
       PLAYWRIGHT_DRIVER_URL: ws://browser-chrome:3000
+      # The upstream image disables visual screenshot diffing by default.
+      # Keep it available alongside the text processor used by AURA webhooks.
+      DISABLED_PROCESSORS: ${DISABLED_PROCESSORS:-}
     volumes:
       - changedetection-data:/datastore
     depends_on:
