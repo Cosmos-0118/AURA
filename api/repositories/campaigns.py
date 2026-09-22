@@ -490,10 +490,23 @@ def get_campaign_workspace_history(db: Any, campaign_id: str) -> dict[str, Any]:
                 pass
 
     # Lessons
-    lessons = db.execute(
-        "SELECT * FROM lessons_learned WHERE campaign_id = %s ORDER BY created_at DESC",
-        (campaign_id,),
-    ).fetchall()
+    lessons = []
+    try:
+        lessons = db.execute(
+            "SELECT * FROM lessons WHERE source_campaign_id = %s ORDER BY created_at DESC",
+            (campaign_id,),
+        ).fetchall()
+    except Exception:
+        pass
+
+    if not lessons:
+        try:
+            lessons = db.execute(
+                "SELECT * FROM lessons_learned WHERE campaign_id = %s ORDER BY created_at DESC",
+                (campaign_id,),
+            ).fetchall()
+        except Exception:
+            lessons = []
 
     return {
         "campaign": c_row,
