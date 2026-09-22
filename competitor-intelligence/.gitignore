@@ -1,0 +1,6 @@
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.run/
+__pycache__/
+competitor_intelligence/__pycache__/

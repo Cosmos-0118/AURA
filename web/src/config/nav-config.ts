@@ -18,5 +18,16 @@ export const navGroups: NavGroup[] = [
         items: []
       }
     ]
+  },
+  {
+    label: 'INTELLIGENCE',
+    items: [
+      {
+        title: 'Competitor Intelligence',
+        url: '/dashboard/competitor-intelligence',
+        icon: 'search',
+        items: []
+      }
+    ]
   }
 ];

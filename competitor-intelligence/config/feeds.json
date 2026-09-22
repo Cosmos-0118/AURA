@@ -1,0 +1,92 @@
+[
+  {
+    "competitor_id": "jade-howden",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/howden-insurance/posts"
+  },
+  {
+    "competitor_id": "jade-howden",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/youtube/channel/UCo2LeAyiNk8PaWjZFBNCdfQ"
+  },
+  {
+    "competitor_id": "jade-chubb",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/chubb/posts"
+  },
+  {
+    "competitor_id": "jade-chubb",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/youtube/channel/UCKUW_iz1AZwr_UBOp9mN4iQ"
+  },
+  {
+    "competitor_id": "jade-anglo-east",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/anglo-east-group/posts"
+  },
+  {
+    "competitor_id": "jade-liberty",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/liberty-specialty-markets/posts"
+  },
+  {
+    "competitor_id": "doctorshield-marsh-medefend",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/marsh-asia/posts"
+  },
+  {
+    "competitor_id": "doctorshield-mps",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/medical-protection-society/posts"
+  },
+  {
+    "competitor_id": "doctorshield-mps",
+    "source": "rss",
+    "url": "https://www.spreaker.com/show/4298729/episodes/feed"
+  },
+  {
+    "competitor_id": "doctorshield-income",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/incomeinsurance/posts"
+  },
+  {
+    "competitor_id": "doctorshield-income",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/youtube/channel/UC4YE_agXOLEA0S0SX9N-yvg"
+  },
+  {
+    "competitor_id": "doctorshield-howden",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/howden-insurance/posts"
+  },
+  {
+    "competitor_id": "doctorshield-howden",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/youtube/channel/UCo2LeAyiNk8PaWjZFBNCdfQ"
+  },
+  {
+    "competitor_id": "jaguar-parcel-pro",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/ups-capital/posts"
+  },
+  {
+    "competitor_id": "jaguar-brinks",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/brinkssingapore/posts"
+  },
+  {
+    "competitor_id": "jaguar-brinks",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/brinks/posts"
+  },
+  {
+    "competitor_id": "jaguar-g4s",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/linkedin/company/g4s/posts"
+  },
+  {
+    "competitor_id": "jaguar-g4s",
+    "source": "rsshub",
+    "url": "http://127.0.0.1:1200/youtube/channel/UChZ5QPPYCQIhPqoRrenp2NA"
+  }
+]
