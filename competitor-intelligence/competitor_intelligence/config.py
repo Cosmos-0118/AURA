@@ -36,6 +36,8 @@ def load_competitors(path: Path = COMPETITORS_PATH) -> list[Competitor]:
     if not path.exists():
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError(f"Competitor configuration must be a list: {path}")
     return [Competitor(**item) for item in raw]
 
 

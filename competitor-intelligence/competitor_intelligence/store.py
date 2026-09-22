@@ -27,6 +27,12 @@ class Store:
         with closing(self._connect()) as connection, connection:
             connection.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS organizations (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    website TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 CREATE TABLE IF NOT EXISTS competitors (
                     id TEXT PRIMARY KEY,
                     brand_id TEXT NOT NULL,
@@ -35,6 +41,13 @@ class Store:
                     countries TEXT NOT NULL,
                     url TEXT NOT NULL,
                     priority TEXT NOT NULL DEFAULT 'medium',
+                    organization_id TEXT NOT NULL DEFAULT '',
+                    relationship TEXT NOT NULL DEFAULT 'DIRECT_COMPETITOR',
+                    market TEXT NOT NULL DEFAULT '',
+                    product_category TEXT NOT NULL DEFAULT '',
+                    monitor_enabled INTEGER NOT NULL DEFAULT 1,
+                    retired INTEGER NOT NULL DEFAULT 0,
+                    registry_managed INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE TABLE IF NOT EXISTS snapshots (
@@ -75,6 +88,33 @@ class Store:
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
+            self._ensure_column(connection, "competitors", "organization_id", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                connection,
+                "competitors",
+                "relationship",
+                "TEXT NOT NULL DEFAULT 'DIRECT_COMPETITOR'",
+            )
+            self._ensure_column(connection, "competitors", "market", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                connection,
+                "competitors",
+                "product_category",
+                "TEXT NOT NULL DEFAULT ''",
+            )
+            self._ensure_column(
+                connection,
+                "competitors",
+                "monitor_enabled",
+                "INTEGER NOT NULL DEFAULT 1",
+            )
+            self._ensure_column(connection, "competitors", "retired", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(
+                connection,
+                "competitors",
+                "registry_managed",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
             self._ensure_column(connection, "snapshots", "source_key", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "snapshots", "source_url", "TEXT")
             self._ensure_column(connection, "snapshots", "market", "TEXT")
@@ -92,6 +132,12 @@ class Store:
                     ON events(competitor_id, event_key)
                 """
             )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_competitors_organization
+                    ON competitors(organization_id)
+                """
+            )
             self._migrate_snapshot_streams(connection)
             connection.commit()
 
@@ -107,19 +153,44 @@ class Store:
         if column not in columns:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
-    def upsert_competitor(self, competitor: Competitor) -> None:
+    def upsert_competitor(self, competitor: Competitor, registry_managed: bool = False) -> None:
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
-                INSERT INTO competitors(id, brand_id, name, niche, countries, url, priority)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO organizations(id, name, website)
+                VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    website = excluded.website
+                """,
+                (
+                    competitor.organization_id,
+                    competitor.name,
+                    self._website_root(competitor.url),
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO competitors(
+                    id, brand_id, name, niche, countries, url, priority,
+                    organization_id, relationship, market, product_category, monitor_enabled, retired,
+                    registry_managed
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     brand_id = excluded.brand_id,
                     name = excluded.name,
                     niche = excluded.niche,
                     countries = excluded.countries,
                     url = excluded.url,
-                    priority = excluded.priority
+                    priority = excluded.priority,
+                    organization_id = excluded.organization_id,
+                    relationship = excluded.relationship,
+                    market = excluded.market,
+                    product_category = excluded.product_category,
+                    monitor_enabled = excluded.monitor_enabled,
+                    retired = excluded.retired,
+                    registry_managed = excluded.registry_managed
                 """,
                 (
                     competitor.id,
@@ -129,13 +200,46 @@ class Store:
                     json.dumps(competitor.countries),
                     competitor.url,
                     competitor.priority,
+                    competitor.organization_id,
+                    competitor.relationship,
+                    competitor.market,
+                    competitor.product_category,
+                    int(competitor.monitor),
+                    int(competitor.retired),
+                    int(registry_managed),
                 ),
             )
 
-    def list_competitors(self) -> list[Competitor]:
+    def list_competitors(self, active_only: bool = False) -> list[Competitor]:
         with closing(self._connect()) as connection, connection:
-            rows = connection.execute("SELECT * FROM competitors ORDER BY priority, name").fetchall()
+            query = "SELECT * FROM competitors WHERE retired = 0"
+            if active_only:
+                query += " AND monitor_enabled = 1"
+            rows = connection.execute(f"{query} ORDER BY priority, name").fetchall()
         return [self._competitor_from_row(row) for row in rows]
+
+    def retire_missing_competitors(
+        self, active_ids: set[str], legacy_ids: set[str] | None = None
+    ) -> None:
+        legacy_ids = legacy_ids or set()
+        with closing(self._connect()) as connection, connection:
+            managed_clause = "registry_managed = 1"
+            managed_values: tuple[str, ...] = ()
+            if legacy_ids:
+                placeholders = ", ".join("?" for _ in legacy_ids)
+                managed_clause += f" OR id IN ({placeholders})"
+                managed_values = tuple(sorted(legacy_ids))
+            if active_ids:
+                placeholders = ", ".join("?" for _ in active_ids)
+                connection.execute(
+                    f"UPDATE competitors SET monitor_enabled = 0, retired = 1 WHERE ({managed_clause}) AND id NOT IN ({placeholders})",
+                    managed_values + tuple(sorted(active_ids)),
+                )
+            else:
+                connection.execute(
+                    f"UPDATE competitors SET monitor_enabled = 0, retired = 1 WHERE {managed_clause}",
+                    managed_values,
+                )
 
     def get_competitor(self, competitor_id: str) -> Competitor | None:
         with closing(self._connect()) as connection, connection:
@@ -146,10 +250,15 @@ class Store:
 
     def find_competitor_by_url(self, url: str) -> Competitor | None:
         with closing(self._connect()) as connection, connection:
-            rows = connection.execute("SELECT * FROM competitors").fetchall()
+            rows = connection.execute(
+                "SELECT * FROM competitors WHERE monitor_enabled = 1 AND retired = 0"
+            ).fetchall()
         wanted = self.canonical_url(url)
-        row = next((candidate for candidate in rows if self.canonical_url(candidate["url"]) == wanted), None)
-        return self._competitor_from_row(row) if row else None
+        matches = [candidate for candidate in rows if self.canonical_url(candidate["url"]) == wanted]
+        if len(matches) > 1:
+            ids = ", ".join(candidate["id"] for candidate in matches)
+            raise ValueError(f"watch_url matches multiple active relationships; provide competitor_id ({ids})")
+        return self._competitor_from_row(matches[0]) if matches else None
 
     @staticmethod
     def canonical_url(url: str) -> str:
@@ -446,6 +555,12 @@ class Store:
                     c.name AS competitor_name,
                     c.brand_id,
                     c.priority,
+                    c.organization_id,
+                    c.relationship,
+                    c.market AS relationship_market,
+                    c.product_category,
+                    c.monitor_enabled,
+                    c.retired,
                     s.source,
                     s.source_url,
                     s.market,
@@ -463,6 +578,7 @@ class Store:
                     ORDER BY sx.scraped_at DESC
                     LIMIT 1
                 )
+                WHERE c.retired = 0
                 ORDER BY c.priority, c.name
                 """
             ).fetchall()
@@ -471,7 +587,13 @@ class Store:
     def source_competitor_counts(self) -> dict[str, int]:
         with closing(self._connect()) as connection, connection:
             rows = connection.execute(
-                "SELECT source, COUNT(DISTINCT competitor_id) AS competitors FROM snapshots GROUP BY source"
+                """
+                SELECT s.source, COUNT(DISTINCT s.competitor_id) AS competitors
+                FROM snapshots s
+                JOIN competitors c ON c.id = s.competitor_id
+                WHERE c.monitor_enabled = 1
+                GROUP BY s.source
+                """
             ).fetchall()
         return {row["source"]: row["competitors"] for row in rows}
 
@@ -488,14 +610,36 @@ class Store:
                 FROM events
                 """
             ).fetchone()
-            watchlist = connection.execute("SELECT COUNT(*) AS count FROM competitors").fetchone()["count"]
+            watchlist = connection.execute(
+                "SELECT COUNT(*) AS count FROM competitors WHERE monitor_enabled = 1"
+            ).fetchone()["count"]
+            relationships = connection.execute(
+                "SELECT COUNT(*) AS count FROM competitors WHERE retired = 0"
+            ).fetchone()["count"]
+            organizations = connection.execute(
+                """
+                SELECT COUNT(DISTINCT o.id) AS count
+                FROM organizations o
+                JOIN competitors c ON c.organization_id = o.id
+                WHERE c.retired = 0
+                """
+            ).fetchone()["count"]
         return {
             "total": row["total"] or 0,
             "high": row["high"] or 0,
             "medium": row["medium"] or 0,
             "low": row["low"] or 0,
             "competitors": watchlist or 0,
+            "relationships": relationships or 0,
+            "organizations": organizations or 0,
         }
+
+    @staticmethod
+    def _website_root(url: str) -> str:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parsed = urlsplit(url.strip())
+        return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), "", "", ""))
 
     def _competitor_from_row(self, row: sqlite3.Row) -> Competitor:
         return Competitor(
@@ -506,6 +650,12 @@ class Store:
             countries=json.loads(row["countries"]),
             url=row["url"],
             priority=row["priority"],
+            organization_id=row["organization_id"],
+            relationship=row["relationship"],
+            market=row["market"],
+            product_category=row["product_category"],
+            monitor=bool(row["monitor_enabled"]),
+            retired=bool(row["retired"]),
         )
 
     def _snapshot_from_row(self, row: sqlite3.Row) -> Snapshot:

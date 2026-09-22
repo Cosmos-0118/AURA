@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from competitor_intelligence.analysis import content_hash, meaningful_change
 from competitor_intelligence.collectors import CollectedContent, FeedItem
+from competitor_intelligence.config import load_competitors
 from competitor_intelligence.models import Competitor
 from competitor_intelligence.provision import _notification_url, provision_changedetection
 from competitor_intelligence.service import IntelligenceService
@@ -17,6 +18,106 @@ from competitor_intelligence.store import Store
 
 
 class IntelligenceCoreTests(unittest.TestCase):
+    def test_registry_models_companies_as_brand_relationships(self) -> None:
+        registry = load_competitors()
+        self.assertEqual(len(registry), 13)
+        self.assertEqual(sum(item.monitor for item in registry), 12)
+        self.assertEqual(len({item.organization_id for item in registry}), 11)
+
+        howden = [item for item in registry if item.organization_id == "howden"]
+        self.assertEqual({item.brand_id for item in howden}, {"jade", "doctorshield"})
+        self.assertTrue(all(item.relationship == "DIRECT_COMPETITOR" for item in howden))
+
+        chubb = next(item for item in registry if item.organization_id == "chubb" and item.brand_id == "jade")
+        self.assertEqual(chubb.relationship, "DIRECT_COMPETITOR")
+        marsh = next(item for item in registry if item.organization_id == "marsh")
+        self.assertEqual(marsh.name, "Marsh / MEDEFEND")
+        liberty_context = next(item for item in registry if item.id == "jaguar-liberty-context")
+        self.assertEqual(liberty_context.relationship, "PARTNER")
+        self.assertFalse(liberty_context.monitor)
+
+    def test_store_persists_relationships_and_active_watchlist_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            for competitor in load_competitors():
+                store.upsert_competitor(competitor)
+
+            summary = store.summary()
+            self.assertEqual(summary["competitors"], 12)
+            self.assertEqual(summary["relationships"], 13)
+            self.assertEqual(summary["organizations"], 11)
+            liberty = store.get_competitor("jaguar-liberty-context")
+            self.assertIsNotNone(liberty)
+            self.assertEqual(liberty.relationship, "PARTNER")
+            self.assertFalse(liberty.monitor)
+            self.assertEqual(len(store.list_competitors(active_only=True)), 12)
+
+    def test_registry_sync_retires_removed_rows_without_deleting_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(
+                Competitor(
+                    id="jade-competitor-1",
+                    brand_id="jade",
+                    name="Legacy watch",
+                    niche="legacy",
+                    countries=["SG"],
+                    url="https://legacy.example.test/watch",
+                ),
+                registry_managed=True,
+            )
+
+            IntelligenceService(store)
+
+            retired = store.get_competitor("jade-competitor-1")
+            self.assertIsNotNone(retired)
+            self.assertTrue(retired.retired)
+            self.assertFalse(retired.monitor)
+            self.assertNotIn("jade-competitor-1", {item.id for item in store.list_competitors()})
+
+    def test_empty_registry_retires_managed_rows_when_file_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            registry_path = Path(directory) / "competitors.json"
+            registry_path.write_text("[]", encoding="utf-8")
+            store = Store(Path(directory) / "test.db")
+            store.upsert_competitor(
+                Competitor(
+                    id="managed-old",
+                    brand_id="jade",
+                    name="Managed old",
+                    niche="legacy",
+                    countries=["SG"],
+                    url="https://legacy.example.test/watch",
+                ),
+                registry_managed=True,
+            )
+
+            with patch("competitor_intelligence.service.load_competitors", return_value=[]), \
+                 patch("competitor_intelligence.service.COMPETITORS_PATH", registry_path):
+                IntelligenceService(store)
+
+            retired = store.get_competitor("managed-old")
+            self.assertIsNotNone(retired)
+            self.assertTrue(retired.retired)
+
+    def test_url_only_lookup_rejects_ambiguous_active_relationships(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            for competitor_id in ("active-one", "active-two"):
+                store.upsert_competitor(
+                    Competitor(
+                        id=competitor_id,
+                        brand_id="jade",
+                        name=competitor_id,
+                        niche="valuable goods",
+                        countries=["SG"],
+                        url="https://example.test/shared",
+                    )
+                )
+
+            with self.assertRaisesRegex(ValueError, "multiple active relationships"):
+                store.find_competitor_by_url("https://EXAMPLE.TEST/shared/")
+
     def test_normalized_hash_ignores_whitespace_noise(self) -> None:
         self.assertEqual(content_hash("A  page\nwith text"), content_hash("A page with   text"))
         self.assertFalse(meaningful_change("Trusted by 8,000 businesses", "Trusted by 8,001 businesses"))
@@ -292,6 +393,88 @@ class IntelligenceCoreTests(unittest.TestCase):
         self.assertEqual(result[0]["status"], "updated")
         self.assertEqual(request.get_method(), "PUT")
         self.assertTrue(request.full_url.endswith("/api/v1/watch/watch-id"))
+
+    def test_legacy_changedetection_watch_is_paused(self) -> None:
+        class FakeResponse:
+            def __init__(self, body: str, status: int = 200):
+                self.body = body.encode("utf-8")
+                self.status = status
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self.body
+
+        responses = [
+            FakeResponse(
+                json.dumps(
+                    {
+                        "legacy-watch": {
+                            "url": "https://www.msig.com.sg/commercial/professional-indemnity"
+                        }
+                    }
+                )
+            ),
+            FakeResponse(
+                json.dumps(
+                    {
+                        "notification_urls": [
+                            "post://intelligence:8787/api/webhooks/changedetection"
+                        ]
+                    }
+                )
+            ),
+            FakeResponse("{}", 200),
+        ]
+        with patch("competitor_intelligence.provision.CHANGEDETECTION_API_KEY", "api-key"), \
+             patch("competitor_intelligence.provision.load_competitors", return_value=[]), \
+             patch("competitor_intelligence.provision.urllib.request.urlopen", side_effect=responses) as opener:
+            result = provision_changedetection()
+
+        request = opener.call_args_list[2].args[0]
+        self.assertEqual(result[0]["status"], "paused")
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertTrue(request.full_url.endswith("/api/v1/watch/legacy-watch"))
+        self.assertEqual(json.loads(request.data), {"paused": True})
+
+    def test_manual_legacy_changedetection_watch_is_not_paused(self) -> None:
+        class FakeResponse:
+            def __init__(self, body: str):
+                self.body = body.encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self.body
+
+        responses = [
+            FakeResponse(
+                json.dumps(
+                    {
+                        "manual-watch": {
+                            "url": "https://www.msig.com.sg/commercial/professional-indemnity"
+                        }
+                    }
+                )
+            ),
+            FakeResponse(json.dumps({"notification_urls": []})),
+        ]
+
+        with patch("competitor_intelligence.provision.CHANGEDETECTION_API_KEY", "api-key"), \
+             patch("competitor_intelligence.provision.load_competitors", return_value=[]), \
+             patch("competitor_intelligence.provision.urllib.request.urlopen", side_effect=responses) as opener:
+            result = provision_changedetection()
+
+        self.assertEqual(result, [])
+        self.assertEqual(opener.call_count, 2)
 
 
 if __name__ == "__main__":

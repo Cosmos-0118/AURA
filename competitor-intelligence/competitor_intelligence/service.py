@@ -6,9 +6,18 @@ from typing import Any
 
 from .analysis import build_change_summary, classify_change, meaningful_change, new_snapshot
 from .collectors import CollectedContent, collect_rss, collect_website, search_searxng
-from .config import SEARXNG_URL, load_competitors, load_feeds
+from .config import COMPETITORS_PATH, SEARXNG_URL, load_competitors, load_feeds
 from .models import ChangeEvent, Competitor, Snapshot, utc_now
 from .store import Store, new_id
+
+
+LEGACY_REGISTRY_IDS = frozenset(
+    {
+        "jade-competitor-1",
+        "doctorshield-competitor-1",
+        "jaguar-competitor-1",
+    }
+)
 
 
 @dataclass(slots=True)
@@ -42,11 +51,19 @@ class IntelligenceService:
         self.sync_registry()
 
     def sync_registry(self) -> None:
-        for competitor in load_competitors():
-            self.store.upsert_competitor(competitor)
+        registry = load_competitors()
+        for competitor in registry:
+            self.store.upsert_competitor(competitor, registry_managed=True)
+        if registry or COMPETITORS_PATH.exists():
+            self.store.retire_missing_competitors(
+                {competitor.id for competitor in registry}, LEGACY_REGISTRY_IDS
+            )
 
     def competitors(self) -> list[Competitor]:
         return self.store.list_competitors()
+
+    def active_competitors(self) -> list[Competitor]:
+        return self.store.list_competitors(active_only=True)
 
     def scan(self, competitor_id: str, collected: CollectedContent | None = None) -> ScanResult:
         competitor = self.store.get_competitor(competitor_id)
@@ -103,7 +120,7 @@ class IntelligenceService:
             return ScanResult(competitor.id, "error", False, error=str(exc))
 
     def scan_all(self) -> list[ScanResult]:
-        return [self.scan(competitor.id) for competitor in self.competitors()]
+        return [self.scan(competitor.id) for competitor in self.active_competitors()]
 
     def ingest_changedetection(self, payload: dict[str, Any]) -> ScanResult:
         url = str(payload.get("watch_url") or payload.get("url") or "").strip()
@@ -179,7 +196,12 @@ class IntelligenceService:
         events = []
         for event in self.store.list_events(filters):
             payload = event.to_dict()
+            competitor = self.store.get_competitor(event.competitor_id)
             payload["competitor_name"] = competitor_names.get(event.competitor_id, event.competitor_id)
+            if competitor:
+                payload["organization_id"] = competitor.organization_id
+                payload["relationship"] = competitor.relationship
+                payload["product_category"] = competitor.product_category
             events.append(payload)
         return events
 
@@ -192,7 +214,7 @@ class IntelligenceService:
             {
                 "source": "website",
                 "status": "receiving" if website_scans else "ready",
-                "detail": f"{website_scans}/{len(self.competitors())} URLs scanned",
+                "detail": f"{website_scans}/{len(self.active_competitors())} URLs scanned",
             },
             {
                 "source": "changedetection",

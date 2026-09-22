@@ -20,6 +20,13 @@ const labels = {
   promotion: 'Promotion',
   article: 'Article',
   social_post: 'Social post',
+  DIRECT_COMPETITOR: 'Direct competitor',
+  INDIRECT_COMPETITOR: 'Indirect competitor',
+  PARTNER: 'Partner / overlap',
+  UNDERWRITER: 'Underwriter',
+  DISTRIBUTOR: 'Distributor',
+  SECURE_LOGISTICS_COMPETITOR: 'Secure logistics competitor',
+  ADJACENT: 'Adjacent market',
 };
 
 const scanPhases = [
@@ -132,6 +139,7 @@ function renderEvents(events) {
           <span class="event-competitor">${escapeHtml(event.competitor_name)}</span>
           <span class="badge badge-${escapeHtml(event.impact)}">${escapeHtml(event.impact)} impact</span>
           <span class="badge badge-brand">${escapeHtml(labels[event.brand_id] || event.brand_id)}</span>
+          ${event.relationship ? `<span class="badge badge-relationship">${escapeHtml(labels[event.relationship] || event.relationship)}</span>` : ''}
         </div>
         <p class="event-summary">${escapeHtml(event.summary)}</p>
         <div class="event-meta">
@@ -157,12 +165,13 @@ function openDetail(id) {
   if (!event) return;
   $('#event-detail').innerHTML = `
     <div class="detail">
-      <div class="event-topline"><span class="badge badge-${escapeHtml(event.impact)}">${escapeHtml(event.impact)} impact</span><span class="badge badge-brand">${escapeHtml(labels[event.brand_id] || event.brand_id)}</span></div>
+      <div class="event-topline"><span class="badge badge-${escapeHtml(event.impact)}">${escapeHtml(event.impact)} impact</span><span class="badge badge-brand">${escapeHtml(labels[event.brand_id] || event.brand_id)}</span>${event.relationship ? `<span class="badge badge-relationship">${escapeHtml(labels[event.relationship] || event.relationship)}</span>` : ''}</div>
       <h2>${escapeHtml(event.summary)}</h2>
       <div class="detail-grid">
         <div class="detail-box"><span>Competitor</span><strong>${escapeHtml(event.competitor_name)}</strong></div>
         <div class="detail-box"><span>Market</span><strong>${escapeHtml(labels[event.country] || event.country || 'Regional')}</strong></div>
         <div class="detail-box"><span>Change type</span><strong>${escapeHtml(labels[event.change_type] || event.change_type)}</strong></div>
+        ${event.product_category ? `<div class="detail-box"><span>Product category</span><strong>${escapeHtml(event.product_category)}</strong></div>` : ''}
         <div class="detail-box"><span>Analysis confidence</span><strong>${Math.round(event.confidence * 100)}%</strong></div>
       </div>
       ${event.previous_value || event.current_value ? `<div class="detail-grid"><div class="detail-box"><span>Before</span><strong>${escapeHtml(event.previous_value || 'Not found')}</strong></div><div class="detail-box"><span>After</span><strong>${escapeHtml(event.current_value || 'Not found')}</strong></div></div>` : ''}
@@ -197,8 +206,12 @@ async function refreshDashboard() {
     const monitor = monitors.find((item) => item.competitor_id === competitor.id) || {};
     const source = monitor.source ? `${monitor.source} · ${monitor.versions || 0} version${monitor.versions === 1 ? '' : 's'}` : 'Not checked yet';
     const link = monitor.source_url ? `<a class="watch-link" href="${escapeHtml(monitor.source_url)}" target="_blank" rel="noreferrer">Open source</a>` : '';
+    const relationship = labels[competitor.relationship] || competitor.relationship;
+    const monitorAction = competitor.monitor
+      ? `<button class="watch-action" data-scan-id="${escapeHtml(competitor.id)}">Scan</button>`
+      : '<span class="watch-context">Context only</span>';
     return `
-    <div class="watch-row"><div><div class="watch-name">${escapeHtml(competitor.name)}</div><div class="watch-detail">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)} · ${escapeHtml(competitor.priority)} priority</div><div class="watch-detail">${escapeHtml(source)} · checked ${escapeHtml(formatDate(monitor.last_checked))}</div>${link}</div><button class="watch-action" data-scan-id="${escapeHtml(competitor.id)}">Scan</button></div>
+    <div class="watch-row"><div><div class="watch-name">${escapeHtml(competitor.name)}</div><div class="watch-detail">${escapeHtml(labels[competitor.brand_id] || competitor.brand_id)} · ${escapeHtml(relationship)}</div><div class="watch-detail">${escapeHtml(competitor.product_category)} · ${escapeHtml(competitor.market || competitor.countries.join(', '))}</div><div class="watch-detail">${escapeHtml(source)} · checked ${escapeHtml(formatDate(monitor.last_checked))}</div>${link}</div>${monitorAction}</div>
     `;
   }).join('') || '<div class="empty-state">Add competitors to config/competitors.json.</div>';
   document.querySelectorAll('[data-scan-id]').forEach((button) => button.addEventListener('click', () => scan(button.dataset.scanId, button)));
@@ -238,7 +251,8 @@ async function scanAll() {
   button.disabled = true;
   button.textContent = 'Scanning…';
   clearNotice();
-  startScanOverlay(state.competitors.map((item) => item.name));
+  const activeCompetitors = state.competitors.filter((item) => item.monitor);
+  startScanOverlay(activeCompetitors.map((item) => item.name));
   let outcome = 'complete';
   try {
     const results = await request('/api/scan-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
