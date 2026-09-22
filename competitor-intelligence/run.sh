@@ -10,15 +10,22 @@ if [[ -f "$MODULE_DIR/../.env" ]]; then
 fi
 
 MODE="docker"
-NO_CACHE=1
+# Reusing layers prevents every restart from leaving another 1.5 GB
+# changedetection image behind. Use --no-cache only when deliberately forcing a
+# clean image rebuild.
+NO_CACHE=0
 START_WORKER=1
 START_DISCOVERY=1
+DO_STOP=0
 PORT="${INTEL_PORT:-8787}"
 HOST="${INTEL_HOST:-127.0.0.1}"
 RUN_DIR="$MODULE_DIR/.run"
 SERVER_PID_FILE="$RUN_DIR/server.pid"
 WORKER_PID_FILE="$RUN_DIR/worker.pid"
 WORKER_LOG="$RUN_DIR/worker.log"
+CLEANUP_SCRIPT="$MODULE_DIR/scripts/cleanup-docker.sh"
+CLEANUP_PID_FILE="$RUN_DIR/cleanup.pid"
+CLEANUP_LOG="$RUN_DIR/cleanup.log"
 FEEDS_PATH="$MODULE_DIR/config/feeds.json"
 
 log() {
@@ -31,12 +38,15 @@ Usage: ./run.sh [options]
 
 Starts the competitor-intelligence dashboard and worker.
 By default also starts SearXNG (8080) and RSSHub (1200).
+Ctrl-C (or --stop) shuts everything down and clears runtime junk.
 
 Options:
   --docker         Stop, rebuild, and start the Docker Compose services (default).
   --local          Run the dashboard and worker with Python; still starts
                    SearXNG/RSSHub in Docker when available.
-  --cached         Allow Docker to reuse build cache.
+  --stop           Stop local processes and Compose services, then exit.
+  --cached         Allow Docker to reuse build cache (default).
+  --no-cache       Rebuild Docker images without using the build cache.
   --no-worker      Start only the dashboard server in local mode.
   --no-discovery   Skip SearXNG and RSSHub.
   -h, --help       Show this help.
@@ -44,6 +54,7 @@ Options:
 Examples:
   ./run.sh
   ./run.sh --local
+  ./run.sh --stop
   ./run.sh --docker
   ./run.sh --docker --cached
   ./run.sh --local --no-discovery
@@ -105,8 +116,110 @@ stop_local_processes() {
     while IFS= read -r pid; do
       [[ -n "$pid" ]] || continue
       stop_pid "$pid"
-    done < <(pgrep -f 'python(3)? -m competitor_intelligence worker' 2>/dev/null || true)
+    done < <(pgrep -f 'python(3)? -m competitor_intelligence (worker|serve)' 2>/dev/null || true)
   fi
+}
+
+clear_runtime_junk() {
+  log "Clearing runtime pid/log junk."
+  mkdir -p -- "$RUN_DIR"
+  rm -f -- \
+    "$SERVER_PID_FILE" \
+    "$WORKER_PID_FILE" \
+    "$CLEANUP_PID_FILE" \
+    "$WORKER_LOG" \
+    "$CLEANUP_LOG"
+  rm -rf -- "$RUN_DIR/cleanup.lock" "$MODULE_DIR/.pytest_cache"
+  clear_local_builds
+}
+
+stop_compose_services() {
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Stopping Compose services (volumes and watch history kept)."
+  "${COMPOSE[@]}" down --remove-orphans || true
+}
+
+run_project_image_cleanup() {
+  [[ -x "$CLEANUP_SCRIPT" ]] || return 0
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Removing dangling project Docker images."
+  "$CLEANUP_SCRIPT" --once || true
+}
+
+shutdown_all() {
+  log "Shutting down competitor-intelligence."
+  stop_cleanup_scheduler
+  stop_local_processes
+  stop_compose_services
+  run_project_image_cleanup
+  clear_runtime_junk
+  log "Shutdown complete."
+}
+
+start_cleanup_scheduler() {
+  [[ -x "$CLEANUP_SCRIPT" ]] || {
+    log "Cleanup script is unavailable; skipping the periodic cleanup scheduler."
+    return 0
+  }
+  local interval="${CLEANUP_INTERVAL_SECONDS:-21600}"
+  [[ "$interval" =~ ^[0-9]+$ ]] || {
+    log "Invalid CLEANUP_INTERVAL_SECONDS=$interval; using 21600 seconds."
+    interval=21600
+  }
+  if [[ "$interval" == "0" ]]; then
+    stop_cleanup_scheduler
+    log "Periodic Docker cleanup disabled (CLEANUP_INTERVAL_SECONDS=0)."
+    return 0
+  fi
+
+  if [[ -f "$CLEANUP_PID_FILE" ]]; then
+    local existing_pid
+    existing_pid="$(<"$CLEANUP_PID_FILE")"
+    if [[ "$existing_pid" =~ ^[0-9]+$ ]] && kill -0 "$existing_pid" 2>/dev/null; then
+      local existing_command
+      existing_command="$(process_command "$existing_pid")"
+      if [[ "$existing_command" == *"$CLEANUP_SCRIPT --daemon"* ]]; then
+        log "Periodic cleanup scheduler already running (pid $existing_pid)."
+        return 0
+      fi
+    fi
+    rm -f -- "$CLEANUP_PID_FILE"
+  fi
+
+  mkdir -p -- "$RUN_DIR"
+  log "Starting periodic Docker cleanup every ${interval}s."
+  nohup env CLEANUP_INTERVAL_SECONDS="$interval" "$CLEANUP_SCRIPT" --daemon \
+    >"$CLEANUP_LOG" 2>&1 < /dev/null &
+  echo "$!" > "$CLEANUP_PID_FILE"
+}
+
+stop_cleanup_scheduler() {
+  [[ -f "$CLEANUP_PID_FILE" ]] || return 0
+  local existing_pid
+  existing_pid="$(<"$CLEANUP_PID_FILE")"
+  if [[ "$existing_pid" =~ ^[0-9]+$ ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    local existing_command
+    existing_command="$(process_command "$existing_pid")"
+    if [[ "$existing_command" == *"$CLEANUP_SCRIPT --daemon"* ]]; then
+      log "Stopping periodic Docker cleanup scheduler (pid $existing_pid)."
+      kill "$existing_pid" 2>/dev/null || true
+      for _ in 1 2 3 4 5; do
+        kill -0 "$existing_pid" 2>/dev/null || break
+        sleep 1
+      done
+      if kill -0 "$existing_pid" 2>/dev/null; then
+        log "Cleanup scheduler did not stop gracefully; terminating it."
+        kill -KILL "$existing_pid" 2>/dev/null || true
+      fi
+    else
+      log "Leaving unrelated process $existing_pid running; removing stale cleanup pid file."
+    fi
+  fi
+  rm -f -- "$CLEANUP_PID_FILE"
 }
 
 clear_local_builds() {
@@ -136,14 +249,17 @@ PY
 
 load_local_changedetection_key() {
   if [[ -n "${CHANGEDETECTION_API_KEY:-}" ]]; then
-    return
+    return 0
   fi
   if ! command -v docker >/dev/null 2>&1; then
-    return
+    return 0
   fi
   local token
-  token="$("${COMPOSE[@]}" exec -T changedetection python -c 'import json; print(json.load(open("/datastore/changedetection.json"))["settings"]["application"]["api_access_token"])' 2>/dev/null)" || return
-  [[ -n "$token" ]] || return
+  if ! token="$("${COMPOSE[@]}" exec -T changedetection python -c 'import json; print(json.load(open("/datastore/changedetection.json"))["settings"]["application"]["api_access_token"])' 2>/dev/null)"; then
+    log "Changedetection is unavailable; continuing without its local API credential."
+    return 0
+  fi
+  [[ -n "$token" ]] || return 0
   export CHANGEDETECTION_API_KEY="$token"
   log "Loaded the local changedetection API credential."
 }
@@ -209,8 +325,8 @@ start_discovery_services() {
     return 0
   fi
 
-  log "Starting SearXNG and RSSHub."
-  "${COMPOSE[@]}" up -d searxng rsshub
+  log "Starting SearXNG, RSSHub, and RSSHub Redis."
+  "${COMPOSE[@]}" up -d searxng rsshub-redis rsshub
   if ! wait_for_url "http://127.0.0.1:8080/" "SearXNG" 45; then
     "${COMPOSE[@]}" logs --tail=40 searxng || true
     log "Continuing without a healthy SearXNG."
@@ -218,20 +334,44 @@ start_discovery_services() {
     export SEARXNG_URL="${SEARXNG_URL:-$searxng_url}"
     log "SEARXNG_URL=${SEARXNG_URL}"
   fi
-  if ! wait_for_url "http://127.0.0.1:1200/" "RSSHub" 45; then
+  if ! wait_for_url "http://127.0.0.1:1200/healthz" "RSSHub" 60; then
     "${COMPOSE[@]}" logs --tail=40 rsshub || true
     log "Continuing without a healthy RSSHub."
   fi
   warn_empty_feeds
 }
 
+start_changedetection_services() {
+  local required="${1:-0}"
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    log "Docker is unavailable; changedetection was not started."
+    [[ "$required" == 1 ]] && return 1
+    return 0
+  fi
+
+  log "Starting changedetection (and browser-chrome)."
+  "${COMPOSE[@]}" up -d changedetection
+  if ! wait_for_url "http://127.0.0.1:5001/" "changedetection UI"; then
+    "${COMPOSE[@]}" logs --tail=50 changedetection || true
+    if [[ "$required" == 1 ]]; then
+      return 1
+    fi
+    log "Continuing without a healthy changedetection UI on :5001."
+    return 0
+  fi
+}
+
 start_local() {
   check_python
+  # Bring collectors back up after a previous --stop / Ctrl-C shutdown.
+  start_changedetection_services 0 || true
   start_discovery_services "http://127.0.0.1:8080"
   load_local_changedetection_key
   if [[ -n "${CHANGEDETECTION_API_KEY:-}" && -z "${CHANGEDETECTION_API_URL:-}" ]]; then
     export CHANGEDETECTION_API_URL=http://127.0.0.1:5001
   fi
+  # Let changedetection containers reach the host Python dashboard for webhooks.
+  export INTEL_WEBHOOK_HOST="${INTEL_WEBHOOK_HOST:-host.docker.internal:${PORT}}"
   if [[ -z "${SEARXNG_URL:-}" && "$START_DISCOVERY" == 1 ]]; then
     export SEARXNG_URL=http://127.0.0.1:8080
   fi
@@ -257,10 +397,13 @@ start_local() {
   fi
 
   cleanup() {
+    # Avoid running shutdown twice when INT/TERM already triggered exit.
+    trap - EXIT INT TERM
     if [[ -n "$worker_pid" ]]; then
       stop_pid "$worker_pid"
+      worker_pid=""
     fi
-    rm -f -- "$WORKER_PID_FILE"
+    shutdown_all
   }
   trap cleanup EXIT
   trap 'exit 130' INT
@@ -268,8 +411,9 @@ start_local() {
 
   log "Dashboard is running at http://127.0.0.1:${PORT}"
   log "SearXNG http://127.0.0.1:8080 · RSSHub http://127.0.0.1:1200 · changedetection http://127.0.0.1:5001"
-  log "Press Ctrl-C to stop the dashboard and worker (Docker collectors keep running)."
+  log "Press Ctrl-C to stop everything (Python + Compose collectors) and clear runtime junk."
   log "Worker log: $WORKER_LOG"
+  start_cleanup_scheduler
   python3 -m competitor_intelligence serve --host "$HOST" --port "$PORT"
 }
 
@@ -290,12 +434,7 @@ start_docker() {
     log "Rebuilding Docker images using available cache."
     "${COMPOSE[@]}" build
   fi
-  log "Starting changedetection."
-  "${COMPOSE[@]}" up -d changedetection
-  if ! wait_for_url "http://127.0.0.1:5001/" "changedetection UI"; then
-    "${COMPOSE[@]}" logs --tail=50 changedetection
-    exit 1
-  fi
+  start_changedetection_services 1 || exit 1
   start_discovery_services "http://searxng:8080"
   load_local_changedetection_key
   log "Starting intelligence and collector worker."
@@ -318,6 +457,15 @@ start_docker() {
   if [[ -n "${SEARXNG_URL:-}" ]]; then
     log "Intelligence container SEARXNG_URL=${SEARXNG_URL}"
   fi
+  start_cleanup_scheduler
+  log "Press Ctrl-C to stop everything and clear runtime junk."
+  trap 'trap - EXIT INT TERM; shutdown_all; exit 130' INT
+  trap 'trap - EXIT INT TERM; shutdown_all; exit 143' TERM
+  trap 'trap - EXIT INT TERM; shutdown_all' EXIT
+  # Keep the foreground shell attached so Ctrl-C can tear the stack down.
+  while true; do
+    sleep 3600
+  done
 }
 
 while (($# > 0)); do
@@ -328,8 +476,14 @@ while (($# > 0)); do
     --docker)
       MODE="docker"
       ;;
+    --stop)
+      DO_STOP=1
+      ;;
     --cached)
       NO_CACHE=0
+      ;;
+    --no-cache)
+      NO_CACHE=1
       ;;
     --no-worker)
       START_WORKER=0
@@ -349,6 +503,11 @@ while (($# > 0)); do
   esac
   shift
 done
+
+if [[ "$DO_STOP" == 1 ]]; then
+  shutdown_all
+  exit 0
+fi
 
 if [[ "$MODE" == "docker" ]]; then
   start_docker

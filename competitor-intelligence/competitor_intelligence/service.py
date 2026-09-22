@@ -10,7 +10,8 @@ import urllib.request
 from typing import Any
 
 from .ai import analyze_diff, article_relevant
-from .analysis import build_change_summary, classify_change, content_hash, meaningful_change, new_snapshot
+from .analysis import (build_change_summary, classify_change, confidence_for_change,
+                       content_hash, meaningful_change, new_snapshot)
 from .collectors import (CollectedContent, collect_rss, collect_watch, collect_website,
                          extract_income_pricing_text, search_searxng)
 from .config import (CHANGEDETECTION_API_KEY, CHANGEDETECTION_API_URL, COMPETITORS_PATH,
@@ -26,6 +27,7 @@ LEGACY_REGISTRY_IDS = frozenset(
         "jaguar-competitor-1",
     }
 )
+FEED_EVENT_SOURCES = frozenset({"rss", "rsshub", "linkedin", "youtube", "news"})
 
 
 @dataclass(slots=True)
@@ -62,6 +64,10 @@ class IntelligenceService:
         self._analysis_inflight: set[str] = set()
         self._registry_loaded = False
         self._registry_signature: tuple[int, int] | None = None
+        # When True, first-seen RSS/RSSHub/YouTube items become feed events.
+        # First poll of each feed seeds baselines silently so the dashboard is
+        # not flooded with historical posts.
+        self._emit_new_feed_items = False
         self.sync_registry()
 
     def sync_registry(self) -> None:
@@ -134,13 +140,41 @@ class IntelligenceService:
 
             def build_event(previous: Snapshot | None) -> ChangeEvent | None:
                 if previous is None:
+                    if (
+                        self._emit_new_feed_items
+                        and current.source in FEED_EVENT_SOURCES
+                    ):
+                        classification = classify_change(
+                            competitor, "", current.content, current.source
+                        )
+                        classification["summary"] = (
+                            f"New public post from {competitor.name}"
+                            + (f": {current.title}" if current.title else ".")
+                        )
+                        if current.title:
+                            classification["current_value"] = current.title
+                        snapshot.change_summary = str(classification["summary"])
+                        return ChangeEvent(
+                            id=new_id("event"),
+                            competitor_id=competitor.id,
+                            brand_id=competitor.brand_id,
+                            country=competitor.countries[0] if competitor.countries else None,
+                            source=current.source,
+                            source_url=current.url or competitor.url,
+                            detected_at=current.observed_at or utc_now(),
+                            **classification,
+                        )
                     return None
                 if watch and watch.kind == "pricing" and (current.source == "website" or current.source_key.endswith("#pricing")):
                     if previous.content == current.content:
                         return None
-                    classification = self._price_change(competitor, previous.content, current.content)
+                    classification = self._price_change(
+                        competitor, previous.content, current.content, current.source
+                    )
                 elif watch and watch.kind in {"news", "insights"}:
-                    classification = self._article_change(competitor, previous.content, current.content)
+                    classification = self._article_change(
+                        competitor, previous.content, current.content, current.source
+                    )
                     if classification is None:
                         return None
                 else:
@@ -194,7 +228,12 @@ class IntelligenceService:
         return due
 
     @staticmethod
-    def _price_change(competitor: Competitor, old: str, new: str) -> dict[str, object]:
+    def _price_change(
+        competitor: Competitor,
+        old: str,
+        new: str,
+        source: str = "website",
+    ) -> dict[str, object]:
         before, after = json.loads(old), json.loads(new)
         old_prices, new_prices = before.get("premiums", {}), after.get("premiums", {})
         changed = [(category, old_prices.get(category), new_prices.get(category))
@@ -214,10 +253,15 @@ class IntelligenceService:
                 "why_it_matters": f"Published medical indemnity pricing affects {competitor.brand_id} comparisons.",
                 "recommended_action": "Review the published rate and date with the DoctorShield owner before responding.",
                 "evidence": json.dumps({"before": before, "after": after}, ensure_ascii=False)[:3000],
-                "confidence": 0.95}
+                "confidence": confidence_for_change(old, new, source, "price_change")}
 
     @staticmethod
-    def _article_change(competitor: Competitor, old: str, new: str) -> dict[str, object] | None:
+    def _article_change(
+        competitor: Competitor,
+        old: str,
+        new: str,
+        source: str = "news",
+    ) -> dict[str, object] | None:
         old_urls = {line.split("\t", 1)[0] for line in old.splitlines()}
         additions = [line.split("\t", 1) for line in new.splitlines()
                      if "\t" in line and line.split("\t", 1)[0] not in old_urls]
@@ -229,12 +273,16 @@ class IntelligenceService:
         if not relevant:
             return None
         url, title, excerpt = relevant[0]
+        confidence = confidence_for_change(old, new, source, "article")
+        # Multiple independently relevant additions strengthen the evidence,
+        # but never allow the count alone to create false certainty.
+        confidence = min(0.98, round(confidence + min(0.06, 0.02 * (len(relevant) - 1)), 2))
         return {"change_type": "article", "impact": "medium",
                 "summary": f"New relevant article from {competitor.name}: {title}",
                 "previous_value": None, "current_value": f"{len(relevant)} new relevant article(s)",
                 "why_it_matters": f"New public content may affect {competitor.brand_id} positioning.",
                 "recommended_action": "Read the article and compare its claims with the JA brand's current messaging.",
-                "evidence": f"{url}\n{excerpt}", "confidence": 0.75}
+                "evidence": f"{url}\n{excerpt}", "confidence": confidence}
 
     def watch_status(self) -> list[dict[str, Any]]:
         rows = []
@@ -385,7 +433,7 @@ class IntelligenceService:
     def poll_feeds(self) -> list[dict[str, Any]]:
         self.sync_registry()
         results: list[dict[str, Any]] = []
-        for feed in load_feeds():
+        for index, feed in enumerate(load_feeds()):
             url = str(feed["url"])
             source = str(feed.get("source", "rss"))
             competitor_id = str(feed.get("competitor_id", ""))
@@ -393,24 +441,36 @@ class IntelligenceService:
             if competitor is None:
                 results.append({"url": url, "status": "error", "error": "Unknown competitor_id"})
                 continue
+            # Pace LinkedIn/YouTube Chromium routes so RSSHub is less likely to 503.
+            if index and (":1200/" in url or "rsshub:" in url):
+                time.sleep(2)
+            feed_cursor = f"feed-seeded:{Store.canonical_url(url)}:{competitor.id}"
+            seeded = bool(self.store.get_cursor(feed_cursor))
             try:
                 items = collect_rss(url, source)
                 created = 0
-                for item in items[:20]:
-                    item_identity = Store.canonical_url(item.url) if item.url != url else item.title
-                    result = self.scan(
-                        competitor.id,
-                        CollectedContent(
-                            content=f"{item.title}\n{item.content}\n{item.url}",
-                            source=source,
-                            title=item.title,
-                            url=Store.canonical_url(item.url),
-                            source_key=f"{Store.canonical_url(url)}#{item_identity}",
-                            market=competitor.countries[0] if competitor.countries else None,
-                        ),
-                    )
-                    created += int(result.changed)
-                results.append({"url": url, "status": "ok", "items": len(items), "events": created})
+                previous_emit = self._emit_new_feed_items
+                self._emit_new_feed_items = seeded
+                try:
+                    for item in items[:20]:
+                        item_identity = Store.canonical_url(item.url) if item.url != url else item.title
+                        result = self.scan(
+                            competitor.id,
+                            CollectedContent(
+                                content=f"{item.title}\n{item.content}\n{item.url}",
+                                source=source,
+                                title=item.title,
+                                url=Store.canonical_url(item.url),
+                                source_key=f"{Store.canonical_url(url)}#{item_identity}",
+                                market=competitor.countries[0] if competitor.countries else None,
+                            ),
+                        )
+                        created += int(result.changed)
+                finally:
+                    self._emit_new_feed_items = previous_emit
+                if not seeded:
+                    self.store.set_cursor(feed_cursor, utc_now())
+                results.append({"url": url, "status": "ok", "items": len(items), "events": created, "seeded": seeded})
             except Exception as exc:
                 results.append({"url": url, "status": "error", "error": str(exc)})
         return results

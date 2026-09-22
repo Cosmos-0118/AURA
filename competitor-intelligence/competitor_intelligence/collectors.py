@@ -17,6 +17,16 @@ from .config import REQUEST_TIMEOUT, SEARXNG_URL
 USER_AGENT = "JA-Assure-Competitor-Intelligence/0.1 (+deterministic-monitor)"
 RETRYABLE_HTTP_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
 MAX_REQUEST_ATTEMPTS = 3
+COOKIE_CONTAINER_PATTERN = re.compile(
+    r"(?:cookie|consent|onetrust|cookiebot|trustarc|quantcast|usercentrics|"
+    r"didomi|gdpr|ccpa|cookieyes|iubenda|osano)",
+    re.IGNORECASE,
+)
+COOKIE_CONTAINER_ATTRIBUTES = frozenset({"id", "class", "role", "aria-label", "aria-labelledby"})
+HTML_VOID_ELEMENTS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+    "meta", "param", "source", "track", "wbr",
+})
 
 
 class BotProtectionChallenge(ValueError):
@@ -45,22 +55,43 @@ class FeedItem:
 class VisibleTextParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._hidden = 0
         self._parts: list[str] = []
+        self._tag_stack: list[tuple[str, bool]] = []
         self.title: str | None = None
         self._in_title = False
 
+    @staticmethod
+    def _is_cookie_container(attrs: list[tuple[str, str | None]]) -> bool:
+        values = [
+            value
+            for key, value in attrs
+            if value and (key in COOKIE_CONTAINER_ATTRIBUTES or key.startswith("data-"))
+        ]
+        return bool(values and COOKIE_CONTAINER_PATTERN.search(" ".join(values)))
+
+    def _visible_context(self) -> bool:
+        return not any(excluded for _, excluded in self._tag_stack)
+
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style", "noscript", "svg", "template"}:
-            self._hidden += 1
+        tag = tag.lower()
+        excluded = (
+            tag in {"script", "style", "noscript", "svg", "template"}
+            or self._is_cookie_container(attrs)
+            or not self._visible_context()
+        )
+        if tag not in HTML_VOID_ELEMENTS:
+            self._tag_stack.append((tag, excluded))
         if tag == "title":
             self._in_title = True
 
     def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
         if tag == "title":
             self._in_title = False
-        if tag in {"script", "style", "noscript", "svg", "template"}:
-            self._hidden = max(0, self._hidden - 1)
+        for index in range(len(self._tag_stack) - 1, -1, -1):
+            if self._tag_stack[index][0] == tag:
+                del self._tag_stack[index:]
+                break
 
     def handle_data(self, data: str) -> None:
         text = " ".join(data.split())
@@ -68,7 +99,7 @@ class VisibleTextParser(HTMLParser):
             return
         if self._in_title and self.title is None:
             self.title = text
-        if self._hidden == 0:
+        if self._visible_context():
             self._parts.append(text)
 
     @property
@@ -97,7 +128,10 @@ class StructuredPageParser(VisibleTextParser):
             self._link = []
 
     def handle_data(self, data: str) -> None:
+        visible = self._visible_context()
         super().handle_data(data)
+        if not visible:
+            return
         if self._cell is not None:
             self._cell.append(data)
         if self._link is not None:
@@ -149,6 +183,7 @@ def request_bytes(
     *,
     accept: str = "*/*",
     extra_headers: dict[str, str] | None = None,
+    timeout: int | None = None,
 ) -> tuple[bytes, str]:
     headers = {
         "Accept": accept,
@@ -159,15 +194,20 @@ def request_bytes(
         url,
         headers=headers,
     )
+    request_timeout = REQUEST_TIMEOUT if timeout is None else timeout
     for attempt in range(MAX_REQUEST_ATTEMPTS):
         try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+            with urllib.request.urlopen(request, timeout=request_timeout) as response:
                 body = response.read()
                 status = getattr(response, "status", None) or response.getcode()
                 if status == 247 or b"kramericaindustries.ac_v2.lib.js" in body[:4096]:
                     raise BotProtectionChallenge(
                         f"Origin returned HTTP 247 bot-protection challenge at {url}"
                     )
+                # RSSHub sometimes answers 200 with its landing page when Chromium is busy.
+                if b"<title>Welcome to RSSHub!</title>" in body[:4096] and attempt < MAX_REQUEST_ATTEMPTS - 1:
+                    time.sleep(2 ** (attempt + 2))
+                    continue
                 content_type = response.headers.get("Content-Type", "")
                 return body, content_type
         except urllib.error.HTTPError as exc:
@@ -281,7 +321,15 @@ def collect_watch(url: str, kind: str) -> CollectedContent:
 
 
 def collect_rss(url: str, source: str = "rss") -> list[FeedItem]:
-    body, _ = request_bytes(url, accept="application/rss+xml, application/atom+xml, application/xml")
+    # LinkedIn/YouTube via RSSHub need headroom for Chromium; native podcast RSS is fast.
+    timeout = 90 if "127.0.0.1:1200" in url or "rsshub:" in url else REQUEST_TIMEOUT
+    body, _ = request_bytes(
+        url,
+        accept="application/rss+xml, application/atom+xml, application/xml",
+        timeout=timeout,
+    )
+    if b"<title>Welcome to RSSHub!</title>" in body[:4096]:
+        raise RuntimeError(f"RSSHub route temporarily unavailable at {url}")
     root = ET.fromstring(body)
     items: list[FeedItem] = []
     for item in root.findall(".//item"):

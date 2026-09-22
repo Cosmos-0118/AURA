@@ -9,9 +9,10 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from competitor_intelligence.analysis import content_hash, meaningful_change
+from competitor_intelligence.analysis import classify_change, confidence_for_change, content_hash, meaningful_change
 from competitor_intelligence.collectors import (CollectedContent, FeedItem, collect_watch,
-                                                extract_income_pricing_text, request_bytes)
+                                                collect_website, extract_income_pricing_text,
+                                                request_bytes)
 from competitor_intelligence.config import load_competitors, load_watches
 from competitor_intelligence.models import Competitor, WatchSource
 from competitor_intelligence.provision import _fetch_backend, _notification_url, provision_changedetection
@@ -163,6 +164,165 @@ class IntelligenceCoreTests(unittest.TestCase):
         self.assertTrue(meaningful_change("Premium USD 800", "Premium USD 801"))
         old = "alpha beta gamma " * 100
         self.assertTrue(meaningful_change(old, old.replace(" gamma", "")))
+
+    def test_confidence_varies_with_evidence_and_source_quality(self) -> None:
+        competitor = Competitor(
+            id="confidence-1",
+            brand_id="doctorshield",
+            name="Confidence Test",
+            niche="medical indemnity",
+            countries=["SG"],
+            url="https://example.test/monitor",
+        )
+        price = classify_change(
+            competitor,
+            "Annual premium S$500.",
+            "Annual premium S$425 with expanded cover.",
+            "website",
+        )
+        product = classify_change(
+            competitor,
+            "Medical indemnity cover for doctors.",
+            "Medical indemnity cover for doctors with a new product and expanded claims support.",
+            "website",
+        )
+        weak = confidence_for_change(
+            "Coverage for professionals.",
+            "Coverage for professionals in Singapore.",
+            "rss",
+            "positioning_change",
+        )
+
+        self.assertEqual(price["change_type"], "price_change")
+        self.assertEqual(product["change_type"], "new_product")
+        self.assertGreater(price["confidence"], product["confidence"])
+        self.assertGreater(product["confidence"], weak)
+        self.assertNotEqual(price["confidence"], 0.82)
+        self.assertNotEqual(product["confidence"], 0.82)
+        self.assertTrue(0.50 <= weak <= 0.98)
+
+    def test_cookie_banner_container_is_excluded_from_website_content(self) -> None:
+        main = "<main><h1>Professional indemnity cover</h1><p>Annual premium S$500.</p></main>"
+        first = (
+            f"<html><body>{main}<div id='cookie-banner'>"
+            "We use cookies. Accept all cookies.</div></body></html>"
+        ).encode()
+        second = (
+            f"<html><body>{main}<div id='cookie-banner'>"
+            "We use cookies. Accept all cookies. Manage preferences and reject non-essential cookies."
+            "</div></body></html>"
+        ).encode()
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(first, "text/html")):
+            first_page = collect_website("https://example.test/monitor")
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(second, "text/html")):
+            second_page = collect_website("https://example.test/monitor")
+
+        self.assertEqual(first_page.content, second_page.content)
+        self.assertNotIn("Manage preferences", second_page.content)
+
+    def test_cookie_filter_preserves_substantive_same_line_price_changes(self) -> None:
+        old = "Annual premium SGD 500. We use cookies to improve your experience."
+        new = "Annual premium SGD 750. We use cookies to improve your experience."
+
+        self.assertTrue(meaningful_change(old, new))
+
+    def test_cookie_filter_preserves_ambiguous_consent_first_product_changes(self) -> None:
+        old = "Accept all cookies New product launch announced for doctors."
+        new = "Accept all cookies New product launch postponed until next quarter."
+
+        self.assertTrue(meaningful_change(old, new))
+
+    def test_cookie_labelled_void_element_does_not_hide_following_content(self) -> None:
+        html = (
+            b"<html><body><input aria-label='Cookie consent'>"
+            b"<main><h1>Professional indemnity cover</h1>"
+            b"<p>Annual premium S$500.</p></main></body></html>"
+        )
+        with patch("competitor_intelligence.collectors.request_bytes", return_value=(html, "text/html")):
+            page = collect_website("https://example.test/monitor")
+
+        self.assertIn("Professional indemnity cover", page.content)
+        self.assertIn("Annual premium S$500.", page.content)
+
+    def test_cookie_only_change_is_unchanged_and_creates_no_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            competitor = Competitor(
+                id="cookie-1",
+                brand_id="jade",
+                name="Cookie Test",
+                niche="valuable goods",
+                countries=["SG"],
+                url="https://example.test/monitor",
+            )
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            url = competitor.url
+            first = service.scan(
+                competitor.id,
+                CollectedContent(
+                    "Stable page copy with annual premium S$500.\n"
+                    "We use cookies. Accept all cookies.",
+                    "website",
+                    url=url,
+                    source_key=url,
+                ),
+            )
+            second = service.scan(
+                competitor.id,
+                CollectedContent(
+                    "Stable page copy with annual premium S$500.\n"
+                    "We use cookies. Accept all cookies. Manage preferences and reject non-essential cookies.",
+                    "website",
+                    url=url,
+                    source_key=url,
+                ),
+            )
+
+            self.assertEqual(first.status, "baseline")
+            self.assertEqual(second.status, "unchanged")
+            self.assertFalse(second.changed)
+            self.assertIsNone(second.event_id)
+            self.assertEqual(len(service.events()), 0)
+            snapshot = store.latest_snapshot(competitor.id, f"website:{url}")
+            self.assertIsNotNone(snapshot)
+            self.assertNotIn("Manage preferences", snapshot.content)
+
+    def test_failed_scan_returns_error_and_preserves_previous_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "test.db")
+            competitor = Competitor(
+                id="blocked-1",
+                brand_id="jade",
+                name="Blocked Test",
+                niche="valuable goods",
+                countries=["SG"],
+                url="https://example.test/monitor",
+            )
+            store.upsert_competitor(competitor)
+            service = IntelligenceService(store)
+            baseline = service.scan(
+                competitor.id,
+                CollectedContent(
+                    "Stable baseline content.",
+                    "website",
+                    url=competitor.url,
+                    source_key=competitor.url,
+                ),
+            )
+            with patch(
+                "competitor_intelligence.service.collect_website",
+                side_effect=ValueError("HTTP 247 bot-protection challenge"),
+            ):
+                failed = service.scan(competitor.id)
+
+            self.assertEqual(baseline.status, "baseline")
+            self.assertEqual(failed.status, "error")
+            self.assertFalse(failed.changed)
+            self.assertIn("bot-protection", failed.error or "")
+            snapshot = store.latest_snapshot(competitor.id, f"website:{competitor.url}")
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(snapshot.content, "Stable baseline content.")
 
     def test_income_pricing_extracts_category_discount_and_effective_date(self) -> None:
         html = b'''<table><tr><th>Risk Category</th><th>Annual Premium (S$)</th></tr>
@@ -535,13 +695,26 @@ class IntelligenceCoreTests(unittest.TestCase):
                 FeedItem("Rates", "Updated rates", "https://example.test/news/rates"),
             ]
             with patch("competitor_intelligence.service.load_feeds", return_value=[
-                {"url": "https://example.test/feed.xml", "competitor_id": competitor.id}
+                {"url": "https://example.test/feed.xml", "competitor_id": competitor.id, "source": "rsshub"}
             ]), patch("competitor_intelligence.service.collect_rss", return_value=items):
                 first = service.poll_feeds()
                 second = service.poll_feeds()
             self.assertEqual(first[0]["events"], 0)
+            self.assertFalse(first[0]["seeded"])
             self.assertEqual(second[0]["events"], 0)
+            self.assertTrue(second[0]["seeded"])
             self.assertEqual(len(service.events()), 0)
+
+            newer = items + [FeedItem("Asia hub", "Opened SG hub", "https://example.test/news/asia-hub")]
+            with patch("competitor_intelligence.service.load_feeds", return_value=[
+                {"url": "https://example.test/feed.xml", "competitor_id": competitor.id, "source": "rsshub"}
+            ]), patch("competitor_intelligence.service.collect_rss", return_value=newer):
+                third = service.poll_feeds()
+            self.assertEqual(third[0]["events"], 1)
+            events = service.events()
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["source"], "rsshub")
+            self.assertIn("Asia hub", events[0]["summary"])
 
     def test_legacy_snapshot_streams_are_migrated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -665,6 +838,22 @@ class IntelligenceCoreTests(unittest.TestCase):
             _fetch_backend("https://www.libertyinternational.com/sg/product/fine-art-and-specie"),
             "html_requests",
         )
+        self.assertEqual(
+            _fetch_backend("https://www.income.com.sg/commercial-insurance/medical-indemnity-insurance"),
+            "html_requests",
+        )
+        self.assertEqual(
+            _fetch_backend("https://www.g4s.com/what-we-do/cash-solutions"),
+            "html_webdriver",
+        )
+
+    def test_g4s_watch_uses_challenge_wait_options(self) -> None:
+        from competitor_intelligence.provision import _watch_fetch_options
+
+        options = _watch_fetch_options("https://www.g4s.com/what-we-do/cash-solutions")
+        self.assertTrue(options["ignore_status_codes"])
+        self.assertGreaterEqual(options["webdriver_delay"], 20)
+        self.assertIn("kramericaindustries", options["text_should_not_be_present"])
 
     def test_existing_unconfigured_watch_is_preserved(self) -> None:
         class FakeResponse:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,11 +21,62 @@ WATCH_TITLE_PREFIX = "JA Assure competitor intelligence ·"
 
 
 def _fetch_backend(url: str) -> str:
-    """Use the HTTP client for Liberty; its page does not need JavaScript."""
+    """Prefer plain HTTP when the page does not need JavaScript.
+
+    Chrome CDP capacity is limited; routing static pages through html_requests
+    keeps sockpuppetbrowser free for bot-protected / JS-heavy origins (G4S, Chubb).
+    """
     hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
-    if hostname.endswith("libertyinternational.com"):
+    http_ok = (
+        hostname.endswith("libertyinternational.com")
+        or hostname.endswith("libertyspecialtymarkets.com")
+        or hostname.endswith("income.com.sg")
+        or hostname.endswith("marsh.com")
+        or hostname.endswith("howdengroup.com")
+        or hostname.endswith("parcelpro.com")
+        or hostname.endswith("upscapital.com")
+        or hostname.endswith("malca-amit.com")
+        or hostname.endswith("malacamit.com")
+        or hostname.endswith("brinkssingapore.com")
+        or hostname.endswith("brinks.com")
+        or hostname.endswith("angloeast.com.hk")
+        or hostname.endswith("medicalprotection.org")
+    )
+    if http_ok:
         return "html_requests"
     return "html_webdriver"
+
+
+def _is_g4s(url: str) -> bool:
+    hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return hostname == "g4s.com" or hostname.endswith(".g4s.com")
+
+
+def _watch_fetch_options(url: str) -> dict[str, Any]:
+    """Extra changedetection fields for origins that need a real browser wait."""
+    if not _is_g4s(url):
+        return {}
+    # Radware returns HTTP 247 + a JS challenge. Ignore the interstitial status,
+    # wait for client-side navigation, and reject snapshots that are still the
+    # challenge page instead of product content.
+    return {
+        "ignore_status_codes": True,
+        "webdriver_delay": 25,
+        "headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+        },
+        # Fail the check (do not baseline) if Radware challenge markers remain.
+        "text_should_not_be_present": [
+            "kramericaindustries",
+            "rbzns",
+            "Access Denied",
+        ],
+    }
 
 
 def _canonical_url(url: str) -> str:
@@ -34,7 +86,11 @@ def _canonical_url(url: str) -> str:
 
 
 def _notification_url() -> str:
-    url = f"post://intelligence:8787{WEBHOOK_PATH}"
+    # Docker Compose intelligence service by default. Local `./run.sh --local`
+    # should set INTEL_WEBHOOK_HOST=host.docker.internal:8787 so changedetection
+    # can reach the host Python dashboard.
+    host = os.getenv("INTEL_WEBHOOK_HOST", "intelligence:8787").strip() or "intelligence:8787"
+    url = f"post://{host}{WEBHOOK_PATH}"
     if WEBHOOK_TOKEN:
         token = urllib.parse.quote(WEBHOOK_TOKEN, safe="")
         url += f"?+X-Webhook-Token={token}"
@@ -97,7 +153,11 @@ def provision_changedetection() -> list[dict[str, Any]]:
             "notification_format": "text",
             "time_between_check_use_default": False,
             "time_between_check": {"hours": watch.interval_hours, "minutes": 0, "seconds": 0},
-            "paused": False,
+            # G4S serves Radware HTTP 247 from this runtime even with headful
+            # Chrome + stealth + long waits. Keep the watches visible but paused;
+            # LinkedIn/YouTube feeds in config/feeds.json remain the live G4S signal.
+            "paused": _is_g4s(watch.url),
+            **_watch_fetch_options(watch.url),
         }
         existing_watch = existing_by_url.get(_canonical_url(watch.url))
         method = "PUT" if existing_watch else "POST"
