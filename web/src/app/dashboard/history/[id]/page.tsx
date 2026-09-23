@@ -17,13 +17,7 @@ import type {
 } from '@/lib/api/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -75,28 +69,27 @@ export default function HistoryDetailPage({ params }: PageProps) {
     }>
   >([]);
 
-  const fetchWorkspace = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await getCampaignWorkspaceHistory(campaignId);
-      setWorkspace(data);
-
-      // Default to latest version of current platform
-      const platContents = data.contents.filter((c) => c.platform === selectedPlatform);
-      if (platContents.length > 0) {
-        const maxV = Math.max(...platContents.map((c) => c.version || 1));
-        setSelectedVersion(maxV);
+  const fetchWorkspace = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) setIsLoading(true);
+      try {
+        const data = await getCampaignWorkspaceHistory(campaignId);
+        setWorkspace(data);
+        return data;
+      } catch (err: unknown) {
+        const msg =
+          err instanceof Error ? err.message : 'Failed to fetch campaign history workspace';
+        toast.error(msg);
+        return null;
+      } finally {
+        if (showLoading) setIsLoading(false);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch campaign history workspace';
-      toast.error(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [campaignId, selectedPlatform]);
+    },
+    [campaignId]
+  );
 
   useEffect(() => {
-    fetchWorkspace();
+    fetchWorkspace(true);
   }, [fetchWorkspace]);
 
   // When platform changes, select its latest version
@@ -107,7 +100,20 @@ export default function HistoryDetailPage({ params }: PageProps) {
       const maxV = Math.max(...platContents.map((c) => c.version || 1));
       setSelectedVersion(maxV);
     }
-  }, [selectedPlatform, workspace]);
+  }, [selectedPlatform]);
+
+  // Ensure selectedVersion is valid whenever workspace updates
+  useEffect(() => {
+    if (!workspace) return;
+    const platContents = workspace.contents.filter((c) => c.platform === selectedPlatform);
+    if (platContents.length > 0) {
+      const exists = platContents.some((c) => (c.version || 1) === selectedVersion);
+      if (!exists) {
+        const maxV = Math.max(...platContents.map((c) => c.version || 1));
+        setSelectedVersion(maxV);
+      }
+    }
+  }, [workspace, selectedPlatform, selectedVersion]);
 
   const handleResubmit = async () => {
     setIsResubmitting(true);
@@ -116,7 +122,7 @@ export default function HistoryDetailPage({ params }: PageProps) {
       toast.success(res.message || `Resubmitted for Review Cycle ${res.review_cycle}`);
       setIsResubmitOpen(false);
       setResubmitNote('');
-      fetchWorkspace();
+      fetchWorkspace(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Resubmission failed';
       toast.error(msg);
@@ -157,8 +163,51 @@ export default function HistoryDetailPage({ params }: PageProps) {
         }
       ]);
 
+      // Optimistically update workspace in-memory immediately with regenerated content
+      if (res.updated_contents && res.updated_contents.length > 0) {
+        const updatedPlatforms = new Set(res.updated_contents.map((c) => c.platform));
+        setWorkspace((prev) => {
+          if (!prev) return prev;
+          const oldContents = prev.contents.map((c) =>
+            updatedPlatforms.has(c.platform) ? { ...c, is_current: false } : c
+          );
+          return {
+            ...prev,
+            contents: [...oldContents, ...res.updated_contents],
+            media: res.new_media ? [...prev.media, res.new_media] : prev.media
+          };
+        });
+
+        // Determine which platform to focus: prefer the user's selected platform if updated, else the first updated platform
+        const matchedUpdated =
+          res.updated_contents.find((c) => c.platform === selectedPlatform) ||
+          res.updated_contents[0];
+        if (matchedUpdated) {
+          const newPlatform = matchedUpdated.platform as Platform;
+          const newVersion = matchedUpdated.version || 1;
+          setSelectedPlatform(newPlatform);
+          setSelectedVersion(newVersion);
+        }
+      }
+
       toast.success('Campaign revised! New version(s) saved.');
-      fetchWorkspace();
+
+      // Background sync from database to confirm persistent state
+      const freshData = await fetchWorkspace(false);
+      if (freshData && res.updated_contents && res.updated_contents.length > 0) {
+        const matchedUpdated =
+          res.updated_contents.find((c) => c.platform === selectedPlatform) ||
+          res.updated_contents[0];
+        if (matchedUpdated) {
+          const newPlatform = matchedUpdated.platform as Platform;
+          const platContents = freshData.contents.filter((c) => c.platform === newPlatform);
+          if (platContents.length > 0) {
+            const maxV = Math.max(...platContents.map((c) => c.version || 1));
+            setSelectedPlatform(newPlatform);
+            setSelectedVersion(maxV);
+          }
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'AURA Assistant revision failed';
       toast.error(msg);
@@ -185,9 +234,10 @@ export default function HistoryDetailPage({ params }: PageProps) {
   }
 
   const camp = workspace.campaign;
-  const currentCycle = workspace.review_cycles.length > 0
-    ? Math.max(...workspace.review_cycles.map((r) => r.review_cycle || 1))
-    : 1;
+  const currentCycle =
+    workspace.review_cycles.length > 0
+      ? Math.max(...workspace.review_cycles.map((r) => r.review_cycle || 1))
+      : 1;
 
   // Contents for selected platform
   const platformVersions = workspace.contents
@@ -209,9 +259,18 @@ export default function HistoryDetailPage({ params }: PageProps) {
   const finalVideo = videoMedia.find((m) => m.media_stage === 'final' && m.status === 'completed');
 
   const brandBadges: Record<string, { label: string; className: string }> = {
-    jade: { label: 'Jade', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-    doctorshield: { label: 'DoctorShield', className: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400' },
-    jaguar: { label: 'Jaguar Transit', className: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' }
+    jade: {
+      label: 'Jade',
+      className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    },
+    doctorshield: {
+      label: 'DoctorShield',
+      className: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400'
+    },
+    jaguar: {
+      label: 'Jaguar Transit',
+      className: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+    }
   };
   const brandMeta = brandBadges[camp.brand_id] || {
     label: (camp.brand_id || 'BRAND').toUpperCase(),
@@ -223,12 +282,17 @@ export default function HistoryDetailPage({ params }: PageProps) {
       {/* Top Header & Breadcrumb Navigation */}
       <div className='flex flex-col gap-3 border-b pb-4'>
         <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-          <Link href='/dashboard/history' className='hover:text-foreground flex items-center gap-1 font-medium'>
+          <Link
+            href='/dashboard/history'
+            className='hover:text-foreground flex items-center gap-1 font-medium'
+          >
             <Icons.chevronLeft className='size-3.5' />
             <span>Back to Campaign History</span>
           </Link>
           <span>/</span>
-          <span className='font-mono text-foreground font-semibold'>{campaignId.slice(0, 8)}...</span>
+          <span className='font-mono text-foreground font-semibold'>
+            {campaignId.slice(0, 8)}...
+          </span>
         </div>
 
         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
@@ -240,7 +304,15 @@ export default function HistoryDetailPage({ params }: PageProps) {
               <Badge variant='outline' className='text-xs font-mono font-semibold bg-muted'>
                 Review Cycle {currentCycle}
               </Badge>
-              <Badge variant={camp.status === 'approved' ? 'default' : camp.status === 'published' ? 'secondary' : 'outline'}>
+              <Badge
+                variant={
+                  camp.status === 'approved'
+                    ? 'default'
+                    : camp.status === 'published'
+                      ? 'secondary'
+                      : 'outline'
+                }
+              >
                 {camp.status?.toUpperCase() || 'DRAFT'}
               </Badge>
             </div>
@@ -280,12 +352,24 @@ export default function HistoryDetailPage({ params }: PageProps) {
         <div className='lg:col-span-8 flex flex-col gap-5'>
           <Tabs defaultValue='content' className='w-full'>
             <TabsList className='grid grid-cols-6 h-9 p-1 bg-muted/60 text-xs w-full'>
-              <TabsTrigger value='content' className='text-xs'>Content</TabsTrigger>
-              <TabsTrigger value='prompts' className='text-xs'>Prompts</TabsTrigger>
-              <TabsTrigger value='media' className='text-xs'>Media</TabsTrigger>
-              <TabsTrigger value='reviews' className='text-xs'>Reviews ({workspace.review_cycles.length})</TabsTrigger>
-              <TabsTrigger value='pubs' className='text-xs'>Pubs ({workspace.publications.length})</TabsTrigger>
-              <TabsTrigger value='events' className='text-xs'>Audit ({workspace.events.length})</TabsTrigger>
+              <TabsTrigger value='content' className='text-xs'>
+                Content
+              </TabsTrigger>
+              <TabsTrigger value='prompts' className='text-xs'>
+                Prompts
+              </TabsTrigger>
+              <TabsTrigger value='media' className='text-xs'>
+                Media
+              </TabsTrigger>
+              <TabsTrigger value='reviews' className='text-xs'>
+                Reviews ({workspace.review_cycles.length})
+              </TabsTrigger>
+              <TabsTrigger value='pubs' className='text-xs'>
+                Pubs ({workspace.publications.length})
+              </TabsTrigger>
+              <TabsTrigger value='events' className='text-xs'>
+                Audit ({workspace.events.length})
+              </TabsTrigger>
             </TabsList>
 
             {/* TAB 1: PLATFORM CONTENT VERSIONS */}
@@ -313,7 +397,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                 {/* Version Selector for active platform */}
                 {platformVersions.length > 1 && (
                   <div className='flex items-center gap-1.5 bg-muted/40 p-1 rounded-lg border text-xs'>
-                    <span className='text-[10px] text-muted-foreground font-semibold px-1'>Version:</span>
+                    <span className='text-[10px] text-muted-foreground font-semibold px-1'>
+                      Version:
+                    </span>
                     {platformVersions.map((item) => {
                       const v = item.version || 1;
                       const isSelected = selectedVersion === v;
@@ -346,7 +432,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                           {activeContentItem.platform} v{activeContentItem.version || 1}
                         </Badge>
                         {activeContentItem.is_current && (
-                          <Badge className='bg-emerald-600 text-[10px] font-mono'>Current Version</Badge>
+                          <Badge className='bg-emerald-600 text-[10px] font-mono'>
+                            Current Version
+                          </Badge>
                         )}
                       </div>
                       <span className='text-[11px] text-muted-foreground font-mono'>
@@ -370,9 +458,14 @@ export default function HistoryDetailPage({ params }: PageProps) {
                     {/* Hashtags */}
                     {activeContentItem.hashtags && activeContentItem.hashtags.length > 0 && (
                       <div className='flex items-center gap-1.5 flex-wrap'>
-                        <span className='text-[10px] font-semibold text-muted-foreground'>Hashtags:</span>
+                        <span className='text-[10px] font-semibold text-muted-foreground'>
+                          Hashtags:
+                        </span>
                         {activeContentItem.hashtags.map((ht) => (
-                          <span key={ht} className='text-xs font-mono text-sky-600 dark:text-sky-400'>
+                          <span
+                            key={ht}
+                            className='text-xs font-mono text-sky-600 dark:text-sky-400'
+                          >
                             {ht.startsWith('#') ? ht : `#${ht}`}
                           </span>
                         ))}
@@ -384,14 +477,20 @@ export default function HistoryDetailPage({ params }: PageProps) {
                       <div className='p-3 rounded-lg bg-muted/40 border space-y-2'>
                         {activeContentItem.script && (
                           <div>
-                            <span className='text-[10px] font-bold uppercase text-muted-foreground'>Script / Voiceover:</span>
+                            <span className='text-[10px] font-bold uppercase text-muted-foreground'>
+                              Script / Voiceover:
+                            </span>
                             <p className='text-xs mt-0.5'>{activeContentItem.script}</p>
                           </div>
                         )}
                         {activeContentItem.visual_concept && (
                           <div>
-                            <span className='text-[10px] font-bold uppercase text-muted-foreground'>Visual Concept:</span>
-                            <p className='text-xs mt-0.5 text-muted-foreground'>{activeContentItem.visual_concept}</p>
+                            <span className='text-[10px] font-bold uppercase text-muted-foreground'>
+                              Visual Concept:
+                            </span>
+                            <p className='text-xs mt-0.5 text-muted-foreground'>
+                              {activeContentItem.visual_concept}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -445,8 +544,12 @@ export default function HistoryDetailPage({ params }: PageProps) {
               {/* Image Comparison: Original vs Final */}
               <div className='space-y-2'>
                 <div className='flex items-center justify-between'>
-                  <Label className='text-xs font-bold uppercase text-muted-foreground'>Poster Asset Comparison</Label>
-                  <Badge variant='outline' className='text-[10px] font-mono'>1:1 Square</Badge>
+                  <Label className='text-xs font-bold uppercase text-muted-foreground'>
+                    Poster Asset Comparison
+                  </Label>
+                  <Badge variant='outline' className='text-[10px] font-mono'>
+                    1:1 Square
+                  </Badge>
                 </div>
 
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
@@ -454,7 +557,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                   <Card className='overflow-hidden border-border/80'>
                     <CardHeader className='py-2.5 px-3 bg-muted/40 border-b flex flex-row items-center justify-between'>
                       <span className='text-xs font-semibold'>1. Original AI Generation</span>
-                      <Badge variant='secondary' className='text-[10px]'>Unwatermarked</Badge>
+                      <Badge variant='secondary' className='text-[10px]'>
+                        Unwatermarked
+                      </Badge>
                     </CardHeader>
                     <CardContent className='p-3 flex flex-col items-center justify-center min-h-[220px]'>
                       {originalImage?.local_path ? (
@@ -478,7 +583,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                   {/* Final Watermarked Asset */}
                   <Card className='overflow-hidden border-emerald-500/30'>
                     <CardHeader className='py-2.5 px-3 bg-emerald-500/10 border-b flex flex-row items-center justify-between'>
-                      <span className='text-xs font-semibold text-emerald-600 dark:text-emerald-400'>2. Final Watermarked Asset</span>
+                      <span className='text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
+                        2. Final Watermarked Asset
+                      </span>
                       <Badge className='bg-emerald-600 text-[10px]'>Official Verified</Badge>
                     </CardHeader>
                     <CardContent className='p-3 flex flex-col items-center justify-center min-h-[220px]'>
@@ -496,7 +603,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                         <div className='text-center p-4 text-xs text-amber-500 flex flex-col items-center gap-1.5'>
                           <Icons.warning className='size-6' />
                           <span className='font-semibold'>Final media not ready</span>
-                          <span className='text-[10px] text-muted-foreground'>Watermark not applied yet</span>
+                          <span className='text-[10px] text-muted-foreground'>
+                            Watermark not applied yet
+                          </span>
                         </div>
                       )}
                     </CardContent>
@@ -507,7 +616,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                 {finalImage?.watermark_config && (
                   <Card className='shadow-xs'>
                     <CardHeader className='py-2 px-3 border-b bg-muted/20'>
-                      <CardTitle className='text-xs font-bold'>Saved Watermark Configuration</CardTitle>
+                      <CardTitle className='text-xs font-bold'>
+                        Saved Watermark Configuration
+                      </CardTitle>
                     </CardHeader>
                     <CardContent className='p-3 text-[11px] font-mono bg-muted/10'>
                       <pre className='overflow-x-auto whitespace-pre-wrap leading-relaxed'>
@@ -520,12 +631,16 @@ export default function HistoryDetailPage({ params }: PageProps) {
 
               {/* Video Assets */}
               <div className='space-y-2 pt-2 border-t'>
-                <Label className='text-xs font-bold uppercase text-muted-foreground'>Video Reel Asset</Label>
+                <Label className='text-xs font-bold uppercase text-muted-foreground'>
+                  Video Reel Asset
+                </Label>
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                   <Card className='overflow-hidden'>
                     <CardHeader className='py-2 px-3 bg-muted/40 border-b flex flex-row items-center justify-between'>
                       <span className='text-xs font-semibold'>Original AI Video</span>
-                      <Badge variant='secondary' className='text-[10px]'>Original</Badge>
+                      <Badge variant='secondary' className='text-[10px]'>
+                        Original
+                      </Badge>
                     </CardHeader>
                     <CardContent className='p-3 flex items-center justify-center min-h-[180px]'>
                       {originalVideo?.local_path ? (
@@ -535,14 +650,18 @@ export default function HistoryDetailPage({ params }: PageProps) {
                           className='max-h-[160px] rounded-md border'
                         />
                       ) : (
-                        <span className='text-xs text-muted-foreground'>No original video generated</span>
+                        <span className='text-xs text-muted-foreground'>
+                          No original video generated
+                        </span>
                       )}
                     </CardContent>
                   </Card>
 
                   <Card className='overflow-hidden border-emerald-500/30'>
                     <CardHeader className='py-2 px-3 bg-emerald-500/10 border-b flex flex-row items-center justify-between'>
-                      <span className='text-xs font-semibold text-emerald-600 dark:text-emerald-400'>Final Watermarked Video</span>
+                      <span className='text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
+                        Final Watermarked Video
+                      </span>
                       <Badge className='bg-emerald-600 text-[10px]'>Final</Badge>
                     </CardHeader>
                     <CardContent className='p-3 flex items-center justify-center min-h-[180px]'>
@@ -553,7 +672,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                           className='max-h-[160px] rounded-md border'
                         />
                       ) : (
-                        <span className='text-xs text-muted-foreground'>No final video watermarked</span>
+                        <span className='text-xs text-muted-foreground'>
+                          No final video watermarked
+                        </span>
                       )}
                     </CardContent>
                   </Card>
@@ -580,8 +701,8 @@ export default function HistoryDetailPage({ params }: PageProps) {
                             rq.status === 'approved'
                               ? 'bg-emerald-600 text-white'
                               : rq.status === 'rejected'
-                              ? 'bg-destructive text-white'
-                              : 'bg-blue-600 text-white'
+                                ? 'bg-destructive text-white'
+                                : 'bg-blue-600 text-white'
                           }
                         >
                           {rq.status?.toUpperCase()}
@@ -595,7 +716,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                     <CardContent className='pt-0 pb-3 px-4 text-xs space-y-1.5'>
                       {rq.reviewer_note && (
                         <div>
-                          <span className='text-[10px] font-bold text-muted-foreground'>Reviewer Note:</span>
+                          <span className='text-[10px] font-bold text-muted-foreground'>
+                            Reviewer Note:
+                          </span>
                           <p className='text-xs text-foreground bg-muted/30 p-2 rounded border mt-0.5'>
                             {rq.reviewer_note}
                           </p>
@@ -619,7 +742,8 @@ export default function HistoryDetailPage({ params }: PageProps) {
             <TabsContent value='pubs' className='space-y-3 pt-3'>
               {workspace.publications.length === 0 ? (
                 <div className='p-8 text-center text-xs text-muted-foreground border rounded-lg'>
-                  No platform publications recorded yet. Campaigns must be approved before publishing.
+                  No platform publications recorded yet. Campaigns must be approved before
+                  publishing.
                 </div>
               ) : (
                 workspace.publications.map((pub) => (
@@ -634,8 +758,8 @@ export default function HistoryDetailPage({ params }: PageProps) {
                             pub.status === 'published'
                               ? 'bg-emerald-600 text-white'
                               : pub.status === 'failed'
-                              ? 'bg-destructive text-white'
-                              : 'bg-amber-600 text-white'
+                                ? 'bg-destructive text-white'
+                                : 'bg-amber-600 text-white'
                           }
                         >
                           {pub.status?.toUpperCase()}
@@ -685,7 +809,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                   >
                     <div>
                       <div className='flex items-center gap-2'>
-                        <span className='font-mono font-bold text-foreground text-[11px]'>{e.event_type}</span>
+                        <span className='font-mono font-bold text-foreground text-[11px]'>
+                          {e.event_type}
+                        </span>
                         <Badge variant='secondary' className='text-[9px] py-0 px-1 font-mono'>
                           {e.actor}
                         </Badge>
@@ -695,7 +821,11 @@ export default function HistoryDetailPage({ params }: PageProps) {
                       )}
                     </div>
                     <span className='text-[10px] font-mono text-muted-foreground shrink-0'>
-                      {new Date(e.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      {new Date(e.created_at).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                      })}
                     </span>
                   </div>
                 ))}
@@ -724,9 +854,12 @@ export default function HistoryDetailPage({ params }: PageProps) {
             {/* Chat Feed */}
             <CardContent className='flex-1 p-3 overflow-y-auto space-y-3 text-xs'>
               <div className='p-2.5 rounded-lg bg-muted/40 border text-[11px] text-muted-foreground leading-relaxed'>
-                👋 <strong>I&apos;m your AURA Campaign Assistant.</strong> Ask me to revise content tone, emphasize specific event details, add disclaimers, or regenerate media prompts.
+                👋 <strong>I&apos;m your AURA Campaign Assistant.</strong> Ask me to revise content
+                tone, emphasize specific event details, add disclaimers, or regenerate media
+                prompts.
                 <div className='text-[10px] text-primary/80 mt-1 font-medium'>
-                  Guarantee: Revisions create new draft versions (v2, v3); I will never auto-publish.
+                  Guarantee: Revisions create new draft versions (v2, v3); I will never
+                  auto-publish.
                 </div>
               </div>
 
@@ -748,7 +881,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
 
                     {msg.compliance && (
                       <div className='mt-2 pt-2 border-t border-border/40 text-[10px] font-mono text-left'>
-                        <div className='font-bold text-muted-foreground'>Compliance Verification:</div>
+                        <div className='font-bold text-muted-foreground'>
+                          Compliance Verification:
+                        </div>
                         {Object.entries(msg.compliance).map(([plat, comp]: [string, any]) => (
                           <div key={plat} className='flex items-center gap-1.5 mt-0.5'>
                             <span className='capitalize'>{plat}:</span>
@@ -766,7 +901,9 @@ export default function HistoryDetailPage({ params }: PageProps) {
                       </div>
                     )}
                   </div>
-                  <span className='text-[9px] font-mono text-muted-foreground px-1'>{msg.timestamp}</span>
+                  <span className='text-[9px] font-mono text-muted-foreground px-1'>
+                    {msg.timestamp}
+                  </span>
                 </div>
               ))}
 
@@ -803,7 +940,10 @@ export default function HistoryDetailPage({ params }: PageProps) {
                     checked={chatRegenMedia}
                     onCheckedChange={(c) => setChatRegenMedia(Boolean(c))}
                   />
-                  <Label htmlFor='regen-media' className='text-[10px] cursor-pointer text-muted-foreground'>
+                  <Label
+                    htmlFor='regen-media'
+                    className='text-[10px] cursor-pointer text-muted-foreground'
+                  >
                     Regen Media
                   </Label>
                 </div>
@@ -871,15 +1011,17 @@ export default function HistoryDetailPage({ params }: PageProps) {
             <DialogTitle className='text-base font-bold'>Resubmit Campaign for Review</DialogTitle>
             <DialogDescription className='text-xs'>
               This will transition this campaign into{' '}
-              <strong className='text-foreground'>Review Cycle {currentCycle + 1}</strong>
-              , set its status to &apos;pending_review&apos;, and re-queue it for human reviewer approval.
+              <strong className='text-foreground'>Review Cycle {currentCycle + 1}</strong>, set its
+              status to &apos;pending_review&apos;, and re-queue it for human reviewer approval.
             </DialogDescription>
           </DialogHeader>
 
           <div className='space-y-3 py-2'>
             <div className='p-2.5 rounded bg-muted/40 border text-xs space-y-1'>
               <div className='font-bold text-foreground'>{camp.title || camp.thesis}</div>
-              <div className='text-muted-foreground font-mono text-[11px]'>Brand: {camp.brand_id?.toUpperCase()}</div>
+              <div className='text-muted-foreground font-mono text-[11px]'>
+                Brand: {camp.brand_id?.toUpperCase()}
+              </div>
             </div>
 
             <div className='space-y-1.5'>

@@ -482,6 +482,139 @@ def init_sqlite_db(conn: sqlite3.Connection):
         )
         conn.commit()
 
+    # Seed campaigns and full history from aura (1).sql if empty
+    cursor.execute("SELECT COUNT(*) FROM campaigns")
+    if cursor.fetchone()[0] == 0:
+        _auto_import_aura_sql_dump(conn)
+
+
+def _auto_import_aura_sql_dump(conn: sqlite3.Connection):
+    """Import initial campaigns and history data from aura (1).sql dump if available."""
+    candidates = [
+        Path(r"D:\Computers\Projects\AURA\aura (1).sql"),
+        Path(__file__).resolve().parent.parent.parent / "aura (1).sql",
+        Path(__file__).resolve().parent.parent / "aura (1).sql",
+    ]
+    sql_file = next((p for p in candidates if p.exists()), None)
+    if not sql_file:
+        return
+
+    try:
+        import re
+        with open(sql_file, "r", encoding="utf-8", errors="ignore") as f:
+            sql_text = f.read()
+
+        insert_pattern = re.compile(
+            r"INSERT INTO [`\"]?([a-zA-Z0-9_]+)[`\"]?\s*\(([^)]+)\)\s*VALUES\s*(.+?);",
+            re.DOTALL | re.IGNORECASE,
+        )
+        matches = insert_pattern.findall(sql_text)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        sqlite_tables = {row[0] for row in cursor.fetchall()}
+        cursor.execute("PRAGMA foreign_keys = OFF")
+
+        for table, cols_str, values_block in matches:
+            tbl = table.strip().lower()
+            if tbl not in sqlite_tables:
+                continue
+
+            cols = [c.strip().strip("`").strip('"') for c in cols_str.split(",")]
+            cursor.execute(f"PRAGMA table_info({tbl})")
+            table_info = {row[1]: row[2] for row in cursor.fetchall()}
+            valid_col_indices = [i for i, c in enumerate(cols) if c in table_info]
+            valid_cols = [cols[i] for i in valid_col_indices]
+            if not valid_cols:
+                continue
+
+            rows_data = []
+            current_val = []
+            current_row = []
+            in_quote = False
+            quote_char = None
+            escape = False
+            depth = 0
+
+            for char in values_block:
+                if escape:
+                    current_val.append(char)
+                    escape = False
+                    continue
+                if char == "\\":
+                    escape = True
+                    continue
+                if in_quote:
+                    if char == quote_char:
+                        in_quote = False
+                        quote_char = None
+                    else:
+                        current_val.append(char)
+                    continue
+                else:
+                    if char in ("'", '"'):
+                        in_quote = True
+                        quote_char = char
+                        continue
+                    elif char == "(":
+                        depth += 1
+                        if depth == 1:
+                            current_row = []
+                            current_val = []
+                        continue
+                    elif char == ")":
+                        depth -= 1
+                        if depth == 0:
+                            v = "".join(current_val).strip()
+                            current_row.append(None if v == "NULL" else v)
+                            current_val = []
+                            rows_data.append(current_row)
+                            current_row = []
+                        continue
+                    elif char == "," and depth == 1:
+                        v = "".join(current_val).strip()
+                        current_row.append(None if v == "NULL" else v)
+                        current_val = []
+                        continue
+                    elif depth == 1:
+                        current_val.append(char)
+
+            placeholders = ", ".join(["?"] * len(valid_cols))
+            col_names = ", ".join(f'"{c}"' for c in valid_cols)
+            sql_insert = f"INSERT OR REPLACE INTO {tbl} ({col_names}) VALUES ({placeholders})"
+
+            for row in rows_data:
+                filtered_row = [row[i] if i < len(row) else None for i in valid_col_indices]
+                if tbl == "brands":
+                    if "tone" in valid_cols:
+                        t_idx = valid_cols.index("tone")
+                        if not filtered_row[t_idx]:
+                            filtered_row[t_idx] = json.dumps(["Professional", "Educational"])
+                    if "do_list" in valid_cols:
+                        d_idx = valid_cols.index("do_list")
+                        if not filtered_row[d_idx]:
+                            filtered_row[d_idx] = json.dumps([])
+                    if "dont_list" in valid_cols:
+                        dt_idx = valid_cols.index("dont_list")
+                        if not filtered_row[dt_idx]:
+                            filtered_row[dt_idx] = json.dumps([])
+                elif tbl == "lessons":
+                    if "reason_tag" in valid_cols:
+                        rt_idx = valid_cols.index("reason_tag")
+                        if not filtered_row[rt_idx] and "tag" in valid_cols:
+                            filtered_row[rt_idx] = filtered_row[valid_cols.index("tag")] or "OFF_BRAND"
+                        elif not filtered_row[rt_idx]:
+                            filtered_row[rt_idx] = "OFF_BRAND"
+
+                try:
+                    cursor.execute(sql_insert, filtered_row)
+                except Exception:
+                    pass
+
+        conn.commit()
+        cursor.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        pass
+
 
 _mysql_initialized = False
 

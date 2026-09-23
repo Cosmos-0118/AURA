@@ -15,14 +15,14 @@ try:
         competitor_readiness,
         start_competitor_refresh,
     )
-    from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics, video
+    from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
     from agents.lead_intel import start_daily_refresh
     from services.competitor_intelligence import (  # type: ignore[no-redef]
         competitor_readiness,
         start_competitor_refresh,
     )
-    from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics, video
+    from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics
 
 app = FastAPI(
     title="AURA API",
@@ -110,6 +110,5 @@ app.include_router(assets.router)
 app.include_router(lessons.router)
 app.include_router(leads.router)
 app.include_router(metrics.router)
-app.include_router(video.router)
 app.include_router(buffer.router)
 app.include_router(media.router)
