@@ -22,7 +22,14 @@ import type {
   PublishResponse,
   CompetitorDashboard,
   CompetitorEventAnalysis,
-  CompetitorScanResult
+  CompetitorScanResult,
+  HistoryCampaignSummary,
+  AssistantChatRequest,
+  AssistantChatResponse,
+  ResubmitReviewRequest,
+  ResubmitReviewResponse,
+  CampaignWorkspaceHistory,
+  BrandLogoItem
 } from './types';
 import { DEMO_BRANDS, getDemoBrandsList } from '../demo/brands';
 import { auraStore } from '../demo/store';
@@ -31,43 +38,36 @@ import { COMPETITOR_INTEL } from '../demo/research';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 export function getStoredApiMode(): 'real' | 'mock' {
-  if (typeof window === 'undefined') return 'real';
-  const stored = localStorage.getItem('aura_api_mode');
-  return stored === 'mock' ? 'mock' : 'real';
+  return 'real';
 }
 
-export function setStoredApiMode(mode: 'real' | 'mock') {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('aura_api_mode', mode);
-    window.dispatchEvent(new CustomEvent('aura_api_mode_change', { detail: mode }));
-  }
+export function setStoredApiMode(_mode: 'real' | 'mock') {
+  // Mock mode toggle removed
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Demo-Mode': isMock ? 'true' : 'false',
     ...(init?.headers as Record<string, string>)
   };
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: 'no-store',
     ...init,
     headers
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.detail ?? `AURA API request failed (${response.status})`);
+    const msg = error?.detail ?? error?.error ?? error?.message ?? `AURA API request failed (${response.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
   return (await response.json()) as T;
 }
 
-
 function jsonBody(body: unknown): RequestInit {
   return { method: 'POST', body: JSON.stringify(body) };
 }
-
 
 export async function getBrands(): Promise<Brand[]> {
   try {
@@ -105,9 +105,7 @@ export async function getCompetitors(brandId?: string): Promise<Competitor[]> {
     const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
     return await request<Competitor[]>(`/api/competitors${query}`);
   } catch {
-    return COMPETITOR_INTEL.filter(
-      (c) => !brandId || c.target_brand === brandId
-    ).map((c) => ({
+    return COMPETITOR_INTEL.filter((c) => !brandId || c.target_brand === brandId).map((c) => ({
       id: c.id,
       brand_id: c.target_brand,
       name: c.competitor_name,
@@ -189,7 +187,8 @@ function demoCompetitorDashboard(): CompetitorDashboard {
       { source: 'changedetection', status: 'waiting', detail: 'No live collector in demo mode' },
       { source: 'rsshub', status: 'waiting', detail: 'No live collector in demo mode' },
       { source: 'searxng', status: 'waiting', detail: 'No live collector in demo mode' }
-    ]
+    ],
+    ready: true
   };
 }
 
@@ -237,7 +236,10 @@ export async function getCompetitorEventDiff(eventId: string): Promise<{
   return request(`/api/competitors/events/${encodeURIComponent(eventId)}/diff`);
 }
 
-export async function syncCompetitorChangedetection(): Promise<{ imported: number; errors: string[] }> {
+export async function syncCompetitorChangedetection(): Promise<{
+  imported: number;
+  errors: string[];
+}> {
   return request('/api/competitors/sync-changedetection', { method: 'POST' });
 }
 
@@ -453,20 +455,9 @@ export function getLeadEmailDraft(leadId: string): Promise<import('./types').Lea
 }
 
 export function sendLeadEmail(leadId: string): Promise<import('./types').LeadEmailResult> {
-  return request<import('./types').LeadEmailResult>('/api/leads/send', jsonBody({ lead_id: leadId }));
-}
-
-export function searchLeads(body: import('./types').LeadSearchRequest): Promise<Lead[]> {
-  return request<Lead[]>('/api/leads/search', jsonBody(body));
-}
-
-export function generateLeadOutreach(
-  leadId: string,
-  body: import('./types').LeadOutreachRequest
-): Promise<{ status: string; message: string }> {
-  return request<{ status: string; message: string }>(
-    `/api/leads/${encodeURIComponent(leadId)}/outreach`,
-    jsonBody(body)
+  return request<import('./types').LeadEmailResult>(
+    '/api/leads/send',
+    jsonBody({ lead_id: leadId })
   );
 }
 
@@ -588,6 +579,8 @@ export async function applyCampaignWatermark(
     logo_opacity?: number;
     custom_text?: string | null;
     image_data?: string | null;
+    logos?: any[];
+    watermark_config?: any;
   }
 ): Promise<CampaignMediaItem> {
   return await request<CampaignMediaItem>(
@@ -614,29 +607,81 @@ export async function uploadWatermarkedMedia(
 }
 
 export async function submitCampaign(id: string): Promise<CampaignSubmitResult> {
-  const isMock = typeof window !== 'undefined' ? localStorage.getItem('aura_api_mode') === 'mock' : false;
-  try {
-    const res = await request<CampaignSubmitResult>(
-      `/api/campaigns/${encodeURIComponent(id)}/submit`,
-      { method: 'POST' }
-    );
-    return res;
-  } catch (err: unknown) {
-    if (isMock) {
-      return {
-        success: true,
-        campaign_id: id,
-        status: 'pending_review',
-        message: 'Campaign submitted for verification (Mock Mode).'
-      };
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(msg || 'Failed to submit campaign for verification', { cause: err });
-  }
+  return await request<CampaignSubmitResult>(`/api/campaigns/${encodeURIComponent(id)}/submit`, {
+    method: 'POST'
+  });
 }
 
 export async function submitCampaignForReview(id: string): Promise<CampaignSubmitResult> {
   return submitCampaign(id);
+}
+
+export async function getHistoryList(): Promise<HistoryCampaignSummary[]> {
+  return await request<HistoryCampaignSummary[]>('/api/campaigns/history-list');
+}
+
+export async function getCampaignWorkspaceHistory(id: string): Promise<CampaignWorkspaceHistory> {
+  return await request<CampaignWorkspaceHistory>(
+    `/api/campaigns/${encodeURIComponent(id)}/workspace-history`
+  );
+}
+
+export async function resubmitCampaignReview(
+  id: string,
+  note?: string
+): Promise<ResubmitReviewResponse> {
+  return await request<ResubmitReviewResponse>(
+    `/api/campaigns/${encodeURIComponent(id)}/resubmit`,
+    jsonBody({ note })
+  );
+}
+
+export async function assistantChat(
+  id: string,
+  body: AssistantChatRequest
+): Promise<AssistantChatResponse> {
+  return await request<AssistantChatResponse>(
+    `/api/campaigns/${encodeURIComponent(id)}/chat`,
+    jsonBody(body)
+  );
+}
+
+export async function getBrandLogos(): Promise<BrandLogoItem[]> {
+  const normalize = (items: any[]): BrandLogoItem[] =>
+    items.map((d: any) => {
+      const file = d.file || d.filename || '';
+      const fallbackUrl = file ? `/logo/${file}` : '/logo/ja.png';
+      return {
+        id: d.id || (d.name ? d.name.toLowerCase().replace(/\s+/g, '') : 'logo'),
+        name: d.name || 'Brand Logo',
+        filename: file,
+        file: file,
+        url: d.url || d.src || fallbackUrl,
+        src: d.src || d.url || fallbackUrl
+      };
+    });
+
+  try {
+    const res = await fetch('/api/logos');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return normalize(data);
+    }
+  } catch {
+    // fallback to direct API
+  }
+  try {
+    const data = await request<any[]>('/logos');
+    if (Array.isArray(data) && data.length > 0) return normalize(data);
+  } catch {
+    // fallback to static list
+  }
+  return [
+    { id: 'jade', name: 'Jade', filename: 'Jade.png', file: 'Jade.png', url: '/logo/Jade.png', src: '/logo/Jade.png' },
+    { id: 'doctorshield', name: 'DoctorShield', filename: 'doctorshield.png', file: 'doctorshield.png', url: '/logo/doctorshield.png', src: '/logo/doctorshield.png' },
+    { id: 'ja', name: 'JA Assure', filename: 'ja.png', file: 'ja.png', url: '/logo/ja.png', src: '/logo/ja.png' },
+    { id: 'jaguar', name: 'Jaguar Transit', filename: 'jaguar.png', file: 'jaguar.png', url: '/logo/jaguar.png', src: '/logo/jaguar.png' }
+  ];
 }
 
 export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
@@ -692,6 +737,27 @@ export async function publishCampaignPlatform(
   );
 }
 
+export async function publishToLinkedIn(campaignId: string): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/linkedin`,
+    { method: 'POST' }
+  );
+}
+
+export async function publishToInstagram(campaignId: string): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/instagram`,
+    { method: 'POST' }
+  );
+}
+
+export async function publishToX(campaignId: string): Promise<PublishResponse> {
+  return await request<PublishResponse>(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/publish/x`,
+    { method: 'POST' }
+  );
+}
+
 export async function getCampaignPublications(
   campaignId: string
 ): Promise<CampaignPublicationItem[]> {
@@ -700,17 +766,13 @@ export async function getCampaignPublications(
   );
 }
 
-export async function getCampaignHistory(
-  campaignId: string
-): Promise<CampaignEventItem[]> {
+export async function getCampaignHistory(campaignId: string): Promise<CampaignEventItem[]> {
   return await request<CampaignEventItem[]>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/history`
   );
 }
 
-export async function getCampaignMediaList(
-  campaignId: string
-): Promise<CampaignMediaItem[]> {
+export async function getCampaignMediaList(campaignId: string): Promise<CampaignMediaItem[]> {
   return await request<CampaignMediaItem[]>(
     `/api/campaigns/${encodeURIComponent(campaignId)}/media`
   );
@@ -728,44 +790,6 @@ export async function resetAllCampaignData(): Promise<{
   }>('/api/campaigns/reset-data', { method: 'POST' });
 }
 
-export function generateVideo(
-  body: import('./types').VideoGenerateRequest
-): Promise<import('./types').VideoGenerateResponse> {
-  return request<import('./types').VideoGenerateResponse>('/api/video/generate', jsonBody(body));
-}
-
-export function getVideoConfig(): Promise<import('./types').VideoConfig> {
-  return request<import('./types').VideoConfig>('/api/video/config');
-}
-
-export function attachVideoToAsset(
-  body: import('./types').VideoAttachRequest
-): Promise<{ ok: boolean; asset_id: string; media_url: string }> {
-  return request<{ ok: boolean; asset_id: string; media_url: string }>(
-    '/api/video/attach',
-    jsonBody(body)
-  );
-}
-
-export function listVideoHistory(
-  params: { limit?: number; brand_id?: string } = {}
-): Promise<import('./types').VideoGenerationRecord[]> {
-  const query = new URLSearchParams();
-  if (params.limit) query.set('limit', String(params.limit));
-  if (params.brand_id) query.set('brand_id', params.brand_id);
-  const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<import('./types').VideoGenerationRecord[]>(`/api/video/history${suffix}`);
-}
-
-export function saveVideoExport(
-  body: import('./types').VideoSaveExportRequest
-): Promise<{ ok: boolean; id: string; branded_video_url: string }> {
-  return request<{ ok: boolean; id: string; branded_video_url: string }>(
-    '/api/video/export-record',
-    jsonBody(body)
-  );
-}
-
 export function getBufferStatus(): Promise<import('./types').BufferStatus> {
   return request<import('./types').BufferStatus>('/api/buffer/status');
 }
@@ -778,4 +802,14 @@ export function publishToBuffer(
   body: import('./types').BufferPublishRequest
 ): Promise<import('./types').BufferPublishResult> {
   return request<import('./types').BufferPublishResult>('/api/buffer/publish', jsonBody(body));
+}
+
+export interface MediaConfig {
+  configured: boolean;
+  base_url: string | null;
+  media_endpoint_available: boolean;
+}
+
+export async function getMediaConfig(): Promise<MediaConfig> {
+  return await request<MediaConfig>('/api/media/config');
 }

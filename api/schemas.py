@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 BrandId = Literal["jade", "doctorshield", "jaguar"]
 Platform = Literal["linkedin", "instagram", "x", "blog", "reel"]
@@ -195,18 +195,6 @@ class Lead(BaseModel):
     updated_at: datetime | None = None
 
 
-class LeadSearchRequest(BaseModel):
-    brand_id: BrandId
-    category: str
-    location: str
-    keywords: str | None = None
-
-
-class LeadOutreachRequest(BaseModel):
-    brand_id: BrandId
-    lead_id: str
-
-
 class Metrics(BaseModel):
     rejection_rate: float
     avg_edits_per_post: float
@@ -238,6 +226,8 @@ class CampaignPlatformContentItem(BaseModel):
     script: str | None = None
     visual_concept: str | None = None
     generation_prompt: str | None = None
+    version: int = 1
+    is_current: bool = True
 
 
 class CampaignMediaItem(BaseModel):
@@ -256,6 +246,7 @@ class CampaignMediaItem(BaseModel):
     logo_scale: float | None = None
     logo_opacity: float | None = None
     parent_media_id: str | None = None
+    watermark_config: Any | None = None
 
 
 class CampaignFacts(BaseModel):
@@ -423,3 +414,100 @@ class VideoGenerationRecord(BaseModel):
     error_msg: str | None = None
     request_id: str | None = None
     created_at: datetime
+
+
+class WatermarkLogoItem(BaseModel):
+    id: str | None = None
+    logo_path: str = "/logo/ja.png"
+    name: str | None = None
+    file: str | None = None
+    filename: str | None = None
+    src: str | None = None
+    url: str | None = None
+    anchor: str = "bottom-right"
+    scale: float = 80.0
+    opacity: float = 90.0
+    x: float | None = None
+    y: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_logo_path(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            path_val = (
+                data.get("logo_path")
+                or data.get("url")
+                or data.get("src")
+                or data.get("file")
+                or data.get("filename")
+            )
+            if not path_val and data.get("name"):
+                name_clean = str(data["name"]).lower().replace(" ", "").replace("-", "")
+                if "assure" in name_clean or name_clean == "ja":
+                    path_val = "/logo/ja.png"
+                elif "doctor" in name_clean:
+                    path_val = "/logo/doctorshield.png"
+                elif "jaguar" in name_clean:
+                    path_val = "/logo/jaguar.png"
+                elif "jade" in name_clean:
+                    path_val = "/logo/Jade.png"
+                else:
+                    path_val = f"/logo/{name_clean}.png"
+            data["logo_path"] = path_val or "/logo/ja.png"
+        return data
+
+
+class HistoryCampaignSummary(BaseModel):
+    id: str
+    brand_id: str
+    title: str | None = None
+    thesis: str | None = None
+    objective: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime | None = None
+    platforms: list[str] = Field(default_factory=list)
+    has_final_image: bool = False
+    has_final_video: bool = False
+    has_original_image: bool = False
+    review_cycle: int = 1
+    review_status: str | None = None
+    publications_count: int = 0
+
+
+class AssistantChatRequest(BaseModel):
+    message: str
+    target_platform: str | None = None
+    regenerate_media: bool = False
+    media_type: str = "image"
+
+
+class AssistantChatResponse(BaseModel):
+    reply: str
+    campaign_id: str
+    regenerated_platforms: list[str] = Field(default_factory=list)
+    compliance_results: dict[str, Any] = Field(default_factory=dict)
+    new_media: CampaignMediaItem | None = None
+    updated_contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+
+
+class ResubmitReviewRequest(BaseModel):
+    note: str | None = None
+
+
+class ResubmitReviewResponse(BaseModel):
+    success: bool
+    campaign_id: str
+    status: str
+    review_cycle: int
+    message: str
+
+
+class CampaignWorkspaceHistory(BaseModel):
+    campaign: dict[str, Any]
+    contents: list[CampaignPlatformContentItem] = Field(default_factory=list)
+    media: list[CampaignMediaItem] = Field(default_factory=list)
+    review_cycles: list[dict[str, Any]] = Field(default_factory=list)
+    publications: list[CampaignPublicationItem] = Field(default_factory=list)
+    events: list[CampaignEventItem] = Field(default_factory=list)
+    lessons: list[dict[str, Any]] = Field(default_factory=list)

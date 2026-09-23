@@ -21,6 +21,23 @@ import styles from './page.module.css';
 type View = 'feed' | 'sources' | 'watchlist';
 type FilterValue = '' | string;
 
+const INIT_ATTEMPTS = 8;
+const INIT_BASE_DELAY_MS = 400;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isDashboardHydrated(dashboard: CompetitorDashboard | null): boolean {
+  if (!dashboard) return false;
+  if (dashboard.ready === false) return false;
+  // Watches can load from JSON before the DB registry is upserted; competitors
+  // are the real signal that the shared store has been initialized.
+  return dashboard.competitors.length > 0;
+}
+
 const labels: Record<string, string> = {
   jade: 'Jade',
   doctorshield: 'DoctorShield',
@@ -122,19 +139,27 @@ function impactClasses(impact: string): { badge: string; rail: string } {
   if (impact === 'high') {
     return {
       badge: 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-300',
-      rail: 'bg-red-500'
+      rail: 'border-l-red-500 dark:border-l-red-500'
     };
   }
   if (impact === 'medium') {
     return {
       badge: 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300',
-      rail: 'bg-amber-500'
+      rail: 'border-l-amber-500 dark:border-l-amber-500'
     };
   }
   return {
     badge: 'border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-300',
-    rail: 'bg-blue-500'
+    rail: 'border-l-blue-500 dark:border-l-blue-500'
   };
+}
+
+function diffLineClass(line: string, index: number): string {
+  if (index < 2 && (line.startsWith('+++ ') || line.startsWith('--- '))) return 'block border-l-2 border-transparent px-2 text-[#737373] dark:text-[#a3a3a3]';
+  if (line.startsWith('+')) return 'block border-l-2 border-emerald-500 bg-emerald-50 px-2 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200';
+  if (line.startsWith('-')) return 'block border-l-2 border-red-500 bg-red-50 px-2 text-red-900 dark:bg-red-950/40 dark:text-red-200';
+  if (line.startsWith('@@')) return 'block border-l-2 border-transparent px-2 text-blue-700 dark:text-blue-300';
+  return 'block border-l-2 border-transparent px-2';
 }
 
 function Badge({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -176,6 +201,7 @@ export default function CompetitorIntelligencePage() {
   const [view, setView] = useState<View>('feed');
   const [dashboard, setDashboard] = useState<CompetitorDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CompetitorEvent | null>(null);
@@ -189,20 +215,48 @@ export default function CompetitorIntelligencePage() {
   const [changeType, setChangeType] = useState<FilterValue>('');
   const [source, setSource] = useState<FilterValue>('');
 
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
+  const loadDashboard = useCallback(async (options?: { quiet?: boolean }) => {
+    if (!options?.quiet) setIsLoading(true);
     try {
-      setDashboard(await getCompetitorDashboard());
+      const next = await getCompetitorDashboard();
+      setDashboard(next);
+      setLoadError(null);
       setNotice(null);
+      return isDashboardHydrated(next);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not load competitor intelligence.');
+      const message = error instanceof Error ? error.message : 'Could not load competitor intelligence.';
+      setLoadError(message);
+      return false;
     } finally {
-      setIsLoading(false);
+      if (!options?.quiet) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadDashboard();
+    let cancelled = false;
+
+    const hydrate = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      for (let attempt = 1; attempt <= INIT_ATTEMPTS; attempt += 1) {
+        if (cancelled) return;
+        const hydrated = await loadDashboard({ quiet: attempt > 1 });
+        if (cancelled) return;
+        if (hydrated) {
+          setIsLoading(false);
+          return;
+        }
+        if (attempt < INIT_ATTEMPTS) {
+          await sleep(Math.min(4000, INIT_BASE_DELAY_MS * attempt));
+        }
+      }
+      if (!cancelled) setIsLoading(false);
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, [loadDashboard]);
 
   useEffect(() => {
@@ -343,15 +397,6 @@ export default function CompetitorIntelligencePage() {
     }
   };
 
-  const resetFilters = () => {
-    setSearch('');
-    setBrand('');
-    setImpact('');
-    setCountry('');
-    setChangeType('');
-    setSource('');
-  };
-
   const openView = (nextView: View) => {
     setSelectedEvent(null);
     setView(nextView);
@@ -404,15 +449,13 @@ export default function CompetitorIntelligencePage() {
         <SelectFilter value={country} options={selectOptions.country} onChange={setCountry} label='Country' />
         <SelectFilter value={changeType} options={selectOptions.changeType} onChange={setChangeType} label='Change type' />
         <SelectFilter value={source} options={selectOptions.source} onChange={setSource} label='Source' />
-        <button type='button' className={`${quietButton} self-stretch`} onClick={resetFilters}>Clear</button>
       </form>
 
       <div className='flex flex-col gap-2.5' aria-live='polite'>
         {filteredEvents.map((event) => {
           const impactStyle = impactClasses(event.impact);
           return (
-            <button key={event.id} type='button' aria-label={`View change from ${competitorName(event, dashboard?.competitors || [])}: ${event.summary}`} className='grid min-w-0 grid-cols-[5px_minmax(0,1fr)] items-stretch gap-4 rounded-xl border border-[#e6e6e6] bg-white pr-4 text-left transition hover:-translate-y-px hover:border-[#737373] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black dark:border-[#424242] dark:bg-[#171717] dark:hover:border-[#a3a3a3] dark:hover:bg-[#242424] dark:focus-visible:ring-white' onClick={() => setSelectedEvent(event)}>
-              <span className={`rounded-r-md ${impactStyle.rail}`} />
+            <button key={event.id} type='button' aria-label={`View change from ${competitorName(event, dashboard?.competitors || [])}: ${event.summary}`} className={`block w-full min-w-0 rounded-xl border border-l-[6px] border-[#e6e6e6] bg-white px-4 text-left transition-[transform,background-color,box-shadow] duration-150 hover:-translate-y-px hover:bg-[#f7f7f7] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black motion-reduce:transform-none dark:border-[#424242] dark:bg-[#171717] dark:hover:bg-[#242424] dark:focus-visible:ring-white ${impactStyle.rail}`} onClick={() => setSelectedEvent(event)}>
               <span className={`${styles.eventBody} py-4`}>
                 <span className='min-w-0'>
                   <span className='mb-2 flex min-w-0 flex-wrap items-center gap-[7px]'>
@@ -535,82 +578,98 @@ export default function CompetitorIntelligencePage() {
     if (!selectedEvent) return null;
     const event = selectedEvent;
     const eventAnalysis = analysis[event.id];
+    const confidence = Math.round(event.confidence * 100);
     return (
-      <section className='mx-auto max-w-[980px] min-w-0 pb-10 pt-7'>
-        <button type='button' className='mb-[18px] inline-flex text-[13px] text-[#737373] hover:text-[#09090b] hover:underline dark:text-[#a3a3a3] dark:hover:text-white' onClick={() => setSelectedEvent(null)}>← Back to feed</button>
-        <p className={`mb-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>{competitorName(event, dashboard?.competitors || [])} · {label(event.country)}</p>
-        <h1 className={`mb-3.5 line-clamp-2 text-[26px] font-semibold leading-tight tracking-[-0.035em] text-[#09090b] dark:text-white sm:text-[30px] ${styles.wrapAnywhere}`}>{event.summary}</h1>
-        <div className='mb-5 flex flex-wrap items-center gap-2'>
-          <Badge className={impactClasses(event.impact).badge}>{label(event.impact)} impact</Badge>
-          <Badge>{label(event.brand_id)}</Badge>
-          {event.relationship ? <Badge className='border-violet-500/35 bg-violet-500/10 text-violet-600 dark:text-violet-300'>{label(event.relationship)}</Badge> : null}
-          <span className='text-xs text-[#737373] dark:text-[#a3a3a3]'>{formatDate(event.detected_at)} via {event.source}</span>
+      <section className='w-full min-w-0 pb-10 pt-7'>
+        <button type='button' className='mb-5 inline-flex text-[13px] text-[#737373] hover:text-[#09090b] hover:underline dark:text-[#a3a3a3] dark:hover:text-white' onClick={() => setSelectedEvent(null)}>← Back to feed</button>
+        <div className='mb-6 border-b border-[#e6e6e6] pb-6 dark:border-[#424242]'>
+          <p className={`mb-2 text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>{competitorName(event, dashboard?.competitors || [])} · {label(event.country)}</p>
+          <h1 className={`mb-3 text-[26px] font-semibold leading-tight tracking-[-0.035em] text-[#09090b] dark:text-white sm:text-[32px] ${styles.wrapAnywhere}`}>{label(event.change_type)}: {competitorName(event, dashboard?.competitors || [])}</h1>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Badge className={impactClasses(event.impact).badge}>{label(event.impact)} impact</Badge>
+            <Badge>{label(event.brand_id)}</Badge>
+            {event.relationship ? <Badge className='border-violet-500/35 bg-violet-500/10 text-violet-600 dark:text-violet-300'>{label(event.relationship)}</Badge> : null}
+            <span className='text-xs text-[#737373] dark:text-[#a3a3a3]'>{formatDate(event.detected_at)} · {event.source}</span>
+          </div>
         </div>
-        <div className={`${panelClass} min-w-0 p-4 sm:p-6`}>
-          <div className='mb-5'>
-            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Change summary</h2>
-            <p className={`m-0 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.summary}</p>
-          </div>
-          <div className={`${styles.metadataGrid} gap-2.5`}>
-            {[
-              ['Competitor', competitorName(event, dashboard?.competitors || [])],
-              ['Market', label(event.country)],
-              ['Change type', label(event.change_type)],
-              ['Analysis confidence', `${Math.round(event.confidence * 100)}%`],
-              ...(event.product_category ? [['Product category', event.product_category]] : []),
-              ['Source', event.source]
-            ].map(([name, value]) => (
-              <div key={name} className='min-w-0 rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
-                <span className='mb-1.5 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>{name}</span>
-                <strong className={`text-[13px] text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</strong>
-              </div>
-            ))}
-          </div>
-          {event.previous_value || event.current_value ? (
-            <div className={`${styles.metadataGrid} mt-2.5 gap-2.5`}>
-              {[
-                ['Before', event.previous_value || 'Not found'],
-                ['After', event.current_value || 'Not found']
-              ].map(([name, value]) => (
-                <div key={name} className='min-w-0 rounded-[9px] border border-[#e6e6e6] bg-[#f7f7f7] p-3 dark:border-[#424242] dark:bg-[#242424]'>
-                  <span className='mb-1.5 block text-[10px] text-[#737373] dark:text-[#a3a3a3]'>{name}</span>
-                  <strong className={`text-[13px] text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</strong>
+        <section className={`${panelClass} mb-4 min-w-0 overflow-hidden`}>
+          <h2 className='border-b border-[#e6e6e6] px-5 py-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:border-[#424242] dark:text-[#a3a3a3]'>Signal profile</h2>
+          <div className='min-w-0 overflow-x-auto'>
+            <div className='grid min-w-[880px] grid-cols-[minmax(0,1.4fr)_minmax(0,4.6fr)] px-1 py-4'>
+              <div className='flex min-w-0 flex-col justify-between px-4'>
+                <span className='text-[11px] text-[#737373] dark:text-[#a3a3a3]'>Analysis confidence</span>
+                <strong className='mt-2 text-[26px] leading-none text-[#09090b] dark:text-white'>{confidence}%</strong>
+                <div className='mt-3 h-1.5 overflow-hidden rounded-full bg-[#e6e6e6] dark:bg-[#424242]' role='img' aria-label={`Analysis confidence ${confidence} percent`}>
+                  <span className='block h-full rounded-full bg-[#09090b] dark:bg-white' style={{ width: `${Math.max(0, Math.min(100, event.confidence * 100))}%` }} />
                 </div>
-              ))}
-            </div>
-          ) : null}
-          <div className='mt-[17px]'>
-            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Why it matters</h2>
-            <p className='m-0 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>{event.why_it_matters}</p>
-          </div>
-          <div className='mt-[17px]'>
-            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Recommended action</h2>
-            <p className='m-0 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>{event.recommended_action}</p>
-          </div>
-          <div className='mt-[17px]'>
-            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Captured evidence</h2>
-            <p className={`border-l-2 border-black bg-[#f5f5f5] p-3 text-xs leading-[1.6] text-[#404040] dark:border-white dark:bg-[#242424] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.evidence}</p>
-          </div>
-          <div className='mt-[17px]'>
-            <h2 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Before / after diff</h2>
-            <pre className={`max-h-[300px] min-w-0 overflow-auto whitespace-pre-wrap border border-[#e6e6e6] p-3 text-[11px] leading-[1.5] text-[#404040] dark:border-[#424242] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{eventDiff === null ? 'Loading captured diff…' : eventDiff || 'No line changes in the captured evidence.'}</pre>
-          </div>
-          <div className='mt-[17px]'>
-            <div className='flex flex-wrap gap-2'>
-              <button type='button' className={primaryButton} disabled={busyAction === `analyze:${event.id}`} onClick={() => void analyzeEvent(event)}>
-                {busyAction === `analyze:${event.id}` ? <Icons.spinner className='size-3.5 animate-spin' /> : <Icons.sparkles className='size-3.5' />}
-                {busyAction === `analyze:${event.id}` ? 'Analyzing…' : 'Analyze with AI'}
-              </button>
-              {event.source_url ? <a className={quietButton} href={event.source_url} target='_blank' rel='noreferrer'>Open source ↗</a> : null}
-            </div>
-            {eventAnalysis ? (
-              <div className='mt-3 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>
-                <h3 className='mb-1 font-semibold text-[#09090b] dark:text-white'>{eventAnalysis.summary}</h3>
-                {eventAnalysis.why_it_matters ? <p className='mb-2'>{eventAnalysis.why_it_matters}</p> : null}
-                {eventAnalysis.recommended_action ? <><h4 className='mb-1 font-semibold text-[#09090b] dark:text-white'>Recommended action</h4><p className='mb-2'>{eventAnalysis.recommended_action}</p></> : null}
-                {eventAnalysis.confidence_reason ? <small className='text-[#737373] dark:text-[#a3a3a3]'>{eventAnalysis.confidence_reason}</small> : null}
               </div>
-            ) : null}
+              <dl className='grid min-w-0 grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)_minmax(0,1fr)]'>
+                {[
+                  ['Competitor', competitorName(event, dashboard?.competitors || [])],
+                  ['Market', label(event.country)],
+                  ['Change type', label(event.change_type)],
+                  ['Product category', event.product_category || '—'],
+                  ['Source', event.source]
+                ].map(([name, value]) => (
+                  <div key={name} className='min-w-0 border-l border-[#e6e6e6] px-4 dark:border-[#424242]'>
+                    <dt className='mb-2 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>{name}</dt>
+                    <dd className={`m-0 max-h-24 min-w-0 overflow-y-auto text-[12px] font-semibold leading-5 text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        </section>
+        <div className='min-w-0 space-y-4'>
+          <article className={`${panelClass} min-w-0 overflow-hidden`}>
+            <div className='border-b border-[#e6e6e6] px-5 py-4 dark:border-[#424242]'>
+              <p className='mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:text-[#a3a3a3]'>01 / The change</p>
+              <h2 className='text-[17px] font-semibold text-[#09090b] dark:text-white'>What was detected</h2>
+            </div>
+            <div className='p-5'>
+              <p className={`m-0 text-[14px] leading-7 text-[#404040] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.summary}</p>
+              {event.previous_value || event.current_value ? (
+                <div className={`${styles.comparisonGrid} mt-5`}>
+                  <div className='min-w-0 rounded-lg border border-[#e6e6e6] bg-[#fafafa] p-4 dark:border-[#424242] dark:bg-[#242424]'>
+                    <h3 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#737373] dark:text-[#a3a3a3]'>Before</h3>
+                    <p className={`m-0 text-[13px] leading-6 text-[#404040] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>{event.previous_value || 'No previous value captured'}</p>
+                  </div>
+                  <div className='min-w-0 rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/30'>
+                    <h3 className='mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-blue-700 dark:text-blue-300'>After</h3>
+                    <p className={`m-0 text-[13px] leading-6 text-[#172554] dark:text-blue-100 ${styles.wrapAnywhere}`}>{event.current_value || 'No current value captured'}</p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </article>
+          <article className={`${panelClass} min-w-0 p-5`}>
+            <p className='mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:text-[#a3a3a3]'>02 / Source diff</p>
+            <h2 className='mb-4 text-[17px] font-semibold text-[#09090b] dark:text-white'>Line changes</h2>
+            {eventDiff && eventDiff !== 'No line changes in the captured evidence.' ? (
+              <pre className={`max-h-[300px] min-w-0 overflow-auto whitespace-pre-wrap rounded-lg bg-[#f7f7f7] py-3 text-[11px] leading-[1.6] text-[#404040] dark:bg-[#242424] dark:text-[#d4d4d4] ${styles.wrapAnywhere}`}>
+                {eventDiff.split('\n').map((line, index) => (
+                  <span key={index} className={diffLineClass(line, index)}>{line || ' '}</span>
+                ))}
+              </pre>
+            ) : (
+              <p className='text-[12px] text-[#737373] dark:text-[#a3a3a3]'>{eventDiff === null ? 'Loading captured diff…' : 'No line-level diff available for this capture.'}</p>
+            )}
+          </article>
+          {eventAnalysis ? (
+            <section className={`${panelClass} min-w-0 p-5 text-[13px] leading-6 text-[#404040] dark:text-[#d4d4d4]`}>
+              <h2 className='mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#737373] dark:text-[#a3a3a3]'>AI analysis</h2>
+              <p className={`font-semibold text-[#09090b] dark:text-white ${styles.wrapAnywhere}`}>{eventAnalysis.summary}</p>
+              {eventAnalysis.why_it_matters ? <p className={`mt-2 ${styles.wrapAnywhere}`}>{eventAnalysis.why_it_matters}</p> : null}
+              {eventAnalysis.recommended_action ? <p className={`mt-2 ${styles.wrapAnywhere}`}>{eventAnalysis.recommended_action}</p> : null}
+              {eventAnalysis.confidence_reason ? <small className={`mt-2 block text-[#737373] dark:text-[#a3a3a3] ${styles.wrapAnywhere}`}>{eventAnalysis.confidence_reason}</small> : null}
+            </section>
+          ) : null}
+          <div className='flex flex-wrap gap-2 pt-2'>
+            <button type='button' className={primaryButton} disabled={busyAction === `analyze:${event.id}`} onClick={() => void analyzeEvent(event)}>
+              {busyAction === `analyze:${event.id}` ? <Icons.spinner className='size-3.5 animate-spin' /> : <Icons.sparkles className='size-3.5' />}
+              {busyAction === `analyze:${event.id}` ? 'Analyzing…' : 'Analyze with AI'}
+            </button>
+            {event.source_url ? <a className={quietButton} href={event.source_url} target='_blank' rel='noreferrer'>Open source ↗</a> : null}
           </div>
         </div>
       </section>
@@ -619,7 +678,7 @@ export default function CompetitorIntelligencePage() {
 
   return (
     <main className='min-h-[calc(100vh-4rem)] min-w-0 w-full bg-white px-4 pb-16 pt-6 text-[#09090b] dark:bg-black dark:text-white sm:px-6 lg:px-8 xl:px-12'>
-      <div className={`mx-auto min-w-0 w-full max-w-[1440px] ${styles.workspace}`}>
+      <div className={`min-w-0 w-full ${styles.workspace}`}>
         {renderHeader()}
         {notice ? (
           <div className='fixed bottom-5 right-5 z-50 flex max-w-[380px] items-start gap-2.5 rounded-[10px] border border-[#e6e6e6] bg-white p-3 text-[13px] leading-6 text-[#09090b] shadow-2xl dark:border-[#424242] dark:bg-[#171717] dark:text-white' role='status'>
@@ -627,8 +686,16 @@ export default function CompetitorIntelligencePage() {
             <button type='button' className='grid size-6 flex-none place-items-center rounded-full border border-[#e6e6e6] text-[#737373] dark:border-[#424242]' onClick={() => setNotice(null)} aria-label='Dismiss notification'>×</button>
           </div>
         ) : null}
-        {isLoading && !dashboard ? (
-          <div className='flex items-center gap-2 py-20 text-sm text-[#737373] dark:text-[#a3a3a3]'><Icons.spinner className='size-4 animate-spin' /> Loading intelligence data…</div>
+        {isLoading && !isDashboardHydrated(dashboard) ? (
+          <div className='flex items-center gap-2 py-20 text-sm text-[#737373] dark:text-[#a3a3a3]'><Icons.spinner className='size-4 animate-spin' /> Initializing competitor intelligence…</div>
+        ) : !isDashboardHydrated(dashboard) ? (
+          <div className={`${panelClass} mt-8 px-5 py-11 text-center`}>
+            <strong className='mb-2 block text-[15px] text-[#09090b] dark:text-white'>Competitor intelligence is not ready</strong>
+            <p className='mb-4 text-[13px] text-[#737373] dark:text-[#a3a3a3]'>{loadError || 'The registry has not hydrated yet. Retry once the API finishes initializing.'}</p>
+            <button type='button' className={primaryButton} onClick={() => void loadDashboard()}>
+              Retry
+            </button>
+          </div>
         ) : selectedEvent ? renderEventDetail() : view === 'sources' ? renderSources() : view === 'watchlist' ? renderWatchlist() : renderFeed()}
       </div>
       {busyAction?.startsWith('scan') ? (
@@ -637,7 +704,7 @@ export default function CompetitorIntelligencePage() {
             <div className='mx-auto mb-4 size-8 animate-spin rounded-full border-[3px] border-[#e6e6e6] border-t-black dark:border-[#424242] dark:border-t-white' />
             <h2 className='mb-2 text-[17px] font-semibold tracking-[-0.02em]'>Scanning</h2>
             <p className='mb-[18px] text-[13px] leading-6 text-[#737373] dark:text-[#a3a3a3]'>Checking sources for changes. This may take a few seconds.</p>
-            <div className='h-1 overflow-hidden rounded-full border border-[#e6e6e6] bg-[#f7f7f7] dark:border-[#424242] dark:bg-[#242424]'><span className='block h-full w-2/5 animate-pulse rounded-full bg-black dark:bg-white' /></div>
+            <div className={styles.progressTrack} aria-hidden='true'><span className={styles.progressBar} /></div>
           </div>
         </div>
       ) : null}

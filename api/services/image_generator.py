@@ -150,19 +150,55 @@ def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
 
 
 def find_logo_path(logo_filename: str) -> Path | None:
-    """Locate brand or group logo in web/public/logo, public/logo, or storage/logo."""
+    """Locate brand or group logo in web/public/logo, web/public/logos, public/logo, or storage/logo."""
+    if not logo_filename:
+        return None
     project_root = Path(__file__).resolve().parent.parent.parent
-    variants = [logo_filename, logo_filename.lower(), logo_filename.capitalize()]
-    for fn in variants:
-        candidate_paths = [
-            project_root / "web" / "public" / "logo" / fn,
-            project_root / "public" / "logo" / fn,
-            project_root / "web" / "public" / fn,
-            project_root / "storage" / "logo" / fn,
+    clean_fn = str(logo_filename).replace("\\", "/").split("/")[-1].strip()
+
+    aliases = {
+        "ja assure": "ja.png",
+        "ja-assure": "ja.png",
+        "jaassure": "ja.png",
+        "ja": "ja.png",
+        "jade": "Jade.png",
+        "doctorshield": "doctorshield.png",
+        "doctor shield": "doctorshield.png",
+        "doctor-shield": "doctorshield.png",
+        "jaguar": "jaguar.png",
+        "jaguar transit": "jaguar.png",
+        "jaguar-transit": "jaguar.png",
+        "jaguartransit": "jaguar.png",
+    }
+
+    candidates_to_try = [clean_fn]
+    clean_stem = clean_fn.rsplit(".", 1)[0].lower() if "." in clean_fn else clean_fn.lower()
+    if clean_stem in aliases:
+        candidates_to_try.append(aliases[clean_stem])
+    if clean_fn.lower() in aliases:
+        candidates_to_try.append(aliases[clean_fn.lower()])
+
+    for target in candidates_to_try:
+        variants = [
+            target,
+            target.lower(),
+            target.capitalize(),
+            f"{target}.png",
+            f"{target.lower()}.png",
+            f"{target.capitalize()}.png",
         ]
-        for p in candidate_paths:
-            if p.exists() and p.is_file():
-                return p
+        for fn in variants:
+            candidate_paths = [
+                project_root / "web" / "public" / "logo" / fn,
+                project_root / "web" / "public" / "logos" / fn,
+                project_root / "public" / "logo" / fn,
+                project_root / "public" / "logos" / fn,
+                project_root / "web" / "public" / fn,
+                project_root / "storage" / "logo" / fn,
+            ]
+            for p in candidate_paths:
+                if p.exists() and p.is_file():
+                    return p
     return None
 
 
@@ -308,6 +344,8 @@ def generate_image(
                     continue
 
             if last_exc:
+                if not demo_mode:
+                    raise RuntimeError(f"FAL image generation failed: {last_exc}") from last_exc
                 logger.error(f"All FAL models failed: {last_exc}. Falling back to demo poster.")
                 create_demo_image(target_path, effective_prompt, rel_path)
                 file_size = target_path.stat().st_size if target_path.exists() else 1024
@@ -323,9 +361,14 @@ def generate_image(
                     "media_stage": "original",
                 }
         except Exception as exc:
+            if not demo_mode:
+                raise RuntimeError(f"FAL image generation initialization failed: {exc}") from exc
             logger.error(f"FAL image generation initialization failed: {exc}")
 
-    # Fallback demo image
+    # Fallback demo image only when demo_mode is True
+    if not demo_mode:
+        raise RuntimeError("No image generator available or FAL generation failed.")
+
     create_demo_image(target_path, effective_prompt, rel_path)
     file_size = target_path.stat().st_size if target_path.exists() else 1024
     return {
@@ -345,13 +388,14 @@ def apply_watermark_to_image(
     campaign_id: str,
     original_media_path: str,
     brand_id: str | None = None,
+    logos: list[dict[str, Any]] | None = None,
     logo_anchor: str = "bottom-right",
     logo_scale: float = 80.0,
     logo_opacity: float = 90.0,
     custom_text: str | None = None,
     image_data_base64: str | None = None,
 ) -> dict[str, Any]:
-    """Create final watermarked poster (poster_final_v{v}.png) from original or uploaded canvas data."""
+    """Create final watermarked poster (final_v{v}.png) from original or uploaded canvas data with multi-logo support."""
     target_path, filename, rel_path = determine_next_media_path(campaign_id, "image", stage="final")
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -391,37 +435,77 @@ def apply_watermark_to_image(
                 base_img = base_img.convert("RGBA")
                 w, h = base_img.size
 
-                # Overlay Brand Logo
-                bid = (brand_id or "jade").lower()
-                logo_file = find_logo_path(f"{bid}.png") or find_logo_path("ja.png")
-                if logo_file:
-                    with Image.open(logo_file) as l_img:
-                        l_rgba = l_img.convert("RGBA")
-                        base_size = int(w * 0.22 * (logo_scale / 100.0))
-                        aspect = l_rgba.height / float(l_rgba.width)
-                        logo_w = base_size
-                        logo_h = int(logo_w * aspect)
-                        l_resized = l_rgba.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+                # Multi-logo compositing
+                logo_list = logos if logos and len(logos) > 0 else []
+                if not logo_list:
+                    # Construct default single logo list from brand_id/anchor
+                    bid = (brand_id or "jade").lower()
+                    logo_list = [{
+                        "file": f"{bid}.png",
+                        "scale": logo_scale,
+                        "opacity": logo_opacity,
+                        "position": logo_anchor,
+                    }]
 
-                        # Adjust opacity
-                        alpha = l_resized.split()[3]
-                        alpha = alpha.point(lambda p: int(p * (logo_opacity / 100.0)))
-                        l_resized.putalpha(alpha)
+                padding = int(w * 0.04)
 
-                        # Anchor positioning
-                        padding = int(w * 0.04)
-                        if logo_anchor == "top-left":
-                            pos = (padding, padding)
-                        elif logo_anchor == "top-right":
-                            pos = (w - logo_w - padding, padding)
-                        elif logo_anchor == "bottom-left":
-                            pos = (padding, h - logo_h - padding)
-                        elif logo_anchor == "center":
-                            pos = ((w - logo_w) // 2, (h - logo_h) // 2)
-                        else:  # bottom-right
-                            pos = (w - logo_w - padding, h - logo_h - padding)
+                for item in logo_list:
+                    fname = (
+                        item.get("logo_path")
+                        or item.get("url")
+                        or item.get("src")
+                        or item.get("file")
+                        or item.get("filename")
+                        or item.get("name")
+                        or item.get("id")
+                        or "jade"
+                    )
+                    if str(fname).startswith("/logos/"):
+                        fname = str(fname).replace("/logos/", "")
+                    elif str(fname).startswith("/logo/"):
+                        fname = str(fname).replace("/logo/", "")
+                    if not str(fname).lower().endswith(".png") and not str(fname).lower().endswith(".svg"):
+                        fname = f"{fname}.png"
 
-                        base_img.paste(l_resized, pos, l_resized)
+                    logo_file = find_logo_path(str(fname)) or find_logo_path("ja.png")
+                    if not logo_file:
+                        continue
+
+                    try:
+                        with Image.open(logo_file) as l_img:
+                            l_rgba = l_img.convert("RGBA")
+                            raw_scale = float(item.get("scale", 20.0))
+                            # Normalize scale (if scale is e.g. 0.20 or 20 for 20%)
+                            norm_scale = raw_scale / 100.0 if raw_scale > 1.0 else raw_scale
+                            base_size = max(24, int(w * max(0.05, min(0.60, norm_scale))))
+                            aspect = l_rgba.height / float(l_rgba.width)
+                            logo_w = base_size
+                            logo_h = max(12, int(logo_w * aspect))
+                            l_resized = l_rgba.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+
+                            raw_op = float(item.get("opacity", 100.0))
+                            norm_op = raw_op / 100.0 if raw_op > 1.0 else raw_op
+                            alpha = l_resized.split()[3]
+                            alpha = alpha.point(lambda p: int(p * max(0.1, min(1.0, norm_op))))
+                            l_resized.putalpha(alpha)
+
+                            pos_val = item.get("position", "bottom-right")
+                            if isinstance(pos_val, dict) and "x" in pos_val and "y" in pos_val:
+                                pos = (int(pos_val["x"]), int(pos_val["y"]))
+                            elif pos_val == "top-left":
+                                pos = (padding, padding)
+                            elif pos_val == "top-right":
+                                pos = (w - logo_w - padding, padding)
+                            elif pos_val == "bottom-left":
+                                pos = (padding, h - logo_h - padding)
+                            elif pos_val == "center":
+                                pos = ((w - logo_w) // 2, (h - logo_h) // 2)
+                            else:  # bottom-right
+                                pos = (w - logo_w - padding, h - logo_h - padding)
+
+                            base_img.paste(l_resized, pos, l_resized)
+                    except Exception as err:
+                        logger.warning(f"Failed to composite logo item {item}: {err}")
 
                 # Custom text overlay
                 if custom_text and custom_text.strip():
@@ -438,7 +522,6 @@ def apply_watermark_to_image(
 
                 base_img.save(target_path, "PNG")
         else:
-            # For SVG or fallback, duplicate and mark
             import shutil
             if src_abs.exists():
                 shutil.copyfile(src_abs, target_path)

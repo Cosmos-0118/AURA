@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import type { BrandId, CampaignMediaItem } from '@/lib/api/types';
-import type { LogoAnchor } from './types';
+import type { BrandId, CampaignMediaItem, BrandLogoItem } from '@/lib/api/types';
+import type { LogoAnchor, WatermarkLogo } from './types';
 import { useWatermarkComposer } from './use-watermark-composer';
 import { WatermarkCanvas } from './watermark-canvas';
-import { applyCampaignWatermark, uploadWatermarkedMedia } from '@/lib/api/client';
+import { applyCampaignWatermark, uploadWatermarkedMedia, getBrandLogos } from '@/lib/api/client';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,27 +22,6 @@ import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Progress } from '@/components/ui/progress';
 import { Icons } from '@/components/icons';
-
-export const PRESET_LOGOS = [
-  {
-    id: 'jade',
-    name: 'Jade',
-    badge: 'Luxury & High Value Risk',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%23061A12" fill-opacity="0.90"/><polygon points="24,10 35,24 24,38 13,24" fill="%2310B981" stroke="%23F59E0B" stroke-width="1.8"/><circle cx="24" cy="24" r="3.5" fill="%23FFFFFF"/><text x="44" y="27" fill="%23F59E0B" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1.5">JADE</text><text x="44" y="38" fill="%2310B981" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">SPECIALIST RISK</text></svg>`
-  },
-  {
-    id: 'doctorshield',
-    name: 'Doctor Shield',
-    badge: 'Clinical Healthcare Care',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%2308263B" fill-opacity="0.90"/><path d="M24 10C24 10 34 12 34 21C34 30 24 37 24 37C24 37 14 30 14 21C14 12 24 10 24 10Z" fill="%230284C7" stroke="%2338BDF8" stroke-width="1.8"/><path d="M24 17V29M18 23H30" stroke="%23FFFFFF" stroke-width="2.2" stroke-linecap="round"/><text x="44" y="27" fill="%23FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.8">DOCTOR</text><text x="100" y="27" fill="%2338BDF8" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.8">SHIELD</text><text x="44" y="38" fill="%237DD3FC" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">CLINICAL CARE</text></svg>`
-  },
-  {
-    id: 'jaguar',
-    name: 'Jaguar Transit',
-    badge: 'Logistics & Secure Transit',
-    svg: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 48" fill="none"><rect width="170" height="48" rx="8" fill="%231E170E" fill-opacity="0.90"/><polygon points="24,10 35,16 35,29 24,37 13,29 13,16" fill="%23D97706" stroke="%23FBBF24" stroke-width="1.8"/><circle cx="24" cy="23.5" r="4" fill="%23FFFFFF"/><text x="44" y="27" fill="%23FBBF24" font-family="system-ui, sans-serif" font-weight="800" font-size="11.5" letter-spacing="0.8">JAGUAR TRANSIT</text><text x="44" y="38" fill="%23FDE68A" font-family="system-ui, sans-serif" font-weight="600" font-size="8.5" letter-spacing="1">SECURE LOGISTICS</text></svg>`
-  }
-];
 
 const COLOR_SWATCHES = [
   '#ffffff',
@@ -71,17 +50,26 @@ export function WatermarkStudio({
 }: WatermarkStudioProps) {
   const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video'>('image');
   const [activeTab, setActiveTab] = useState<'logo' | 'text'>('logo');
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(brandId);
   const [isSaving, setIsSaving] = useState(false);
+  const [availableLogos, setAvailableLogos] = useState<BrandLogoItem[]>([
+    { id: 'jade', name: 'Jade', filename: 'Jade.png', file: 'Jade.png', url: '/logo/Jade.png', src: '/logo/Jade.png' },
+    { id: 'doctorshield', name: 'DoctorShield', filename: 'doctorshield.png', file: 'doctorshield.png', url: '/logo/doctorshield.png', src: '/logo/doctorshield.png' },
+    { id: 'ja', name: 'JA Assure', filename: 'ja.png', file: 'ja.png', url: '/logo/ja.png', src: '/logo/ja.png' },
+    { id: 'jaguar', name: 'Jaguar', filename: 'jaguar.png', file: 'jaguar.png', url: '/logo/jaguar.png', src: '/logo/jaguar.png' }
+  ]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    logoSrc,
+    logos,
+    activeLogoId,
+    activeLogo,
+    setActiveLogoId,
+    addLogo,
+    removeLogo,
+    updateLogo,
+    setAnchorForLogo,
     setPresetLogo,
-    logoConfig,
-    setLogoConfig,
-    setAnchor,
     textConfig,
     setTextConfig,
     textEnabled,
@@ -93,15 +81,31 @@ export function WatermarkStudio({
     setLogoFile
   } = useWatermarkComposer();
 
-  // Initialize brand preset on mount
-  React.useEffect(() => {
-    const matching = PRESET_LOGOS.find((p) => p.id === brandId) || PRESET_LOGOS[0];
-    setPresetLogo(matching.svg);
-    setSelectedPresetId(matching.id);
+  // Load available local brand logos dynamically from backend
+  useEffect(() => {
+    getBrandLogos()
+      .then((items) => {
+        if (items && items.length > 0) {
+          setAvailableLogos(items);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Initialize primary logo from brandId
+  useEffect(() => {
+    const brandMap: Record<string, string> = {
+      jade: '/logo/Jade.png',
+      doctorshield: '/logo/doctorshield.png',
+      jaguar: '/logo/jaguar.png'
+    };
+    const targetUrl = brandMap[brandId] || '/logo/ja.png';
+    const logoName = brandId.charAt(0).toUpperCase() + brandId.slice(1);
+    setPresetLogo(targetUrl, logoName);
   }, [brandId, setPresetLogo]);
 
   // If currently selected media type isn't generated, switch to the one that is
-  React.useEffect(() => {
+  useEffect(() => {
     if (selectedMediaType === 'image' && !imageItem && videoItem) {
       setSelectedMediaType('video');
     } else if (selectedMediaType === 'video' && !videoItem && imageItem) {
@@ -127,13 +131,34 @@ export function WatermarkStudio({
     const file = e.target.files?.[0];
     if (file) {
       setLogoFile(file);
-      setSelectedPresetId('custom');
     }
   };
 
-  const handlePresetSelect = (preset: typeof PRESET_LOGOS[0]) => {
-    setPresetLogo(preset.svg);
-    setSelectedPresetId(preset.id);
+  const handleSelectLogoForActive = (logoItem: BrandLogoItem) => {
+    if (!activeLogo) return;
+    const targetUrl =
+      logoItem.url ||
+      logoItem.src ||
+      `/logo/${logoItem.filename || logoItem.file || 'ja.png'}`;
+    updateLogo(activeLogo.id, {
+      logoPath: targetUrl,
+      name: logoItem.name
+    });
+  };
+
+  const handleAddNewLogo = (logoItem: BrandLogoItem) => {
+    const targetUrl =
+      logoItem.url ||
+      logoItem.src ||
+      `/logo/${logoItem.filename || logoItem.file || 'ja.png'}`;
+    addLogo({
+      logoPath: targetUrl,
+      name: logoItem.name,
+      anchor: 'top-left',
+      scale: 65,
+      opacity: 90
+    });
+    toast.success(`Added secondary watermark: ${logoItem.name}`);
   };
 
   const handleSaveWatermark = async () => {
@@ -144,22 +169,48 @@ export function WatermarkStudio({
 
     setIsSaving(true);
     try {
+      const watermarkConfig = {
+        logos: logos.map((l) => {
+          const fallbackPath = l.name ? `/logo/${l.name.toLowerCase().replace(/\s+/g, '')}.png` : '/logo/ja.png';
+          return {
+            id: l.id,
+            logo_path: l.logoPath || fallbackPath,
+            name: l.name,
+            anchor: l.anchor,
+            scale: l.scale,
+            opacity: l.opacity,
+            x: l.x,
+            y: l.y
+          };
+        }),
+        custom_text: textEnabled ? textConfig.text : null,
+        primary_anchor: activeLogo?.anchor || 'bottom-right',
+        primary_scale: activeLogo?.scale || 80,
+        primary_opacity: activeLogo?.opacity || 90
+      };
+
       if (selectedMediaType === 'image') {
         // Render 1:1 Canvas and get dataURL
         const compResult = await compositeImage(activeMediaUrl);
 
+        const primaryLogoPath =
+          activeLogo?.logoPath ||
+          (activeLogo?.name ? `/logo/${activeLogo.name.toLowerCase().replace(/\s+/g, '')}.png` : '/logo/ja.png');
+
         const updated = await applyCampaignWatermark(campaignId, {
           media_type: 'image',
           parent_media_id: activeMediaItem.id,
-          logo_preset: selectedPresetId,
-          logo_anchor: logoConfig.anchor,
-          logo_scale: logoConfig.scale,
-          logo_opacity: logoConfig.opacity,
+          logo_preset: primaryLogoPath,
+          logo_anchor: activeLogo?.anchor || 'bottom-right',
+          logo_scale: activeLogo?.scale || 80,
+          logo_opacity: activeLogo?.opacity || 90,
           custom_text: textEnabled ? textConfig.text : null,
-          image_data: compResult.dataUrl
+          image_data: compResult.dataUrl,
+          logos: watermarkConfig.logos,
+          watermark_config: watermarkConfig
         });
 
-        toast.success('Final watermarked poster saved (poster_final_v1.png)!');
+        toast.success('Final watermarked poster saved (final_v1.png)!');
         onWatermarkSaved(updated);
       } else {
         // Video: render frame-by-frame via MediaRecorder and upload blob
@@ -168,12 +219,13 @@ export function WatermarkStudio({
           formData.append('file', exportRes.blob, exportRes.fileName);
           formData.append('media_type', 'video');
           formData.append('parent_media_id', activeMediaItem.id);
-          formData.append('logo_anchor', logoConfig.anchor);
-          formData.append('logo_scale', String(logoConfig.scale));
-          formData.append('logo_opacity', String(logoConfig.opacity));
+          formData.append('logo_anchor', activeLogo?.anchor || 'bottom-right');
+          formData.append('logo_scale', String(activeLogo?.scale || 80));
+          formData.append('logo_opacity', String(activeLogo?.opacity || 90));
+          formData.append('watermark_config', JSON.stringify(watermarkConfig));
 
           const updated = await uploadWatermarkedMedia(campaignId, formData);
-          toast.success('Final watermarked video saved (reel_final_v1.mp4)!');
+          toast.success('Final watermarked video saved (final_v1.mp4)!');
           onWatermarkSaved(updated);
         });
       }
@@ -205,10 +257,10 @@ export function WatermarkStudio({
       <div className='flex items-center justify-between border-b pb-4'>
         <div className='flex items-center gap-2'>
           <Badge variant='outline' className='text-xs font-semibold px-2.5 py-1 border-primary/40 bg-primary/10 text-primary'>
-            Step 3: Watermark & Brand Marker Studio
+            Step 3: Watermark &amp; Multi-Logo Composer
           </Badge>
           <span className='text-xs text-muted-foreground hidden sm:inline'>
-            Preserves original AI output and generates verified final assets.
+            Preserves original AI output and generates verified final watermarked assets.
           </span>
         </div>
 
@@ -268,16 +320,17 @@ export function WatermarkStudio({
                 </div>
               </div>
               <CardDescription className='text-xs'>
-                Drag the logo or text directly on the preview to adjust position.
+                Drag any logo or text directly on the canvas to reposition freely.
               </CardDescription>
             </CardHeader>
             <CardContent className='pt-0 flex justify-center'>
               <WatermarkCanvas
                 mediaType={selectedMediaType}
                 mediaSrc={activeMediaUrl}
-                logoSrc={logoSrc}
-                logoConfig={logoConfig}
-                onLogoConfigChange={setLogoConfig}
+                logos={logos}
+                activeLogoId={activeLogoId}
+                onSelectLogo={setActiveLogoId}
+                onLogoChange={updateLogo}
                 textConfig={textConfig}
                 onTextConfigChange={setTextConfig}
                 textEnabled={textEnabled}
@@ -292,9 +345,9 @@ export function WatermarkStudio({
             <CardHeader className='pb-3'>
               <div className='flex items-center justify-between'>
                 <div>
-                  <CardTitle className='text-sm font-bold'>Brand Marker Configuration</CardTitle>
+                  <CardTitle className='text-sm font-bold'>Brand Watermark Configuration</CardTitle>
                   <CardDescription className='text-xs mt-0.5'>
-                    Configure logo presets, scale, opacity, and statutory watermark overlays.
+                    Configure multiple brand logos, scales, corner snaps, and text overlays.
                   </CardDescription>
                 </div>
 
@@ -306,7 +359,7 @@ export function WatermarkStudio({
                     className='h-7 text-xs px-2.5'
                     onClick={() => setActiveTab('logo')}
                   >
-                    Brand Logo
+                    Logos ({logos.length})
                   </Button>
                   <Button
                     type='button'
@@ -324,115 +377,189 @@ export function WatermarkStudio({
             <CardContent className='space-y-5 pt-0 text-xs'>
               {activeTab === 'logo' ? (
                 <div className='space-y-5'>
-                  {/* Presets */}
+                  {/* Active Logos Tab Switcher */}
                   <div className='space-y-2'>
-                    <Label className='text-xs font-semibold'>Select Brand Logo Preset</Label>
-                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-2.5'>
-                      {PRESET_LOGOS.map((preset) => {
-                        const isSelected = selectedPresetId === preset.id;
+                    <div className='flex items-center justify-between'>
+                      <Label className='text-xs font-semibold'>Configured Logos</Label>
+                      {/* Add Another Logo dropdown / button */}
+                      <div className='flex items-center gap-1'>
+                        {availableLogos
+                          .filter((al) => !logos.some((l) => l.logoPath === al.url || l.logoPath === al.src))
+                          .slice(0, 2)
+                          .map((al) => (
+                            <Button
+                              key={al.url || al.src || al.name}
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              className='h-6 text-[10px] px-2 gap-1 border-dashed'
+                              onClick={() => handleAddNewLogo(al)}
+                            >
+                              <Icons.add className='size-2.5' />
+                              <span>+ Add {al.name}</span>
+                            </Button>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Logo Selector Pills */}
+                    <div className='flex items-center gap-2 flex-wrap'>
+                      {logos.map((l, index) => {
+                        const isSelected = l.id === activeLogoId;
                         return (
-                          <button
-                            key={preset.id}
-                            type='button'
-                            onClick={() => handlePresetSelect(preset)}
-                            className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          <div
+                            key={l.id}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-all ${
                               isSelected
-                                ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                                : 'border-muted hover:border-foreground/30 bg-card'
+                                ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                : 'border-border bg-card hover:bg-muted/40 text-foreground'
                             }`}
+                            onClick={() => setActiveLogoId(l.id)}
                           >
-                            <span className='font-bold text-xs'>{preset.name}</span>
-                            <span className='text-[10px] text-muted-foreground line-clamp-1 mt-0.5'>{preset.badge}</span>
-                          </button>
+                            <span>Logo {index + 1}: {l.name || 'Brand'}</span>
+                            <span className='text-[10px] font-mono text-muted-foreground'>({l.anchor})</span>
+                            {logos.length > 1 && (
+                              <button
+                                type='button'
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeLogo(l.id);
+                                }}
+                                className='hover:text-destructive text-muted-foreground ml-1 p-0.5'
+                                title='Remove this logo'
+                              >
+                                <Icons.close className='size-3' />
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
-
-                    {/* Custom Upload */}
-                    <div className='pt-1'>
-                      <input
-                        ref={fileInputRef}
-                        type='file'
-                        accept='image/png,image/svg+xml,image/webp,image/jpeg'
-                        onChange={handleFileUpload}
-                        className='hidden'
-                      />
-                      <Button
-                        type='button'
-                        variant='outline'
-                        size='sm'
-                        onClick={() => fileInputRef.current?.click()}
-                        className='w-full border-dashed gap-2 py-2.5 text-xs'
-                      >
-                        <Icons.upload className='size-3.5' />
-                        <span>Upload Custom PNG / SVG Brand Logo</span>
-                      </Button>
-                    </div>
                   </div>
 
-                  {/* Placement Snap & Sliders */}
-                  <div className='space-y-4 pt-2 border-t'>
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs font-medium'>Corner Placement Snap</Label>
-                      <div className='grid grid-cols-5 gap-1.5'>
-                        {(
-                          [
-                            { id: 'top-left', label: 'Top Left' },
-                            { id: 'top-right', label: 'Top Right' },
-                            { id: 'center', label: 'Center' },
-                            { id: 'bottom-left', label: 'Bottom Left' },
-                            { id: 'bottom-right', label: 'Bottom Right' }
-                          ] as const
-                        ).map((corner) => (
+                  {/* Active Logo Customization Panel */}
+                  {activeLogo && (
+                    <div className='space-y-4 pt-2 border-t'>
+                      {/* Brand Logo Picker */}
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold'>
+                          Select Brand Logo for {activeLogo.name || 'Current Logo'}
+                        </Label>
+                        <div className='grid grid-cols-2 sm:grid-cols-4 gap-2'>
+                          {availableLogos.map((preset) => {
+                            const isSelected =
+                              activeLogo.logoPath === preset.url ||
+                              activeLogo.logoPath === preset.src ||
+                              activeLogo.name?.toLowerCase() === preset.name.toLowerCase();
+                            const logoSrc = preset.url || preset.src || `/logo/${preset.filename || preset.file || 'ja.png'}`;
+                            return (
+                              <button
+                                key={preset.url || preset.src || preset.name}
+                                type='button'
+                                onClick={() => handleSelectLogoForActive(preset)}
+                                className={`flex items-center gap-2 p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                                    : 'border-muted hover:border-foreground/30 bg-card'
+                                }`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={logoSrc}
+                                  alt={preset.name}
+                                  className='size-7 object-contain'
+                                />
+                                <span className='font-bold text-xs truncate'>{preset.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom Upload */}
+                        <div className='pt-1'>
+                          <input
+                            ref={fileInputRef}
+                            type='file'
+                            accept='image/png,image/svg+xml,image/webp,image/jpeg'
+                            onChange={handleFileUpload}
+                            className='hidden'
+                          />
                           <Button
-                            key={corner.id}
                             type='button'
-                            variant={logoConfig.anchor === corner.id ? 'default' : 'outline'}
+                            variant='outline'
                             size='sm'
-                            className='text-[11px] h-7 px-1'
-                            onClick={() => setAnchor(corner.id as LogoAnchor)}
+                            onClick={() => fileInputRef.current?.click()}
+                            className='w-full border-dashed gap-2 py-2 text-xs'
                           >
-                            {corner.label}
+                            <Icons.upload className='size-3.5' />
+                            <span>Upload Custom Brand Logo File</span>
                           </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Scale & Opacity */}
-                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1'>
-                      <div className='space-y-2'>
-                        <div className='flex items-center justify-between text-xs'>
-                          <Label className='text-xs font-medium'>Logo Scale</Label>
-                          <span className='font-mono text-muted-foreground'>{logoConfig.scale}%</span>
                         </div>
-                        <Slider
-                          min={20}
-                          max={180}
-                          step={5}
-                          value={[logoConfig.scale]}
-                          onValueChange={(val) =>
-                            setLogoConfig((p) => ({ ...p, scale: Array.isArray(val) ? val[0] : val }))
-                          }
-                        />
                       </div>
 
-                      <div className='space-y-2'>
-                        <div className='flex items-center justify-between text-xs'>
-                          <Label className='text-xs font-medium'>Watermark Opacity</Label>
-                          <span className='font-mono text-muted-foreground'>{logoConfig.opacity}%</span>
+                      {/* Corner Snapping */}
+                      <div className='space-y-1.5 pt-1'>
+                        <Label className='text-xs font-medium'>Placement Snap</Label>
+                        <div className='grid grid-cols-5 gap-1.5'>
+                          {(
+                            [
+                              { id: 'top-left', label: 'Top Left' },
+                              { id: 'top-right', label: 'Top Right' },
+                              { id: 'center', label: 'Center' },
+                              { id: 'bottom-left', label: 'Bottom Left' },
+                              { id: 'bottom-right', label: 'Bottom Right' }
+                            ] as const
+                          ).map((corner) => (
+                            <Button
+                              key={corner.id}
+                              type='button'
+                              variant={activeLogo.anchor === corner.id ? 'default' : 'outline'}
+                              size='sm'
+                              className='text-[11px] h-7 px-1'
+                              onClick={() => setAnchorForLogo(activeLogo.id, corner.id as LogoAnchor)}
+                            >
+                              {corner.label}
+                            </Button>
+                          ))}
                         </div>
-                        <Slider
-                          min={10}
-                          max={100}
-                          step={5}
-                          value={[logoConfig.opacity]}
-                          onValueChange={(val) =>
-                            setLogoConfig((p) => ({ ...p, opacity: Array.isArray(val) ? val[0] : val }))
-                          }
-                        />
+                      </div>
+
+                      {/* Scale & Opacity */}
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1'>
+                        <div className='space-y-2'>
+                          <div className='flex items-center justify-between text-xs'>
+                            <Label className='text-xs font-medium'>Logo Scale</Label>
+                            <span className='font-mono text-muted-foreground'>{activeLogo.scale}%</span>
+                          </div>
+                          <Slider
+                            min={20}
+                            max={180}
+                            step={5}
+                            value={[activeLogo.scale]}
+                            onValueChange={(val) =>
+                              updateLogo(activeLogo.id, { scale: Array.isArray(val) ? val[0] : val })
+                            }
+                          />
+                        </div>
+
+                        <div className='space-y-2'>
+                          <div className='flex items-center justify-between text-xs'>
+                            <Label className='text-xs font-medium'>Watermark Opacity</Label>
+                            <span className='font-mono text-muted-foreground'>{activeLogo.opacity}%</span>
+                          </div>
+                          <Slider
+                            min={10}
+                            max={100}
+                            step={5}
+                            value={[activeLogo.opacity]}
+                            onValueChange={(val) =>
+                              updateLogo(activeLogo.id, { opacity: Array.isArray(val) ? val[0] : val })
+                            }
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 /* Custom Text Overlay Options */
@@ -553,8 +680,8 @@ export function WatermarkStudio({
                 ) : (
                   <p className='text-xs text-muted-foreground'>
                     {selectedMediaType === 'image'
-                      ? 'Creates final 1:1 square poster (poster_final_v1.png).'
-                      : 'Renders branded 9:16 vertical video (reel_final_v1.mp4).'}
+                      ? 'Creates final 1:1 square poster (final_v1.png) with all logos.'
+                      : 'Renders branded 9:16 vertical video (final_v1.mp4) with all logos.'}
                   </p>
                 )}
               </div>

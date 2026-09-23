@@ -2,7 +2,6 @@
 import React from 'react';
 import { ActiveThemeProvider } from '@/components/themes/active-theme';
 import QueryProvider from '@/components/layout/query-provider';
-import { ApiModeProvider } from '@/context/api-mode-context';
 
 export default function Providers({
   activeThemeValue,
@@ -14,7 +13,7 @@ export default function Providers({
   return (
     <ActiveThemeProvider initialTheme={activeThemeValue}>
       <QueryProvider>
-        <ApiModeProvider>{children}</ApiModeProvider>
+        {children}
       </QueryProvider>
     </ActiveThemeProvider>
   );

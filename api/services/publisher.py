@@ -254,12 +254,12 @@ def publish_campaign_platform(
     else:
         content_text = f"{c_row.get('thesis', 'Marketing Update')} — {c_row.get('brand_id', 'JA Assure').upper()}"
 
-    # 3. Retrieve latest media
+    # 3. Retrieve latest final watermarked media
     img_row = db.execute(
         """
         SELECT * FROM campaign_media
-        WHERE campaign_id = %s AND media_type = 'image' AND status = 'completed'
-        ORDER BY CASE WHEN media_stage = 'final' THEN 1 ELSE 0 END DESC, created_at DESC LIMIT 1
+        WHERE campaign_id = %s AND media_type = 'image' AND media_stage = 'final' AND status = 'completed'
+        ORDER BY created_at DESC LIMIT 1
         """,
         (campaign_id,),
     ).fetchone()
@@ -288,15 +288,9 @@ def publish_campaign_platform(
             token = os.environ.get("LINKEDIN_ACCESS_TOKEN")
             person_urn = os.environ.get("LINKEDIN_PERSON_URN")
             if buffer_key:
-                try:
-                    res = _publish_via_buffer_linkedin(content=content_text)
-                    ext_id = res["post_id"]
-                    ext_url = res["post_url"]
-                except Exception as b_err:
-                    logger.warning(f"Buffer API LinkedIn publishing failed ({b_err}). Falling back to simulation...")
-                    share_id = f"buffer_{random.randint(10000000, 99999999)}"
-                    ext_id = share_id
-                    ext_url = "https://publish.buffer.com"
+                res = _publish_via_buffer_linkedin(content=content_text)
+                ext_id = res["post_id"]
+                ext_url = res["post_url"]
             elif token and person_urn:
                 res = _publish_live_linkedin(
                     access_token=token,
@@ -307,10 +301,7 @@ def publish_campaign_platform(
                 ext_id = res["post_id"]
                 ext_url = res["post_url"]
             else:
-                # Simulated production dispatch with realistic live share link
-                share_id = f"urn:li:share:{random.randint(7190000000000000000, 7290000000000000000)}"
-                ext_id = share_id
-                ext_url = f"https://www.linkedin.com/feed/update/{share_id}"
+                raise ValueError("LinkedIn credentials not configured. Please set BUFFER_API_KEY or LINKEDIN_ACCESS_TOKEN.")
         elif platform == "instagram":
             post_num = random.randint(1000000000, 9999999999)
             ext_id = f"ig_{post_num}"

@@ -151,6 +151,7 @@ export type CompetitorDashboard = {
   watches: CompetitorWatch[];
   events: CompetitorEvent[];
   source_health: CompetitorSourceHealth[];
+  ready?: boolean;
 };
 
 export type CompetitorScanResult = {
@@ -273,18 +274,6 @@ export type Lead = {
   updated_at?: string | null;
 };
 
-export type LeadSearchRequest = {
-  brand_id: BrandId;
-  category: string;
-  location: string;
-  keywords?: string | null;
-};
-
-export type LeadOutreachRequest = {
-  brand_id: BrandId;
-  lead_id: string;
-};
-
 export type LeadRefreshStatus = {
   refreshing: boolean;
   configured: boolean;
@@ -337,6 +326,8 @@ export type CampaignPlatformContentItem = {
   script?: string | null;
   visual_concept?: string | null;
   generation_prompt?: string | null;
+  version?: number;
+  is_current?: boolean;
 };
 
 export type CampaignMediaItem = {
@@ -355,7 +346,9 @@ export type CampaignMediaItem = {
   logo_scale?: number | null;
   logo_opacity?: number | null;
   parent_media_id?: string | null;
+  watermark_config?: any;
 };
+
 
 export type StudioCampaignDetail = {
   id: string;
@@ -405,6 +398,8 @@ export type CampaignPublicationItem = {
   campaign_id: string;
   platform: string;
   status: "queued" | "publishing" | "published" | "failed";
+  provider?: string | null;
+  buffer_post_id?: string | null;
   external_post_id?: string | null;
   external_post_url?: string | null;
   published_content?: string | null;
@@ -569,3 +564,79 @@ export type VideoGenerationRecord = {
   request_id?: string | null;
   created_at: string;
 };
+
+export type WatermarkLogoItem = {
+  id?: string;
+  logo_path: string;
+  anchor: string;
+  scale: number;
+  opacity: number;
+  x?: number;
+  y?: number;
+};
+
+export type HistoryCampaignSummary = {
+  id: string;
+  brand_id: string;
+  title?: string | null;
+  thesis?: string | null;
+  objective?: string | null;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+  platforms: string[];
+  has_final_image: boolean;
+  has_final_video: boolean;
+  has_original_image: boolean;
+  review_cycle: number;
+  review_status?: string | null;
+  publications_count: number;
+};
+
+export type AssistantChatRequest = {
+  message: string;
+  target_platform?: string | null;
+  regenerate_media?: boolean;
+  media_type?: 'image' | 'video';
+};
+
+export type AssistantChatResponse = {
+  reply: string;
+  campaign_id: string;
+  regenerated_platforms: string[];
+  compliance_results: Record<string, any>;
+  new_media?: CampaignMediaItem | null;
+  updated_contents: CampaignPlatformContentItem[];
+};
+
+export type ResubmitReviewRequest = {
+  note?: string | null;
+};
+
+export type ResubmitReviewResponse = {
+  success: boolean;
+  campaign_id: string;
+  status: string;
+  review_cycle: number;
+  message: string;
+};
+
+export type CampaignWorkspaceHistory = {
+  campaign: Record<string, any>;
+  contents: CampaignPlatformContentItem[];
+  media: CampaignMediaItem[];
+  review_cycles: Record<string, any>[];
+  publications: CampaignPublicationItem[];
+  events: CampaignEventItem[];
+  lessons: Record<string, any>[];
+};
+
+export type BrandLogoItem = {
+  id?: string;
+  name: string;
+  filename: string;
+  file?: string;
+  url: string;
+  src?: string;
+};
+

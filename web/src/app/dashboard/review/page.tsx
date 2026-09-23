@@ -13,6 +13,9 @@ import {
   rejectCampaignReview,
   editCampaignContent,
   publishCampaignPlatform,
+  publishToLinkedIn,
+  publishToInstagram,
+  publishToX,
   resetAllCampaignData
 } from '@/lib/api/client';
 import type {
@@ -42,8 +45,8 @@ import {
   DialogFooter
 } from '@/components/ui/dialog';
 import { Icons } from '@/components/icons';
-import { ApiModeToggle } from '@/components/layout/api-mode-toggle';
 import { cn } from '@/lib/utils';
+
 
 // Helper for formatting timestamps
 function formatTimeAgo(isoString: string): string {
@@ -153,9 +156,11 @@ export default function ReviewQueuePage() {
   const [rejectNote, setRejectNote] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
 
-  // LinkedIn Publishing Confirmation Modal
-  const [showLinkedInConfirmModal, setShowLinkedInConfirmModal] = useState(false);
+  // Platform Publishing Confirmation Modal
+  const [platformToConfirm, setPlatformToConfirm] = useState<'linkedin' | 'instagram' | 'x' | null>(null);
   const [isPublishingPlatform, setIsPublishingPlatform] = useState<Record<string, boolean>>({});
+  const [publishError, setPublishError] = useState<{ platform: string; message: string } | null>(null);
+
 
   // Reset Data Modal
   const [showResetModal, setShowResetModal] = useState(false);
@@ -318,58 +323,48 @@ export default function ReviewQueuePage() {
     }
   };
 
-  // Trigger Publish for a Platform
-  const handlePublishPlatform = async (platform: string) => {
+  // Trigger Publish for a Platform (opens platform confirmation modal)
+  const handlePublishPlatform = (platform: 'linkedin' | 'instagram' | 'x') => {
     if (!selectedCard) return;
+    setPublishError(null);
+    setPlatformToConfirm(platform);
+  };
 
-    if (platform === 'linkedin') {
-      setShowLinkedInConfirmModal(true);
-      return;
-    }
-
-    // Direct publish for other platforms
-    setIsPublishingPlatform((prev) => ({ ...prev, [platform]: true }));
+  // Confirm Publish to Platform via Buffer
+  const handleConfirmPublish = async () => {
+    if (!selectedCard || !platformToConfirm) return;
+    const plat = platformToConfirm;
+    setIsPublishingPlatform((prev) => ({ ...prev, [plat]: true }));
+    setPublishError(null);
     try {
-      await publishCampaignPlatform(selectedCard.campaign_id, platform);
-      toast.success(`Published to ${platform.toUpperCase()}!`);
+      let res;
+      if (plat === 'linkedin') {
+        res = await publishToLinkedIn(selectedCard.campaign_id);
+      } else if (plat === 'instagram') {
+        res = await publishToInstagram(selectedCard.campaign_id);
+      } else {
+        res = await publishToX(selectedCard.campaign_id);
+      }
+      toast.success(res.message || `Successfully published to ${plat.toUpperCase()}!`);
+      setPlatformToConfirm(null);
+      setPublishError(null);
+
       const [pubs, hist] = await Promise.all([
-        getCampaignPublications(selectedCard.campaign_id),
-        getCampaignHistory(selectedCard.campaign_id)
+        getCampaignPublications(selectedCard.campaign_id).catch(() => []),
+        getCampaignHistory(selectedCard.campaign_id).catch(() => [])
       ]);
       setPublications(pubs);
       setHistoryEvents(hist);
       fetchQueue();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : `Failed to publish to ${platform}`;
+      const msg = err instanceof Error ? err.message : `Failed to publish to ${plat}`;
+      setPublishError({ platform: plat, message: msg });
       toast.error(msg);
     } finally {
-      setIsPublishingPlatform((prev) => ({ ...prev, [platform]: false }));
+      setIsPublishingPlatform((prev) => ({ ...prev, [plat]: false }));
     }
   };
 
-  // Confirm LinkedIn Publish
-  const handleConfirmLinkedInPublish = async () => {
-    if (!selectedCard) return;
-    setIsPublishingPlatform((prev) => ({ ...prev, linkedin: true }));
-    try {
-      await publishCampaignPlatform(selectedCard.campaign_id, 'linkedin');
-      toast.success('Campaign successfully published to LinkedIn!');
-      setShowLinkedInConfirmModal(false);
-
-      const [pubs, hist] = await Promise.all([
-        getCampaignPublications(selectedCard.campaign_id),
-        getCampaignHistory(selectedCard.campaign_id)
-      ]);
-      setPublications(pubs);
-      setHistoryEvents(hist);
-      fetchQueue();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to publish to LinkedIn';
-      toast.error(msg);
-    } finally {
-      setIsPublishingPlatform((prev) => ({ ...prev, linkedin: false }));
-    }
-  };
 
   // Reset All Test Data
   const handleResetData = async () => {
@@ -427,10 +422,8 @@ export default function ReviewQueuePage() {
           </p>
         </div>
 
-        {/* Controls: Mode Toggle, Refresh, Reset */}
+        {/* Controls: Refresh, Reset */}
         <div className='flex items-center gap-2.5 flex-wrap'>
-          <ApiModeToggle />
-
           <Button
             size='sm'
             variant='outline'
@@ -438,6 +431,7 @@ export default function ReviewQueuePage() {
             disabled={isLoading}
             className='text-xs'
           >
+
             <Icons.spinner className={cn('size-3.5 mr-1.5', isLoading && 'animate-spin')} />
             Refresh
           </Button>
@@ -608,17 +602,19 @@ export default function ReviewQueuePage() {
                             className='object-cover'
                             unoptimized
                           />
-                          <div className='absolute bottom-1 left-1 right-1 bg-black/75 text-[9px] text-white px-1.5 py-0.5 rounded backdrop-blur-xs flex items-center justify-between font-mono'>
-                            <span>Dual Watermark</span>
-                            <span className='text-emerald-400'>✓</span>
+                          <div className='absolute bottom-1 left-1 right-1 bg-black/80 text-[9px] text-white px-1.5 py-0.5 rounded backdrop-blur-xs flex items-center justify-between font-mono'>
+                            <span>Final Watermarked</span>
+                            <span className='text-emerald-400 font-bold'>✓</span>
                           </div>
                         </>
                       ) : (
-                        <div className='flex flex-col items-center justify-center text-muted-foreground p-2 text-center'>
-                          <Icons.media className='size-6 mb-1 opacity-50' />
-                          <span className='text-[10px]'>No poster generated</span>
+                        <div className='flex flex-col items-center justify-center text-amber-500 p-2 text-center'>
+                          <Icons.warning className='size-5 mb-1 text-amber-500' />
+                          <span className='text-[10px] font-semibold'>Final media not ready</span>
+                          <span className='text-[8px] text-muted-foreground'>Watermark pending</span>
                         </div>
                       )}
+
                     </div>
 
                     {/* LinkedIn Copy Excerpt */}
@@ -1145,7 +1141,7 @@ export default function ReviewQueuePage() {
                             : 'border-muted-foreground/30 text-muted-foreground'
                         )}
                       >
-                        {isImageFinalWatermarked ? '✓ Final Watermarked' : 'Original AI Asset'}
+                        {isImageFinalWatermarked ? '✓ Final Watermarked' : 'Final media not ready'}
                       </Badge>
                     ) : (
                       <Badge
@@ -1154,10 +1150,10 @@ export default function ReviewQueuePage() {
                           'text-[10px] font-mono py-0',
                           isVideoFinalWatermarked
                             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 font-bold'
-                            : 'border-muted-foreground/30 text-muted-foreground'
+                            : 'border-amber-500/30 bg-amber-500/10 text-amber-600 font-medium'
                         )}
                       >
-                        {isVideoFinalWatermarked ? '✓ Final Watermarked' : 'Original AI Asset'}
+                        {isVideoFinalWatermarked ? '✓ Final Watermarked' : 'Final media not ready'}
                       </Badge>
                     )}
                   </div>
@@ -1175,12 +1171,16 @@ export default function ReviewQueuePage() {
                             unoptimized
                           />
                         ) : (
-                          <div className='text-center p-4 text-xs text-muted-foreground flex flex-col items-center gap-2'>
-                            <Icons.media className='size-8 opacity-40' />
-                            <span>No poster image generated yet</span>
+                          <div className='text-center p-6 text-xs text-amber-600 dark:text-amber-400 flex flex-col items-center gap-2'>
+                            <Icons.warning className='size-8 opacity-80' />
+                            <span className='font-semibold text-sm'>Final media not ready</span>
+                            <span className='text-xs text-muted-foreground max-w-xs'>
+                              Watermark has not yet been applied to the campaign poster. Unwatermarked assets cannot be reviewed or published.
+                            </span>
                           </div>
                         )}
                       </div>
+
 
                       {/* Image Prompt */}
                       {selectedCard.latest_image_prompt && (
@@ -1312,6 +1312,33 @@ export default function ReviewQueuePage() {
                         </p>
                       </div>
 
+                      {/* Status Banner when awaiting approval, rejected, or edited */}
+                      {selectedCard.campaign_status === 'rejected' || selectedCard.review_status === 'rejected' ? (
+                        <div className='p-2.5 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs flex items-center gap-2'>
+                          <Icons.alertCircle className='size-4 shrink-0' />
+                          <div>
+                            <span className='font-bold block'>Publishing unavailable</span>
+                            <span className='text-[11px] opacity-90'>Campaign rejected. Resolve reviewer feedback and resubmit.</span>
+                          </div>
+                        </div>
+                      ) : selectedCard.campaign_status === 'edited' ? (
+                        <div className='p-2.5 rounded-lg border border-muted bg-muted/20 text-muted-foreground text-xs flex items-center gap-2'>
+                          <Icons.clock className='size-4 shrink-0' />
+                          <div>
+                            <span className='font-bold block'>Publishing unavailable</span>
+                            <span className='text-[11px]'>This version has edits and requires another review.</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2'>
+                          <Icons.lock className='size-4 text-amber-500 shrink-0' />
+                          <div>
+                            <span className='font-bold block'>Publishing locked</span>
+                            <span className='text-[11px] opacity-90'>Awaiting human approval. Publishing is unlocked after explicit approval.</span>
+                          </div>
+                        </div>
+                      )}
+
                       <div className='flex items-center gap-3 pt-2'>
                         <Button
                           size='sm'
@@ -1335,90 +1362,117 @@ export default function ReviewQueuePage() {
                       </div>
                     </div>
                   ) : (
-                    /* APPROVED: MULTI-PLATFORM PUBLISHING DECK */
+                    /* APPROVED: PLATFORM PUBLISHING DECK */
                     <div className='flex flex-col gap-3.5'>
                       <div className='flex items-center justify-between flex-wrap gap-2 border-b pb-3'>
                         <div className='flex items-center gap-2'>
-                          <Badge className='bg-blue-600 hover:bg-blue-600 text-white text-[10px] uppercase font-bold tracking-wider'>
+                          <Badge className='bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] uppercase font-bold tracking-wider'>
                             ✓ Approved
                           </Badge>
                           <span className='text-xs font-bold text-foreground'>
-                            Multi-Platform Publishing Deck
+                            Publishing Deck (Buffer API)
                           </span>
                         </div>
                         <span className='text-[10px] text-muted-foreground font-medium'>
-                          Dispatch to channels
+                          Platform-Specific Broadcast
                         </span>
                       </div>
 
-                      {/* 5 Channel Publishing Rows */}
-                      <div className='flex flex-col gap-2'>
-                        {(['linkedin', 'instagram', 'x', 'reel', 'blog'] as Platform[]).map((plat) => {
+                      {/* 3 Platform Publishing Cards: LinkedIn, Instagram, X */}
+                      <div className='flex flex-col gap-2.5'>
+                        {(['linkedin', 'instagram', 'x'] as const).map((plat) => {
                           const pub = publications.find((p) => p.platform === plat);
                           const isPublished = pub?.status === 'published';
                           const isPublishing = Boolean(isPublishingPlatform[plat]);
+                          const hasContent = Boolean(
+                            workspaceDetail?.contents.find((c) => c.platform === plat)?.content ||
+                            (plat === 'linkedin' && selectedCard.linkedin_content)
+                          );
+                          const isMediaReady = isImageFinalWatermarked || isVideoFinalWatermarked;
+                          const bufferPostId = pub?.buffer_post_id || pub?.external_post_id;
 
                           return (
                             <div
                               key={plat}
                               className={cn(
-                                'border rounded-lg p-2.5 flex items-center justify-between gap-3 bg-card text-xs transition-all',
-                                isPublished && 'border-emerald-500/40 bg-emerald-500/[0.03]'
+                                'border rounded-xl p-3 flex flex-col gap-2.5 bg-card text-xs transition-all shadow-xs',
+                                isPublished && 'border-emerald-500/40 bg-emerald-500/[0.02]'
                               )}
                             >
-                              <div className='flex items-center gap-2'>
-                                <PlatformIcon platform={plat} className='size-4 text-primary' />
-                                <div className='flex flex-col'>
-                                  <span className='font-bold capitalize text-foreground text-xs'>
-                                    {plat === 'linkedin' ? 'LinkedIn' : plat}
-                                  </span>
+                              <div className='flex items-center justify-between gap-3'>
+                                <div className='flex items-center gap-2.5'>
+                                  <PlatformIcon platform={plat} className='size-4 text-primary' />
+                                  <div className='flex flex-col'>
+                                    <span className='font-bold capitalize text-foreground text-xs'>
+                                      {plat === 'linkedin' ? 'LinkedIn' : plat === 'instagram' ? 'Instagram' : 'X'}
+                                    </span>
+                                    {isPublished ? (
+                                      <span className='text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1'>
+                                        <Icons.check className='size-3' />
+                                        Published to {plat === 'linkedin' ? 'LinkedIn' : plat === 'instagram' ? 'Instagram' : 'X'}
+                                        {bufferPostId && <span className='font-mono opacity-80'>({bufferPostId.slice(-8)})</span>}
+                                      </span>
+                                    ) : (
+                                      <span className='text-[10px] text-muted-foreground'>
+                                        Buffer dispatch ready
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div>
                                   {isPublished ? (
-                                    <span className='text-[10px] text-emerald-600 font-semibold'>
-                                      ✓ Published live
-                                    </span>
+                                    <div className='flex items-center gap-2'>
+                                      <span className='text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded font-semibold'>
+                                        ✓ Published
+                                      </span>
+                                      <a
+                                        href={pub?.external_post_url || 'https://publish.buffer.com'}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        className='inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-md bg-muted text-foreground font-medium text-[11px] hover:bg-muted/80'
+                                      >
+                                        <span>View Post</span>
+                                        <Icons.externalLink className='size-3' />
+                                      </a>
+                                    </div>
                                   ) : (
-                                    <span className='text-[10px] text-muted-foreground'>
-                                      Ready to broadcast
-                                    </span>
+                                    <Button
+                                      size='sm'
+                                      variant='default'
+                                      onClick={() => handlePublishPlatform(plat)}
+                                      disabled={isPublishing || !isMediaReady}
+                                      className={cn(
+                                        'font-bold text-xs',
+                                        plat === 'linkedin' ? 'bg-[#0077B5] hover:bg-[#005E93] text-white' :
+                                        plat === 'instagram' ? 'bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] text-white' :
+                                        'bg-zinc-900 hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-zinc-200'
+                                      )}
+                                    >
+                                      {isPublishing ? (
+                                        <>
+                                          <Icons.spinner className='size-3 mr-1.5 animate-spin' />
+                                          Posting to {plat === 'linkedin' ? 'LinkedIn' : plat === 'instagram' ? 'Instagram' : 'X'}...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Icons.send className='size-3 mr-1.5' />
+                                          Post to {plat === 'linkedin' ? 'LinkedIn' : plat === 'instagram' ? 'Instagram' : 'X'}
+                                        </>
+                                      )}
+                                    </Button>
                                   )}
                                 </div>
                               </div>
 
-                              <div>
-                                {isPublished ? (
-                                  <a
-                                    href={pub?.external_post_url || '#'}
-                                    target='_blank'
-                                    rel='noopener noreferrer'
-                                    className='inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-md bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] hover:bg-emerald-600/20'
-                                  >
-                                    <span>View Live</span>
-                                    <Icons.externalLink className='size-3' />
-                                  </a>
-                                ) : (
-                                  <Button
-                                    size='xs'
-                                    variant='default'
-                                    onClick={() => handlePublishPlatform(plat)}
-                                    disabled={isPublishing}
-                                    className={cn(
-                                      'font-bold text-[11px]',
-                                      plat === 'linkedin' ? 'bg-[#0077B5] hover:bg-[#005E93] text-white' : ''
-                                    )}
-                                  >
-                                    {isPublishing ? (
-                                      <>
-                                        <Icons.spinner className='size-3 mr-1 animate-spin' />
-                                        Posting...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Icons.send className='size-3 mr-1' />
-                                        Post to {plat === 'linkedin' ? 'LinkedIn' : plat.toUpperCase()}
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
+                              {/* Platform readiness checks */}
+                              <div className='flex items-center gap-3 pt-1 border-t border-muted/50 text-[11px] text-muted-foreground'>
+                                <span className={cn('flex items-center gap-1 font-medium', hasContent ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500')}>
+                                  {hasContent ? '✓' : '○'} Content approved
+                                </span>
+                                <span className={cn('flex items-center gap-1 font-medium', isMediaReady ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500')}>
+                                  {isMediaReady ? '✓' : '○'} {plat === 'instagram' ? 'Final image/video ready' : plat === 'linkedin' ? 'Final image ready' : 'Final media ready'}
+                                </span>
                               </div>
                             </div>
                           );
@@ -1433,97 +1487,145 @@ export default function ReviewQueuePage() {
         </Dialog>
       )}
 
-      {/* LINKEDIN PUBLISHING CONFIRMATION MODAL */}
-      {selectedCard && (
-        <Dialog open={showLinkedInConfirmModal} onOpenChange={setShowLinkedInConfirmModal}>
+      {/* PLATFORM PUBLISHING CONFIRMATION MODAL */}
+      {selectedCard && platformToConfirm && (
+        <Dialog open={Boolean(platformToConfirm)} onOpenChange={(open) => !open && setPlatformToConfirm(null)}>
           <DialogContent className='max-w-2xl p-6 flex flex-col gap-4'>
             <DialogHeader className='border-b pb-3'>
-              <div className='flex items-center gap-2 text-[#0077B5] font-bold text-sm'>
-                <PlatformIcon platform='linkedin' className='size-5 text-[#0077B5]' />
-                <span>Publish Campaign to LinkedIn</span>
+              <div className='flex items-center gap-2 font-bold text-sm'>
+                <PlatformIcon platform={platformToConfirm} className='size-5 text-primary' />
+                <span>
+                  Post to {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}?
+                </span>
               </div>
               <DialogTitle className='text-base font-bold text-foreground mt-1'>
-                Confirm LinkedIn Broadcast
+                Confirm {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'} Broadcast
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
-                Review the combined graphic poster and post commentary before broadcasting to JA Assure's official business page.
+                Review the approved commentary and final watermarked assets before dispatching to Buffer.
               </DialogDescription>
             </DialogHeader>
 
-            {/* Target Account Badge */}
-            <div className='flex items-center gap-3 p-3 rounded-lg border bg-muted/20'>
-              <div className='size-9 rounded-full overflow-hidden relative border bg-white flex items-center justify-center'>
-                <Image
-                  src='/logo/ja.png'
-                  alt='JA Assure'
-                  width={36}
-                  height={36}
-                  className='object-contain'
-                  unoptimized
-                />
+            {/* Target Brand & Campaign Summary */}
+            <div className='flex items-center justify-between p-3 rounded-lg border bg-muted/20'>
+              <div className='flex flex-col'>
+                <span className='text-[10px] uppercase tracking-wider text-muted-foreground font-semibold'>
+                  {selectedCard.brand_id.toUpperCase()}
+                </span>
+                <span className='font-bold text-sm text-foreground'>
+                  {selectedCard.campaign_title || selectedCard.thesis}
+                </span>
               </div>
-              <div className='flex flex-col text-xs'>
-                <span className='font-bold text-foreground'>JA Assure Marketing</span>
-                <span className='text-[10px] text-muted-foreground'>Official LinkedIn Organization Page • 12.4k Followers</span>
-              </div>
+              <Badge className='bg-emerald-600 text-white text-[10px] font-bold uppercase'>
+                ✓ Approved
+              </Badge>
             </div>
 
-            {/* Attached Poster Preview */}
+            {/* Attached Final Watermarked Media Preview */}
             {selectedCard.latest_image_url && (
               <div className='relative aspect-[16/9] rounded-lg overflow-hidden border bg-muted/40'>
                 <Image
                   src={selectedCard.latest_image_url}
-                  alt='Poster Attachment'
+                  alt='Final Watermarked Media'
                   fill
                   className='object-cover'
                   unoptimized
                 />
-                <div className='absolute bottom-1 right-1 bg-black/80 text-[10px] text-white px-2 py-0.5 rounded backdrop-blur-xs font-mono'>
-                  Attached Graphic
+                <div className='absolute bottom-1 right-1 bg-black/80 text-[10px] text-emerald-400 px-2 py-0.5 rounded backdrop-blur-xs font-mono font-bold'>
+                  ✓ Final Watermarked
                 </div>
               </div>
             )}
 
             {/* Post Commentary Preview */}
-            <div className='flex flex-col gap-1 max-h-40 overflow-y-auto p-3 rounded-lg bg-muted/30 border text-xs text-foreground/90 whitespace-pre-line leading-relaxed'>
-              <span className='text-[10px] uppercase font-bold text-muted-foreground mb-1'>Post Commentary:</span>
-              {selectedCard.linkedin_content || selectedCard.thesis}
-              {selectedCard.linkedin_hashtags && (
-                <span className='text-[11px] text-sky-600 dark:text-sky-400 font-mono mt-1'>
-                  {selectedCard.linkedin_hashtags.join(' ')}
-                </span>
-              )}
+            {(() => {
+              const platformContent = workspaceDetail?.contents.find((c) => c.platform === platformToConfirm);
+              const textSnippet = platformContent?.content || (platformToConfirm === 'linkedin' ? selectedCard.linkedin_content : selectedCard.thesis);
+              const hashtags = platformContent?.hashtags || (platformToConfirm === 'linkedin' ? selectedCard.linkedin_hashtags : []);
+
+              return (
+                <div className='flex flex-col gap-1 max-h-40 overflow-y-auto p-3 rounded-lg bg-muted/30 border text-xs text-foreground/90 whitespace-pre-line leading-relaxed'>
+                  <span className='text-[10px] uppercase font-bold text-muted-foreground mb-1'>
+                    Approved {platformToConfirm.toUpperCase()} Copy:
+                  </span>
+                  {textSnippet}
+                  {hashtags && hashtags.length > 0 && (
+                    <span className='text-[11px] text-sky-600 dark:text-sky-400 font-mono mt-1'>
+                      {hashtags.join(' ')}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Verification Checklist */}
+            <div className='p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-xs flex flex-col gap-1.5'>
+              <span className='text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400'>Pre-Publish Verification:</span>
+              <div className='grid grid-cols-3 gap-2 text-[11px] text-foreground font-medium'>
+                <span className='text-emerald-600 dark:text-emerald-400 font-semibold'>✓ Campaign approved</span>
+                <span className='text-emerald-600 dark:text-emerald-400 font-semibold'>✓ Final media ready</span>
+                <span className='text-emerald-600 dark:text-emerald-400 font-semibold'>✓ Content ready</span>
+              </div>
             </div>
 
-            <p className='text-[11px] text-muted-foreground italic leading-tight'>
-              Notice: Post commentary and watermarked graphic will be combined into a single UGC share. Credentials remain strictly server-side.
-            </p>
+            {/* Actionable Error Display */}
+            {publishError && publishError.platform === platformToConfirm && (
+              <div className='p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs flex flex-col gap-2'>
+                <div className='flex items-center gap-1.5 font-bold text-destructive'>
+                  <Icons.alertCircle className='size-4 text-destructive shrink-0' />
+                  <span>Publishing failed</span>
+                </div>
+                <p className='leading-relaxed font-medium'>{publishError.message}</p>
+                {(publishError.message.includes('MEDIA_PUBLIC_BASE_URL') ||
+                  publishError.message.includes('media URL') ||
+                  publishError.message.includes('Buffer cannot access')) && (
+                  <div className='mt-1 pt-2 border-t border-destructive/20 text-[11px] text-foreground/80 space-y-1'>
+                    <span className='font-bold text-foreground'>Action Required:</span>
+                    <ul className='list-disc list-inside space-y-0.5 text-muted-foreground'>
+                      <li>Configure <code className='px-1 py-0.5 rounded bg-muted font-mono text-[10px]'>MEDIA_PUBLIC_BASE_URL</code> in backend <code className='px-1 py-0.5 rounded bg-muted font-mono text-[10px]'>.env</code></li>
+                      <li>Ensure your public tunnel (e.g. <code className='font-mono'>ngrok http 8000</code>) or domain is active</li>
+                      <li>Verify public HTTPS accessibility of the media URL</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             <DialogFooter className='border-t pt-3 flex items-center justify-end gap-2'>
               <Button
                 variant='ghost'
                 size='sm'
-                onClick={() => setShowLinkedInConfirmModal(false)}
-                disabled={isPublishingPlatform.linkedin}
+                onClick={() => setPlatformToConfirm(null)}
+                disabled={Boolean(isPublishingPlatform[platformToConfirm])}
                 className='text-xs'
               >
                 Cancel
               </Button>
               <Button
                 size='sm'
-                onClick={handleConfirmLinkedInPublish}
-                disabled={isPublishingPlatform.linkedin}
-                className='bg-[#0077B5] hover:bg-[#005E93] text-white font-bold text-xs'
+                onClick={handleConfirmPublish}
+                disabled={Boolean(isPublishingPlatform[platformToConfirm])}
+                className={cn(
+                  'font-bold text-xs text-white',
+                  platformToConfirm === 'linkedin' ? 'bg-[#0077B5] hover:bg-[#005E93]' :
+                  platformToConfirm === 'instagram' ? 'bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737]' :
+                  'bg-zinc-900 hover:bg-black dark:bg-white dark:text-black'
+                )}
               >
-                {isPublishingPlatform.linkedin ? (
+                {isPublishingPlatform[platformToConfirm] ? (
                   <>
                     <Icons.spinner className='size-3.5 mr-1.5 animate-spin' />
-                    Publishing to LinkedIn...
+                    Posting to {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}...
+                  </>
+                ) : publishError && publishError.platform === platformToConfirm ? (
+                  <>
+                    <Icons.refresh className='size-3.5 mr-1.5' />
+                    Retry {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}
                   </>
                 ) : (
                   <>
                     <Icons.send className='size-3.5 mr-1.5' />
-                    Confirm & Publish to LinkedIn
+                    Post to {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}
                   </>
                 )}
               </Button>

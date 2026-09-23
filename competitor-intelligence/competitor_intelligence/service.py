@@ -10,10 +10,11 @@ import urllib.request
 from typing import Any
 
 from .ai import analyze_diff, article_relevant
-from .analysis import (build_change_summary, classify_change, confidence_for_change,
-                       content_hash, meaningful_change, new_snapshot)
+from .analysis import (build_change_summary, capture_quality_error, classify_change,
+                       confidence_for_change, content_hash, meaningful_change,
+                       new_snapshot, normalize_content)
 from .collectors import (CollectedContent, collect_rss, collect_watch, collect_website,
-                         extract_income_pricing_text, search_searxng)
+                         _unexpected_redirect, extract_income_pricing_text, search_searxng)
 from .config import (CHANGEDETECTION_API_KEY, CHANGEDETECTION_API_URL, COMPETITORS_PATH,
                      REQUEST_TIMEOUT, SEARXNG_URL, load_competitors, load_feeds, load_watches)
 from .models import ChangeEvent, Competitor, Snapshot, WatchSource, utc_now
@@ -127,6 +128,14 @@ class IntelligenceService:
                     current.source_key = (f"{current.url}#pricing" if source_identity.endswith("#pricing")
                                           else Store.canonical_url(source_identity))
             source_key = _source_key(current)
+            previous_snapshot = self.store.latest_snapshot(competitor.id, source_key)
+            quality_error = capture_quality_error(
+                current.content,
+                baseline=previous_snapshot.content if previous_snapshot else None,
+                expected_url=current.url or competitor.url,
+            )
+            if quality_error:
+                return ScanResult(competitor.id, "error", False, error=quality_error)
             snapshot = new_snapshot(
                 competitor.id,
                 current.content,
@@ -139,13 +148,15 @@ class IntelligenceService:
             )
 
             def build_event(previous: Snapshot | None) -> ChangeEvent | None:
+                current_normalized = normalize_content(current.content)
+                previous_normalized = normalize_content(previous.content) if previous else ""
                 if previous is None:
                     if (
                         self._emit_new_feed_items
                         and current.source in FEED_EVENT_SOURCES
                     ):
                         classification = classify_change(
-                            competitor, "", current.content, current.source
+                            competitor, "", current_normalized, current.source
                         )
                         classification["summary"] = (
                             f"New public post from {competitor.name}"
@@ -178,12 +189,12 @@ class IntelligenceService:
                     if classification is None:
                         return None
                 else:
-                    if not meaningful_change(previous.content, current.content):
+                    if not meaningful_change(previous_normalized, current_normalized):
                         return None
                     classification = classify_change(
-                        competitor, previous.content, current.content, current.source
+                        competitor, previous_normalized, current_normalized, current.source
                     )
-                snapshot.change_summary = build_change_summary(previous.content, current.content)
+                snapshot.change_summary = build_change_summary(previous_normalized, current_normalized)
                 if watch and watch.kind in {"pricing", "news", "insights"}:
                     snapshot.change_summary = str(classification["summary"])
                 return ChangeEvent(
@@ -362,6 +373,13 @@ class IntelligenceService:
         if pair is None:
             return None
         event, before, after = pair
+        # Snapshots created before popup filtering may still contain transient
+        # UI. Clean the evidence presented in the dashboard and to AI while
+        # preserving tab-delimited article streams.
+        if "\t" not in before:
+            before = normalize_content(before)
+        if "\t" not in after:
+            after = normalize_content(after)
         diff = "\n".join(unified_diff(before.splitlines(), after.splitlines(),
                                        fromfile="before", tofile="after", lineterm=""))
         return {"event_id": event_id, "source_url": event.source_url, "before": before[:12000],
@@ -400,7 +418,16 @@ class IntelligenceService:
                 self._analysis_inflight.discard(event_id)
 
     def ingest_changedetection(self, payload: dict[str, Any]) -> ScanResult:
-        url = str(payload.get("watch_url") or payload.get("url") or "").strip()
+        watch_url = str(payload.get("watch_url") or "").strip()
+        url = watch_url or str(payload.get("url") or "").strip()
+        effective_url = str(
+            payload.get("current_url")
+            or payload.get("effective_url")
+            or payload.get("final_url")
+            or ""
+        ).strip()
+        if watch_url and effective_url and _unexpected_redirect(watch_url, effective_url):
+            raise ValueError(f"Unexpected redirect from {watch_url} to {effective_url}; retaining baseline")
         competitor_id = str(payload.get("competitor_id") or "").strip()
         competitor = self.store.get_competitor(competitor_id) if competitor_id else None
         if competitor is None and url:

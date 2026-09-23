@@ -46,17 +46,7 @@ export function ApiModeProvider({ children }: { children: React.ReactNode }) {
         setBackendStatus('offline');
         setLatencyMs(null);
       }
-
-      const info = await getOperationalMode();
-      setModeInfo(info);
-      // Sync state if info has demo_mode
-      const serverIsReal = !info.demo_mode;
-      const storedIsReal = getStoredApiMode() === 'real';
-      // If server and client diverge on startup, use client's preference
-      if (serverIsReal !== storedIsReal) {
-        await setOperationalMode(!storedIsReal);
-      }
-      setIsRealApi(storedIsReal);
+      setIsRealApi(true);
     } catch {
       setBackendStatus('offline');
       setLatencyMs(null);

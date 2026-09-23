@@ -29,8 +29,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Icons } from '@/components/icons';
-import { useApiMode } from '@/context/api-mode-context';
-import { ApiModeToggle } from '@/components/layout/api-mode-toggle';
 import { WatermarkStudio } from '@/components/aura/watermark/watermark-studio';
 import { cn } from '@/lib/utils';
 
@@ -78,7 +76,6 @@ function StudioContent() {
   const campaignIdFromQuery = searchParams.get('id');
 
   const store = useAuraStore();
-  const { isRealApi, modeInfo, backendStatus } = useApiMode();
 
   // Workflow Stepper State: 1 = Setup, 2 = Generation, 3 = Media & Review
   const [currentWorkflowStep, setCurrentWorkflowStep] = useState<1 | 2 | 3>(1);
@@ -373,8 +370,6 @@ function StudioContent() {
         </div>
 
         <div className='flex items-center gap-3'>
-          <ApiModeToggle variant='studio' />
-
           {campaignSnapshot && (
             <Button size='sm' variant='outline' onClick={handleStartNew} className='text-xs'>
               <Icons.add className='size-3.5 mr-1.5' />
@@ -382,6 +377,7 @@ function StudioContent() {
             </Button>
           )}
         </div>
+
       </div>
 
       {/* 3-STEP WORKFLOW STEPPER */}
@@ -459,8 +455,9 @@ function StudioContent() {
             <Icons.sparkles className='size-7' />
           </div>
           <h2 className='text-xl font-bold text-foreground'>
-            {isRealApi ? 'AURA Groq Live AI is Generating' : 'AURA Mock Engine is Generating'}
+            AURA Groq Live AI is Generating
           </h2>
+
           <p className='text-xs text-muted-foreground max-w-md mt-1 mb-6'>
             Executing underwriting parameters, negative guidance constraints, and multi-platform media prompts.
           </p>

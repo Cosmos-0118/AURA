@@ -1,16 +1,20 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import type { LogoConfig, TextConfig } from './types';
+import type { LogoConfig, TextConfig, WatermarkLogo } from './types';
 import { Icons } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 
 interface WatermarkCanvasProps {
   mediaType: 'image' | 'video';
   mediaSrc: string;
-  logoSrc: string | null;
-  logoConfig: LogoConfig;
-  onLogoConfigChange: (updater: (prev: LogoConfig) => LogoConfig) => void;
+  logoSrc?: string | null;
+  logoConfig?: LogoConfig;
+  onLogoConfigChange?: (updater: (prev: LogoConfig) => LogoConfig) => void;
+  logos?: WatermarkLogo[];
+  activeLogoId?: string;
+  onSelectLogo?: (id: string) => void;
+  onLogoChange?: (id: string, updates: Partial<WatermarkLogo>) => void;
   textConfig: TextConfig;
   onTextConfigChange: (updater: (prev: TextConfig) => TextConfig) => void;
   textEnabled: boolean;
@@ -22,6 +26,10 @@ export function WatermarkCanvas({
   logoSrc,
   logoConfig,
   onLogoConfigChange,
+  logos,
+  activeLogoId,
+  onSelectLogo,
+  onLogoChange,
   textConfig,
   onTextConfigChange,
   textEnabled
@@ -30,7 +38,7 @@ export function WatermarkCanvas({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(true);
-  const [activeTarget, setActiveTarget] = useState<'logo' | 'text' | null>(null);
+  const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const togglePlay = () => {
@@ -44,9 +52,12 @@ export function WatermarkCanvas({
     }
   };
 
-  const handlePointerDown = (target: 'logo' | 'text', e: React.PointerEvent) => {
+  const handlePointerDown = (targetId: string, e: React.PointerEvent) => {
     e.stopPropagation();
-    setActiveTarget(target);
+    setActiveTarget(targetId);
+    if (targetId !== 'text' && onSelectLogo) {
+      onSelectLogo(targetId);
+    }
     setIsDragging(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -61,18 +72,24 @@ export function WatermarkCanvas({
     const clampedX = Math.max(5, Math.min(95, Math.round(rawX)));
     const clampedY = Math.max(5, Math.min(95, Math.round(rawY)));
 
-    if (activeTarget === 'logo') {
+    if (activeTarget === 'text') {
+      onTextConfigChange((prev) => ({
+        ...prev,
+        x: clampedX,
+        y: clampedY
+      }));
+    } else if (logos && onLogoChange) {
+      onLogoChange(activeTarget, {
+        x: clampedX,
+        y: clampedY,
+        anchor: 'custom'
+      });
+    } else if (onLogoConfigChange) {
       onLogoConfigChange((prev) => ({
         ...prev,
         x: clampedX,
         y: clampedY,
         anchor: 'custom'
-      }));
-    } else if (activeTarget === 'text') {
-      onTextConfigChange((prev) => ({
-        ...prev,
-        x: clampedX,
-        y: clampedY
       }));
     }
   };
@@ -83,7 +100,7 @@ export function WatermarkCanvas({
       try {
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       } catch {
-        // Ignored if already released
+        // Ignored
       }
     }
   };
@@ -92,6 +109,24 @@ export function WatermarkCanvas({
     mediaType === 'image'
       ? 'w-full max-w-[380px] aspect-square'
       : 'w-full max-w-[270px] aspect-[9/16]';
+
+  // Determine list of logos to render
+  const renderedLogos: WatermarkLogo[] =
+    logos && logos.length > 0
+      ? logos
+      : logoSrc && logoConfig
+      ? [
+          {
+            id: 'default',
+            logoPath: logoSrc,
+            anchor: logoConfig.anchor,
+            scale: logoConfig.scale,
+            opacity: logoConfig.opacity,
+            x: logoConfig.x,
+            y: logoConfig.y
+          }
+        ]
+      : [];
 
   return (
     <div className='flex flex-col items-center w-full space-y-3'>
@@ -125,34 +160,38 @@ export function WatermarkCanvas({
           </video>
         )}
 
-        {/* Logo Marker Overlay */}
-        {logoSrc && (
-          <div
-            onPointerDown={(e) => handlePointerDown('logo', e)}
-            style={{
-              left: `${logoConfig.x}%`,
-              top: `${logoConfig.y}%`,
-              opacity: logoConfig.opacity / 100,
-              transform: `translate(-50%, -50%) scale(${logoConfig.scale / 100})`
-            }}
-            className={`absolute cursor-grab active:cursor-grabbing transition-transform duration-75 touch-none group ${
-              activeTarget === 'logo'
-                ? 'ring-2 ring-primary ring-offset-2 ring-offset-black/50 rounded-sm'
-                : 'hover:ring-1 hover:ring-primary/60'
-            }`}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={logoSrc}
-              alt='Brand Logo'
-              draggable={false}
-              className='max-w-[90px] max-h-[90px] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)] pointer-events-none'
-            />
-            <div className='absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-sm whitespace-nowrap pointer-events-none border border-white/20'>
-              Drag logo
+        {/* Multi-Logo Overlays */}
+        {renderedLogos.map((logo) => {
+          const isSelected = activeLogoId === logo.id || activeTarget === logo.id;
+          return (
+            <div
+              key={logo.id}
+              onPointerDown={(e) => handlePointerDown(logo.id, e)}
+              style={{
+                left: `${logo.x ?? 85}%`,
+                top: `${logo.y ?? 85}%`,
+                opacity: (logo.opacity ?? 90) / 100,
+                transform: `translate(-50%, -50%) scale(${(logo.scale ?? 80) / 100})`
+              }}
+              className={`absolute cursor-grab active:cursor-grabbing transition-transform duration-75 touch-none group ${
+                isSelected
+                  ? 'ring-2 ring-primary ring-offset-2 ring-offset-black/50 rounded-sm'
+                  : 'hover:ring-1 hover:ring-primary/60'
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logo.logoPath}
+                alt={logo.name || 'Brand Logo'}
+                draggable={false}
+                className='max-w-[90px] max-h-[90px] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)] pointer-events-none'
+              />
+              <div className='absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-sm whitespace-nowrap pointer-events-none border border-white/20'>
+                {logo.name || 'Drag logo'}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })}
 
         {/* Custom Text Overlay */}
         {textEnabled && textConfig.text.trim() && (
@@ -161,60 +200,54 @@ export function WatermarkCanvas({
             style={{
               left: `${textConfig.x}%`,
               top: `${textConfig.y}%`,
-              fontSize: `${textConfig.fontSize}px`,
               color: textConfig.color,
-              fontStyle: textConfig.italic ? 'italic' : 'normal',
+              fontSize: `${Math.max(12, Math.round(textConfig.fontSize * 0.75))}px`,
               fontWeight: textConfig.bold ? 'bold' : 'normal',
+              fontStyle: textConfig.italic ? 'italic' : 'normal',
               transform: 'translate(-50%, -50%)'
             }}
-            className={`absolute cursor-grab active:cursor-grabbing font-sans text-center drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] px-2 py-0.5 whitespace-nowrap transition-transform duration-75 touch-none group ${
+            className={`absolute cursor-grab active:cursor-grabbing text-center max-w-[90%] break-words px-2 py-1 select-none transition-transform duration-75 touch-none group drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
               activeTarget === 'text'
-                ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-black/50 rounded-sm'
-                : 'hover:ring-1 hover:ring-emerald-500/60'
+                ? 'ring-2 ring-primary ring-offset-2 ring-offset-black/50 rounded-sm'
+                : 'hover:ring-1 hover:ring-primary/60'
             }`}
           >
             {textConfig.text}
-            <div className='absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-sm whitespace-nowrap pointer-events-none border border-white/20'>
+            <div className='absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 backdrop-blur-xs text-white text-[9px] px-1.5 py-0.5 rounded-sm whitespace-nowrap pointer-events-none border border-white/20 font-sans font-normal'>
               Drag text
             </div>
           </div>
         )}
 
-        {/* Video Play/Pause Overlay for Video */}
+        {/* Video Play/Pause Overlay Control */}
         {mediaType === 'video' && (
-          <div className='absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-white/10'>
-            <button
-              type='button'
-              onClick={togglePlay}
-              className='text-white/80 hover:text-white transition-colors cursor-pointer'
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? (
-                <Icons.minus className='size-3.5' />
-              ) : (
-                <Icons.arrowRight className='size-3.5' />
-              )}
-            </button>
-            <span className='text-[10px] font-mono text-zinc-300'>
-              {isPlaying ? 'Playing' : 'Paused'}
-            </span>
-          </div>
+          <button
+            onClick={togglePlay}
+            aria-label={isPlaying ? 'Pause video preview' : 'Play video preview'}
+            className='absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs hover:bg-black/80 transition-colors'
+          >
+            {isPlaying ? (
+              <Icons.close className='size-3.5 rotate-45' />
+            ) : (
+              <Icons.video className='size-3.5 translate-x-0.5' />
+            )}
+          </button>
         )}
 
-        {/* Live Watermark Overlay Badge */}
-        <div className='absolute top-2 right-2'>
+        {/* Format Indicator Badge */}
+        <div className='absolute top-2 right-2 pointer-events-none'>
           <Badge
-            variant='secondary'
-            className='bg-black/75 backdrop-blur-md text-zinc-200 border-white/15 text-[10px] py-0 px-2'
+            variant='outline'
+            className='bg-black/60 text-white text-[10px] backdrop-blur-xs border-white/20 font-mono px-1.5 py-0'
           >
-            {mediaType === 'image' ? '1:1 Square Poster' : '9:16 Vertical Reel'}
+            {mediaType === 'image' ? '1:1 Square' : '9:16 Reel'}
           </Badge>
         </div>
       </div>
 
-      <p className='text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1.5'>
-        <Icons.info className='size-3.5 text-primary shrink-0' />
-        <span>Click and drag logo or text directly on the canvas to customize placement.</span>
+      <p className='text-[11px] text-muted-foreground flex items-center gap-1.5'>
+        <Icons.info className='size-3.5 text-primary' />
+        Drag logos or text directly on the canvas to reposition freely.
       </p>
     </div>
   );
