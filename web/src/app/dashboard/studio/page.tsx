@@ -352,7 +352,7 @@ function StudioContent() {
   const hasWatermarkedMedia = Boolean(finalImage || finalVideo);
 
   return (
-    <div className='flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full'>
+    <div className='flex min-w-0 w-full flex-col gap-6 px-4 pb-16 pt-6 sm:px-6 lg:px-8 xl:px-12'>
       {/* Top Banner / Header */}
       <div className='flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5'>
         <div>
@@ -529,13 +529,12 @@ function StudioContent() {
                           : 'border-muted hover:border-foreground/30 bg-card'
                       }`}
                     >
-                      <div className='flex items-center justify-between'>
-                        <BrandBadge brandId={bId} />
-                        <Badge variant='secondary' className='text-[10px] font-mono'>
+                      <div className='flex items-center justify-between gap-2'>
+                        <h4 className='font-bold text-sm text-foreground'>{b.name}</h4>
+                        <Badge variant='secondary' className='text-[10px] font-mono shrink-0'>
                           {count} Rules
                         </Badge>
                       </div>
-                      <h4 className='font-bold text-sm text-foreground mt-2.5'>{b.name}</h4>
                       <p className='text-[11px] text-muted-foreground line-clamp-2 mt-1 leading-snug'>
                         {b.tagline}
                       </p>

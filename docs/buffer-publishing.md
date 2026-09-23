@@ -2,6 +2,23 @@
 
 This document describes how to configure and run AURA's Buffer publishing system during local development and production.
 
+> [!IMPORTANT]
+> Local Buffer image/video publishing has a hard dependency on the reserved
+> ngrok tunnel. Start this command in a separate terminal and keep it running
+> for the entire time Buffer is used:
+>
+> ~~~bash
+> ngrok http --url=perceptually-homocentric-lindy.ngrok-free.dev 8000
+> ~~~
+>
+> The root .env must contain
+> MEDIA_PUBLIC_BASE_URL=https://perceptually-homocentric-lindy.ngrok-free.dev.
+> If the tunnel is stopped, the public media URL fails and Buffer cannot fetch
+> the image/video. AURA restricts requests addressed to that public host to
+> read-only `/media/*` URLs and `GET /api/health`; use demo/test provider
+> credentials, do not leave it open on a shared machine, and stop it after the
+> test.
+
 ---
 
 ## 1. Overview
@@ -43,7 +60,7 @@ BUFFER_X_CHANNEL_ID=
 BUFFER_PUBLISH_MODE=addToQueue
 
 # Public HTTPS URL exposing AURA's /media route
-MEDIA_PUBLIC_BASE_URL=https://abc123.ngrok-free.app
+MEDIA_PUBLIC_BASE_URL=https://perceptually-homocentric-lindy.ngrok-free.dev
 ```
 
 > [!IMPORTANT]
@@ -87,20 +104,30 @@ To expose local media storage to Buffer while developing locally:
 
 1. In a new terminal, launch ngrok pointing to port `8000`:
    ```bash
-   ngrok http 8000
+   ngrok http --url=perceptually-homocentric-lindy.ngrok-free.dev 8000
    ```
 
 2. ngrok displays your forwarding URL, for example:
    ```text
-   Forwarding   https://abc123.ngrok-free.app -> http://localhost:8000
+   Forwarding   https://perceptually-homocentric-lindy.ngrok-free.dev -> http://localhost:8000
    ```
 
 3. Update your `.env` in the project root:
    ```env
-   MEDIA_PUBLIC_BASE_URL=https://abc123.ngrok-free.app
+ MEDIA_PUBLIC_BASE_URL=https://perceptually-homocentric-lindy.ngrok-free.dev
    ```
 
 4. Restart the backend API (or launcher) so the new environment variable is loaded.
+
+Instead of typing the command manually, macOS/Linux users can run
+scripts/macos/buffer-tunnel.sh and Windows users can run
+scripts/windows/buffer-tunnel.ps1. Both helpers keep ngrok in the foreground
+and print a clear error when ngrok is not installed. They intentionally target
+API port 8000 and refuse to start unless the reserved `MEDIA_PUBLIC_BASE_URL`
+is configured in the running API. Run the helper in its own terminal; do not
+close it while Buffer is being used. If the application uses another API port,
+configure a separate public origin and tunnel for that environment instead of
+using the reserved local Buffer workflow.
 
 ---
 
@@ -115,7 +142,7 @@ Expected response:
 ```json
 {
   "configured": true,
-  "base_url": "https://abc123.ngrok-free.app",
+  "base_url": "https://perceptually-homocentric-lindy.ngrok-free.dev",
   "media_endpoint_available": true
 }
 ```
@@ -123,7 +150,7 @@ Expected response:
 ### Test Public Media in Browser
 Open the public URL in any browser (or on your mobile phone without local WiFi):
 ```text
-https://abc123.ngrok-free.app/media/campaigns/{campaign_id}/image/final_v1.png
+https://perceptually-homocentric-lindy.ngrok-free.dev/media/campaigns/{campaign_id}/image/final_v1.png
 ```
 You should see the final watermarked campaign image or video directly.
 
@@ -141,7 +168,7 @@ You should see the final watermarked campaign image or video directly.
    - A confirmation dialog opens with a full preview of the final watermarked media, approved copy, and pre-publish checklist.
 6. Click **Confirm**:
    - AURA verifies that final watermarked media exists (`media_stage = 'final'`, `watermarked = 1`).
-   - AURA generates the public media URL: `https://abc123.ngrok-free.app/media/...`.
+  - AURA generates the public media URL: `https://perceptually-homocentric-lindy.ngrok-free.dev/media/...`.
    - AURA performs a pre-flight reachability check on the URL.
    - AURA sends the post with public media URL to Buffer's GraphQL API.
    - The publication record is saved in `campaign_publications` with `media_id` referencing the exact final media.

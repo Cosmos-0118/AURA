@@ -25,6 +25,38 @@ client = TestClient(app)
 
 
 # --------------------------------------------------------------------------
+# 0. Public Origin Route Boundary
+# --------------------------------------------------------------------------
+
+def test_public_media_origin_allows_media_and_health_only(monkeypatch):
+    """The reserved public host must not expose the unauthenticated API."""
+    public_url = "https://perceptually-homocentric-lindy.ngrok-free.dev"
+    monkeypatch.setenv("MEDIA_PUBLIC_BASE_URL", public_url)
+
+    public_headers = {"host": "perceptually-homocentric-lindy.ngrok-free.dev"}
+    health_response = client.get("/api/health", headers=public_headers)
+    brands_response = client.get("/api/brands", headers=public_headers)
+
+    assert health_response.status_code == 200
+    assert brands_response.status_code == 404
+
+    forwarded_response = client.get(
+        "/api/brands",
+        headers={"host": "127.0.0.1:8000", "x-forwarded-host": "perceptually-homocentric-lindy.ngrok-free.dev"},
+    )
+    assert forwarded_response.status_code == 404
+
+
+def test_local_origin_keeps_development_api_access(monkeypatch):
+    """The route boundary applies to the public host, not localhost development."""
+    monkeypatch.setenv("MEDIA_PUBLIC_BASE_URL", "https://perceptually-homocentric-lindy.ngrok-free.dev")
+
+    response = client.get("/openapi.json", headers={"host": "127.0.0.1:8000"})
+
+    assert response.status_code != 404
+
+
+# --------------------------------------------------------------------------
 # 1. Public URL Construction Tests
 # --------------------------------------------------------------------------
 

@@ -1,73 +1,48 @@
-# AURA — MySQL Database Setup
+# AURA database files
 
-This directory contains the database schema and seed data for AURA Marketing Operations Desk.
+The canonical database and storage guide is
+[docs/data-and-storage.md](../docs/data-and-storage.md). This file is a short
+reference for the SQL artifacts in this directory.
 
-## Architecture
+## Runtime behavior
 
-The system uses local MySQL for structured data and stores media binaries (images and vertical videos) on the local filesystem in `storage/campaigns/{campaign_id}/`.
+The API supports SQLite and MySQL. DB_ENGINE=auto tries MySQL only when
+MYSQL_HOST is configured and reachable, then falls back to storage/aura.db.
+DB_ENGINE=sqlite forces SQLite; DB_ENGINE=mysql requires MySQL. Regardless of
+the database engine, media binaries remain on the local filesystem under
+storage/campaigns/{campaign_id}/.
 
-```
-brands
-   │
-   ├────────────── campaigns
-   │                    │
-   │                    ├── campaign_platform_content
-   │                    │
-   │                    ├── campaign_media
-   │                    │
-   │                    ├── compliance_checks
-   │                    │
-   │                    ├── review_queue
-   │                    │
-   │                    └── campaign_events
-   │
-   └────────────── lessons
-```
+## MySQL setup
 
-## Setup Instructions
+Ensure MySQL 8+ is running locally and create the aura database. Set these
+values in the repository root .env:
 
-### 1. Install & Start MySQL
-Ensure MySQL 8.0+ is running locally on port 3306.
-
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env` in the repository root:
-
-```env
+~~~dotenv
+DB_ENGINE=mysql
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
 MYSQL_DATABASE=aura
 MYSQL_USER=root
 MYSQL_PASSWORD=your_mysql_password
-```
+~~~
 
-> **Note:** Never commit `.env` or hardcode database passwords.
+Apply the schema and baseline data:
 
-### 3. Initialize Database Schema
-Run `db/schema.sql` to create the `aura` database and tables:
-
-```bash
+~~~bash
 mysql -u root -p < db/schema.sql
-```
-
-### 4. Seed Baseline Brand & Lesson Data
-Run `db/seed.sql` to populate portfolio brands and negative guidance lessons:
-
-```bash
 mysql -u root -p aura < db/seed.sql
-```
+~~~
 
-### 5. Start Backend Services
-From the `api/` directory:
+Start the API and frontend through the root launcher:
 
-```bash
-cd api
-uv run uvicorn main:app --reload --port 8000
-```
+~~~bash
+./scripts/macos/aura.sh dev
+~~~
 
-### 6. Start Web Frontend
-From the `web/` directory:
+The API also creates missing tables and applies compatibility columns when it
+connects, but applying db/schema.sql makes the intended starting schema
+explicit. db/schema_mysql.sql and db/CampaignStudio.sql are additional
+historical/export artifacts; they are not the runtime migration mechanism.
 
-```bash
-cd web
-bun run dev
-```
+For the complete launcher, manual fallback, SQLite behavior, reset guard,
+backup guidance, and schema caveats, use the canonical guide linked above.

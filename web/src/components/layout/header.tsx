@@ -6,7 +6,6 @@ import { Separator } from '../ui/separator';
 import { Breadcrumbs } from '../breadcrumbs';
 import SearchInput from '../search-input';
 import { ThemeModeToggle } from '../themes/theme-mode-toggle';
-import { NotificationBell } from './notification-bell';
 import { UserNav } from './user-nav';
 
 export default function Header() {
@@ -21,7 +20,6 @@ export default function Header() {
         <div className='hidden md:flex'>
           <SearchInput />
         </div>
-        <NotificationBell />
         <ThemeModeToggle />
         <Separator orientation='vertical' className='h-4 mx-1 hidden sm:block' />
         <UserNav />
@@ -29,4 +27,3 @@ export default function Header() {
     </header>
   );
 }
-

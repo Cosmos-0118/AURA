@@ -1,60 +1,86 @@
 # AURA
 
-AURA is an AI-assisted marketing operations dashboard:
+AURA is an AI-assisted marketing operations dashboard for turning brand-aware
+campaign briefs into reviewable, compliant content packages.
 
-```text
-campaign -> brand-specific draft -> compliance -> human review -> saved lesson
-```
+    brief -> brand voice -> generated content -> compliance checks -> human review
+          -> saved lesson -> optional approved publication
 
-It is a five-person, eight-hour hackathon build. It is not a chatbot, autonomous
-agent swarm, publisher, or full marketing suite.
+The repository also contains an evidence-first competitor intelligence lane,
+lead discovery, image/video generation, watermarking, and Buffer publishing.
+It is an internal/hackathon MVP: there is no authentication or authorization
+layer, and the local runtime is the reference deployment.
 
 ## Start here
 
-- Competitor intelligence: [how it works](competitor-intelligence/docs/01-HOW-IT-WORKS.md)
-- Runtime and launcher: [how it runs](competitor-intelligence/docs/02-HOW-IT-RUNS.md)
+The authoritative project documentation is in [docs/README.md](docs/README.md):
 
-The dashboard and competitor-intelligence collector now run as one AURA
-application. The collector package supplies monitoring and classification
-logic; the AURA API owns the native dashboard and lifecycle.
+- [Getting started and runbook](docs/getting-started.md)
+- [Architecture and request flows](docs/architecture.md)
+- [Configuration and environment variables](docs/configuration.md)
+- [Data, storage, and database setup](docs/data-and-storage.md)
+- [API and frontend integration](docs/api.md)
+- [Testing and development workflow](docs/testing.md)
+- [Operations and troubleshooting](docs/operations.md)
+- [Security, scope, and known limitations](docs/security-and-scope.md)
+- [Reliable demo walkthrough](docs/demo.md)
 
-## Run locally
+Specialized guides:
 
-The interactive launcher offers **Build only**, **Build + run**, and **Just run**:
+- [Competitor intelligence: how it works](competitor-intelligence/docs/01-HOW-IT-WORKS.md)
+- [Competitor intelligence: how it runs](competitor-intelligence/docs/02-HOW-IT-RUNS.md)
+- [Buffer publishing and public media](docs/buffer-publishing.md)
 
-```bash
-./scripts/macos/start.sh
-```
+Concept.md is the historical product/design brief. It contains ideas that are
+not the current implementation, such as LangGraph and Supabase. Use the code
+and the docs above as the source of truth.
 
-For direct commands:
+## Quick start
 
-```bash
-# clean generated output, install locked dependencies, typecheck, and build
-./scripts/macos/build.sh
+Prerequisites: Python 3.12+, uv, Bun, and Docker Compose when competitor
+collectors are enabled.
 
-# start both apps from the existing production build without rebuilding
-./scripts/macos/aura.sh start
+    cp .env.example .env
+    cp web/env.example.txt web/.env.local
+    ./scripts/macos/aura.sh up
 
-# start both apps in development mode with hot reload
-./scripts/macos/aura.sh dev
-
-# clean, build, and start the production frontend plus API
-./scripts/macos/up.sh
-
-# stop only processes started by the runner
-./scripts/macos/stop.sh
-```
+Then open:
 
 - Dashboard: http://localhost:3000
-- API docs: http://localhost:8000/docs
-- Health: http://localhost:8000/api/health
+- FastAPI Swagger UI: http://localhost:8000/docs
+- API health: http://localhost:8000/api/health
 
-Copy `.env.example` to `.env` and `web/env.example.txt` to `web/.env.local`.
-Never commit real keys. Keep `AURA_MOCK_AGENTS=true` until the deterministic
-end-to-end path works.
+The default local configuration uses deterministic/demo generation and a local
+SQLite database. See the configuration guide before adding provider keys or
+enabling external publishing.
 
-## Demo promise
+> Buffer cannot fetch images or videos from localhost. Before any Buffer
+> publish, start the reserved tunnel in a separate terminal and keep it
+> running for the entire publish session:
+>
+>     ngrok http --url=perceptually-homocentric-lindy.ngrok-free.dev 8000
+>
+> Set MEDIA_PUBLIC_BASE_URL to
+> https://perceptually-homocentric-lindy.ngrok-free.dev and verify
+> /api/media/config. ngrok forwards the API port, while AURA restricts that
+> public host to media reads and health. Use demo/test credentials and stop it
+> immediately after the publish test. Full details are in
+> docs/buffer-publishing.md.
 
-The reliable demo is the seeded failed post: inspect its compliance evidence,
-reject it, and show the saved lesson in Insights. Live content generation is the
-second half of the story, not a dependency for the first half.
+## Common commands
+
+    ./scripts/macos/aura.sh dev    # API + Next.js with hot reload
+    ./scripts/macos/aura.sh build  # clean, install locked deps, typecheck, build
+    ./scripts/macos/aura.sh start  # run an existing production frontend build
+    ./scripts/macos/aura.sh stop   # stop tracked processes and collector services
+
+Windows equivalents are under scripts/windows/; for example,
+.\scripts\windows\aura.ps1 dev and .\scripts\windows\up.ps1. The complete
+command matrix and manual two-terminal fallback are in the runbook.
+
+## Demo path
+
+For a deterministic walkthrough, create or load a campaign, inspect the
+compliance/review evidence, reject it with a reason such as TOO_SALESY, and
+confirm that the reviewer correction appears as a saved lesson. The exact
+fresh-database and MySQL demo options are documented in docs/demo.md.
