@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,28 +64,22 @@ function initials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-function fitTone(score: number): { label: string; badge: string; bar: string; score: string } {
+function fitTone(score: number): { label: string; badge: string } {
   if (score >= 85) {
     return {
       label: 'Prime fit',
       badge: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-      bar: 'bg-emerald-500',
-      score: 'text-emerald-600 dark:text-emerald-300',
     };
   }
   if (score >= 70) {
     return {
       label: 'Strong fit',
       badge: 'border-blue-500/35 bg-blue-500/10 text-blue-600 dark:text-blue-300',
-      bar: 'bg-blue-500',
-      score: 'text-blue-600 dark:text-blue-300',
     };
   }
   return {
     label: 'Review fit',
     badge: 'border-amber-500/35 bg-amber-500/10 text-amber-600 dark:text-amber-300',
-    bar: 'bg-amber-500',
-    score: 'text-amber-600 dark:text-amber-300',
   };
 }
 
@@ -488,119 +481,93 @@ export default function LeadIntelligence() {
             {visible.map((lead) => {
               const tone = fitTone(lead.fit_score);
               return (
-                <article key={lead.id} className={`${panelClass} p-[18px]`}>
+                <article key={lead.id} className={`${panelClass} p-5`}>
                   <div className='flex items-start justify-between gap-3'>
-                    <div className='flex min-w-0 items-start gap-3'>
-                      <span className='grid size-10 flex-none place-items-center rounded-full border border-[#e6e6e6] bg-[#f7f7f7] text-xs font-bold text-[#09090b] dark:border-[#424242] dark:bg-[#242424] dark:text-white'>
+                    <div className='flex min-w-0 items-center gap-3'>
+                      <span className='grid size-10 flex-none place-items-center rounded-[10px] bg-[#09090b] text-xs font-bold text-white dark:bg-white dark:text-black'>
                         {initials(lead.name)}
                       </span>
                       <div className='min-w-0'>
-                        <h2 className='line-clamp-2 text-[15px] font-bold leading-5 tracking-[-0.01em] text-[#09090b] dark:text-white'>
+                        <h2
+                          className='truncate text-[15px] font-semibold tracking-[-0.01em] text-[#09090b] dark:text-white'
+                          title={lead.name}
+                        >
                           {lead.name}
                         </h2>
-                        <p className='mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
-                          <span>{lead.country || 'Market not found'}</span>
-                          <span>·</span>
-                          <span className='inline-flex items-center gap-1'>
-                            {lead.brand_id in BRAND_DOT && (
-                              <span className={`size-1.5 rounded-full ${BRAND_DOT[lead.brand_id]}`} />
-                            )}
-                            {brandLabel(lead.brand_id)}
+                        <p className='mt-0.5 flex items-center gap-1.5 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
+                          {lead.brand_id in BRAND_DOT && (
+                            <span className={`size-1.5 rounded-full ${BRAND_DOT[lead.brand_id]}`} />
+                          )}
+                          <span className='truncate'>
+                            {brandLabel(lead.brand_id)} · {lead.country || 'Market not found'}
                           </span>
                         </p>
                       </div>
                     </div>
-                    <div className='flex-none text-right'>
-                      <div className={`text-lg font-semibold leading-none ${tone.score}`}>{lead.fit_score}</div>
-                      <div className='mt-1 text-[10px] uppercase tracking-[0.08em] text-[#737373] dark:text-[#a3a3a3]'>
-                        fit
-                      </div>
-                    </div>
+                    <span
+                      className={`inline-flex flex-none items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone.badge}`}
+                    >
+                      {lead.fit_score} · {tone.label.replace(' fit', '')}
+                    </span>
                   </div>
 
-                  <div className='mt-3 flex flex-wrap gap-1.5'>
-                    <Badge variant='outline' className={tone.badge}>
-                      {tone.label}
-                    </Badge>
-                    {lead.email || lead.phone ? (
-                      <Badge variant='outline'>Reachable</Badge>
-                    ) : (
-                      <Badge variant='outline'>No contact found</Badge>
-                    )}
-                  </div>
-
-                  <div className='mt-3 h-1 overflow-hidden rounded-full bg-[#eeeeee] dark:bg-[#2b2b2b]'>
-                    <div
-                      className={`h-full rounded-full ${tone.bar}`}
-                      style={{ width: `${Math.min(100, Math.max(0, lead.fit_score))}%` }}
-                    />
-                  </div>
-
-                  <p className='mt-3 line-clamp-3 text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>
+                  <p className='mt-3 line-clamp-2 min-h-[42px] text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>
                     {lead.requirements || lead.why || 'Public page did not expose a clear requirement yet.'}
                   </p>
 
-                  <dl className='mt-3 space-y-1.5 border-t border-[#e6e6e6] pt-3 text-[12px] dark:border-[#424242]'>
-                    <div className='flex items-center justify-between gap-3'>
-                      <dt className='text-[#737373] dark:text-[#a3a3a3]'>Website</dt>
-                      <dd className='min-w-0 truncate text-right'>
-                        {lead.url ? (
-                          <a
-                            className='font-medium text-blue-600 hover:underline dark:text-blue-300'
-                            href={lead.url}
-                            target='_blank'
-                            rel='noreferrer'
-                            title={lead.url}
-                          >
-                            {hostOf(lead.url)}
-                          </a>
-                        ) : (
-                          <span className='text-[#737373] dark:text-[#a3a3a3]'>Not listed</span>
-                        )}
-                      </dd>
+                  <div className='mt-3 divide-y divide-[#eeeeee] rounded-[10px] border border-[#eeeeee] text-[12px] dark:divide-[#2e2e2e] dark:border-[#2e2e2e]'>
+                    <div className='flex items-center justify-between gap-3 px-3 py-2'>
+                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Website</span>
+                      {lead.url ? (
+                        <a
+                          className='min-w-0 truncate font-medium text-[#09090b] hover:underline dark:text-white'
+                          href={lead.url}
+                          target='_blank'
+                          rel='noreferrer'
+                          title={lead.url}
+                        >
+                          {hostOf(lead.url)}
+                        </a>
+                      ) : (
+                        <span className='text-[#a3a3a3]'>—</span>
+                      )}
                     </div>
-                    <div className='flex items-center justify-between gap-3'>
-                      <dt className='text-[#737373] dark:text-[#a3a3a3]'>Email</dt>
-                      <dd className='min-w-0 truncate text-right'>
-                        {lead.email ? (
-                          <span className='text-[#404040] dark:text-[#d4d4d4]'>{lead.email}</span>
-                        ) : (
-                          <span className='text-[#737373] dark:text-[#a3a3a3]'>Not published</span>
-                        )}
-                      </dd>
+                    <div className='flex items-center justify-between gap-3 px-3 py-2'>
+                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Email</span>
+                      {lead.email ? (
+                        <span className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]' title={lead.email}>
+                          {lead.email}
+                        </span>
+                      ) : (
+                        <span className='text-[#a3a3a3]'>—</span>
+                      )}
                     </div>
-                    <div className='flex items-center justify-between gap-3'>
-                      <dt className='text-[#737373] dark:text-[#a3a3a3]'>Phone</dt>
-                      <dd className='min-w-0 truncate text-right'>
-                        {lead.phone ? (
-                          <span className='inline-flex items-center justify-end gap-1 text-[#404040] dark:text-[#d4d4d4]'>
-                            <Icons.phone className='size-3 text-[#a3a3a3]' />
-                            {lead.phone}
-                          </span>
-                        ) : (
-                          <span className='text-[#737373] dark:text-[#a3a3a3]'>Not published</span>
-                        )}
-                      </dd>
+                    <div className='flex items-center justify-between gap-3 px-3 py-2'>
+                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Phone</span>
+                      {lead.phone ? (
+                        <span className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]'>{lead.phone}</span>
+                      ) : (
+                        <span className='text-[#a3a3a3]'>—</span>
+                      )}
                     </div>
-                    {lead.source_url && (
-                      <div className='flex items-center justify-between gap-3'>
-                        <dt className='text-[#737373] dark:text-[#a3a3a3]'>Found from</dt>
-                        <dd className='min-w-0 truncate text-right'>
-                          <a
-                            className='font-medium text-blue-600 hover:underline dark:text-blue-300'
-                            href={lead.source_url}
-                            target='_blank'
-                            rel='noreferrer'
-                            title={lead.source_url}
-                          >
-                            {lead.source_title || hostOf(lead.source_url)}
-                          </a>
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
+                  </div>
 
-                  <div className='mt-4 flex gap-2'>
+                  {lead.source_url && (
+                    <p className='mt-2 truncate text-[11px] text-[#a3a3a3]'>
+                      via{' '}
+                      <a
+                        className='hover:underline'
+                        href={lead.source_url}
+                        target='_blank'
+                        rel='noreferrer'
+                        title={lead.source_url}
+                      >
+                        {lead.source_title || hostOf(lead.source_url)}
+                      </a>
+                    </p>
+                  )}
+
+                  <div className='mt-3 flex gap-2 border-t border-[#eeeeee] pt-3 dark:border-[#2e2e2e]'>
                     {lead.url ? (
                       <a className={`${quietButton} flex-1`} href={lead.url} target='_blank' rel='noreferrer'>
                         Open site
