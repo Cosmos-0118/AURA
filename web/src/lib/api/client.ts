@@ -59,7 +59,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.detail ?? `AURA API request failed (${response.status})`);
+    const msg = error?.detail ?? error?.error ?? error?.message ?? `AURA API request failed (${response.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
   return (await response.json()) as T;
 }
@@ -646,25 +647,41 @@ export async function assistantChat(
 }
 
 export async function getBrandLogos(): Promise<BrandLogoItem[]> {
+  const normalize = (items: any[]): BrandLogoItem[] =>
+    items.map((d: any) => {
+      const file = d.file || d.filename || '';
+      const fallbackUrl = file ? `/logo/${file}` : '/logo/ja.png';
+      return {
+        id: d.id || (d.name ? d.name.toLowerCase().replace(/\s+/g, '') : 'logo'),
+        name: d.name || 'Brand Logo',
+        filename: file,
+        file: file,
+        url: d.url || d.src || fallbackUrl,
+        src: d.src || d.url || fallbackUrl
+      };
+    });
+
   try {
     const res = await fetch('/api/logos');
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data) && data.length > 0) return normalize(data);
     }
   } catch {
     // fallback to direct API
   }
   try {
-    return await request<BrandLogoItem[]>('/logos');
+    const data = await request<any[]>('/logos');
+    if (Array.isArray(data) && data.length > 0) return normalize(data);
   } catch {
-    return [
-      { name: 'Jade', filename: 'Jade.png', url: '/logos/Jade.png' },
-      { name: 'DoctorShield', filename: 'doctorshield.png', url: '/logos/doctorshield.png' },
-      { name: 'JA Assure', filename: 'ja.png', url: '/logos/ja.png' },
-      { name: 'Jaguar', filename: 'jaguar.png', url: '/logos/jaguar.png' }
-    ];
+    // fallback to static list
   }
+  return [
+    { id: 'jade', name: 'Jade', filename: 'Jade.png', file: 'Jade.png', url: '/logo/Jade.png', src: '/logo/Jade.png' },
+    { id: 'doctorshield', name: 'DoctorShield', filename: 'doctorshield.png', file: 'doctorshield.png', url: '/logo/doctorshield.png', src: '/logo/doctorshield.png' },
+    { id: 'ja', name: 'JA Assure', filename: 'ja.png', file: 'ja.png', url: '/logo/ja.png', src: '/logo/ja.png' },
+    { id: 'jaguar', name: 'Jaguar Transit', filename: 'jaguar.png', file: 'jaguar.png', url: '/logo/jaguar.png', src: '/logo/jaguar.png' }
+  ];
 }
 
 export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
@@ -785,4 +802,14 @@ export function publishToBuffer(
   body: import('./types').BufferPublishRequest
 ): Promise<import('./types').BufferPublishResult> {
   return request<import('./types').BufferPublishResult>('/api/buffer/publish', jsonBody(body));
+}
+
+export interface MediaConfig {
+  configured: boolean;
+  base_url: string | null;
+  media_endpoint_available: boolean;
+}
+
+export async function getMediaConfig(): Promise<MediaConfig> {
+  return await request<MediaConfig>('/api/media/config');
 }

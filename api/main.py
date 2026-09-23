@@ -1,4 +1,10 @@
 from pathlib import Path
+from dotenv import load_dotenv
+
+_ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_ROOT_ENV)
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,14 +15,14 @@ try:
         competitor_readiness,
         start_competitor_refresh,
     )
-    from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics
+    from .routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics
 except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
     from agents.lead_intel import start_daily_refresh
     from services.competitor_intelligence import (  # type: ignore[no-redef]
         competitor_readiness,
         start_competitor_refresh,
     )
-    from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, metrics
+    from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics
 
 app = FastAPI(
     title="AURA API",
@@ -42,11 +48,12 @@ storage_path.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(storage_path)), name="media")
 app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
 
-logos_path = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
-if not logos_path.exists():
-    logos_path = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
-if logos_path.exists():
-    app.mount("/logos", StaticFiles(directory=str(logos_path)), name="logos")
+logo_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logo"
+if not logo_dir.exists():
+    logo_dir = Path(__file__).resolve().parent.parent / "web" / "public" / "logos"
+if logo_dir.exists():
+    app.mount("/logo", StaticFiles(directory=str(logo_dir)), name="logo")
+    app.mount("/logos", StaticFiles(directory=str(logo_dir)), name="logos")
 
 
 @app.get("/api/health", tags=["health"])
@@ -84,11 +91,14 @@ def list_logos() -> list[dict[str, str]]:
             if base in seen:
                 continue
             seen.add(base)
+            name = name_map.get(base, base.title())
             res.append({
                 "id": base,
-                "name": name_map.get(base, base.title()),
+                "name": name,
                 "file": f.name,
-                "src": f"/logos/{f.name}",
+                "filename": f.name,
+                "src": f"/logo/{f.name}",
+                "url": f"/logo/{f.name}",
             })
     return res
 
@@ -101,3 +111,4 @@ app.include_router(lessons.router)
 app.include_router(leads.router)
 app.include_router(metrics.router)
 app.include_router(buffer.router)
+app.include_router(media.router)

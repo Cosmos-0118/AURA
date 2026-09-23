@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,25 @@ class ApplyWatermarkRequest(BaseModel):
     image_data: str | None = None
     logos: list[WatermarkLogoItem] = []
     watermark_config: dict[str, Any] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_logos_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "logos" in data and isinstance(data["logos"], list):
+            for item in data["logos"]:
+                if isinstance(item, dict) and not item.get("logo_path"):
+                    name = str(item.get("name") or "").lower().replace(" ", "").replace("-", "")
+                    if "assure" in name or name == "ja":
+                        item["logo_path"] = "/logo/ja.png"
+                    elif "doctor" in name:
+                        item["logo_path"] = "/logo/doctorshield.png"
+                    elif "jaguar" in name:
+                        item["logo_path"] = "/logo/jaguar.png"
+                    elif "jade" in name:
+                        item["logo_path"] = "/logo/Jade.png"
+                    else:
+                        item["logo_path"] = item.get("url") or item.get("src") or item.get("file") or "/logo/ja.png"
+        return data
 
 
 
@@ -266,30 +285,31 @@ def generate_studio_campaign(
             note = r.get("note", "")
             lessons_used.append({"id": str(r["id"]), "tag": tag, "note": note})
 
-    # Step 2: Create initial campaign in draft / generating status
-    with transaction() as db:
-        campaign_repo.create_campaign(
-            db=db,
-            campaign_id=campaign_id,
-            brand_id=body.brand_id,
-            objective=body.objective,
-            language=body.language,
-            thesis=body.thesis,
-            target_audience=body.target_audience,
-            status="generating",
-        )
-        event_repo.log_event(
-            db,
-            campaign_id=campaign_id,
-            event_type="generation_started",
-            description=f"Initiated campaign content generation for {body.brand_id}",
-            metadata={"platforms": body.platforms, "lessons_count": len(lessons_used)},
-        )
-
-    # Step 3: Run content generation engine
-    provider = "demo_local" if demo_mode else "groq"
-    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Step 2: Run generation within try-except to ensure CORS headers and clear errors
     try:
+        with transaction() as db:
+            campaign_repo.create_campaign(
+                db=db,
+                campaign_id=campaign_id,
+                brand_id=body.brand_id,
+                objective=body.objective,
+                language=body.language,
+                thesis=body.thesis,
+                target_audience=body.target_audience,
+                status="generating",
+                platforms=body.platforms,
+            )
+            event_repo.log_event(
+                db,
+                campaign_id=campaign_id,
+                event_type="generation_started",
+                description=f"Initiated campaign content generation for {body.brand_id}",
+                metadata={"platforms": body.platforms, "lessons_count": len(lessons_used)},
+            )
+
+        # Step 3: Run content generation engine
+        provider = "demo_local" if demo_mode else "groq"
+        model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
         content_pkg = generate_campaign_content(
             brand_id=body.brand_id,
             objective=body.objective,
@@ -300,24 +320,25 @@ def generate_studio_campaign(
             lessons=lessons_used,
             demo_mode=demo_mode,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Campaign content generation failed: {exc}")
 
-    # Step 4: Atomically persist generated campaign and all platform contents
-    with transaction() as db:
-        campaign_repo.save_generated_campaign_package(
-            db=db,
-            campaign_id=campaign_id,
-            brand_id=body.brand_id,
-            objective=body.objective,
-            language=body.language,
-            thesis=body.thesis,
-            target_audience=body.target_audience,
-            content_pkg=content_pkg,
-            lessons_used=lessons_used,
-            provider=provider,
-            model=model,
-        )
+        # Step 4: Atomically persist generated campaign and all platform contents
+        with transaction() as db:
+            campaign_repo.save_generated_campaign_package(
+                db=db,
+                campaign_id=campaign_id,
+                brand_id=body.brand_id,
+                objective=body.objective,
+                language=body.language,
+                thesis=body.thesis,
+                target_audience=body.target_audience,
+                content_pkg=content_pkg,
+                lessons_used=lessons_used,
+                provider=provider,
+                model=model,
+            )
+    except Exception as exc:
+        logger.error(f"Campaign studio generation failed: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Campaign content generation failed: {exc}")
 
     return get_studio_campaign(campaign_id)
 
@@ -593,7 +614,7 @@ def apply_campaign_watermark(campaign_id: str, body: ApplyWatermarkRequest) -> C
             mime_type=res["mime_type"],
             file_size=res["file_size"],
             parent_media_id=str(parent["id"]),
-            logo_path=body.logo_preset or (logos_payload[0]["logo_path"] if logos_payload else None),
+            logo_path=body.logo_preset or (logos_payload[0].get("logo_path") if logos_payload else None) or "/logo/ja.png",
             logo_position=body.logo_anchor,
             logo_scale=body.logo_scale,
             logo_opacity=body.logo_opacity,
@@ -776,8 +797,7 @@ def edit_campaign_content_route(campaign_id: str, body: ReviewEditRequest):
 def publish_campaign_linkedin_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to LinkedIn via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "linkedin")
+        res = publish_to_platform(None, campaign_id, "linkedin")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -787,8 +807,7 @@ def publish_campaign_linkedin_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_instagram_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to Instagram via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "instagram")
+        res = publish_to_platform(None, campaign_id, "instagram")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -798,8 +817,7 @@ def publish_campaign_instagram_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_x_route(campaign_id: str) -> PublishResponse:
     """Publish approved campaign asset to X via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, "x")
+        res = publish_to_platform(None, campaign_id, "x")
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -809,8 +827,7 @@ def publish_campaign_x_route(campaign_id: str) -> PublishResponse:
 def publish_campaign_platform_route(campaign_id: str, platform: str) -> PublishResponse:
     """Publish approved campaign asset to specific platform (e.g. linkedin, instagram, x) via Buffer."""
     try:
-        with transaction() as db:
-            res = publish_to_platform(db, campaign_id, platform)
+        res = publish_to_platform(None, campaign_id, platform)
         return PublishResponse(**res)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))

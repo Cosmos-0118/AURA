@@ -632,8 +632,11 @@ export type CampaignWorkspaceHistory = {
 };
 
 export type BrandLogoItem = {
+  id?: string;
   name: string;
   filename: string;
+  file?: string;
   url: string;
+  src?: string;
 };
 

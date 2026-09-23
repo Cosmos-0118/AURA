@@ -432,7 +432,7 @@ start_processes() {
   (
     cd "$API_DIR"
     exec env UV_CACHE_DIR="$UV_CACHE_DIR" \
-      uv run uvicorn main:app --host "$API_HOST" --port "$API_PORT" \
+      uv run uvicorn main:app --host "$API_HOST" --port "$API_PORT" --reload \
       >>"$API_LOG" 2>&1
   ) &
   local api_pid=$!

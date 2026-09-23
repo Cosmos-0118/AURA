@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
 class LeadInsight(Lead):
+    country: str | None = None
     email: str | None = None
     phone: str | None = None
     requirements: str | None = None
