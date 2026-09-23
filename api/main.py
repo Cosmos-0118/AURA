@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+from urllib.parse import urlparse
+
 from dotenv import load_dotenv
 
 _ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
@@ -7,6 +10,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 try:
@@ -23,6 +27,8 @@ except ImportError:  # Supports `cd api && uv run uvicorn main:app`.
         start_competitor_refresh,
     )
     from routes import assets, brands, buffer, campaigns, competitors, leads, lessons, media, metrics
+
+RESERVED_PUBLIC_MEDIA_HOST = "perceptually-homocentric-lindy.ngrok-free.dev"
 
 app = FastAPI(
     title="AURA API",
@@ -41,6 +47,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def restrict_public_media_origin(request, call_next):
+    """Limit the configured public media origin to safe read-only routes.
+
+    The local development API remains unauthenticated by design. When the
+    reserved public media hostname is used by ngrok or another reverse proxy,
+    only media reads and the non-sensitive health check should be reachable.
+    """
+    configured_base = os.getenv("MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    configured_host = (urlparse(configured_base).hostname or "").lower()
+    public_hosts = {RESERVED_PUBLIC_MEDIA_HOST, configured_host} - {""}
+    request_host = (request.url.hostname or "").lower()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].split(":", 1)[0].lower()
+    addressed_hosts = {request_host, forwarded_host} - {""}
+    public_path = request.url.path
+    allowed_public_path = public_path == "/api/health" or public_path.startswith("/media/")
+    allowed_public_method = request.method in {"GET", "HEAD"}
+
+    if public_hosts.intersection(addressed_hosts) and (
+        not allowed_public_method or not allowed_public_path
+    ):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "This public origin only serves media files."},
+        )
+
+    return await call_next(request)
+
 
 # Ensure storage and logos directories exist and mount as static files
 storage_path = Path(__file__).resolve().parent.parent / "storage"

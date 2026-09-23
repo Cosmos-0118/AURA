@@ -325,12 +325,12 @@ assert_ports_free() {
   fi
 }
 
-ensure_env() {
-  [[ -f "$ROOT_DIR/.env" ]] || fail "Missing .env. Copy .env.example to .env and set DATABASE_URL before starting AURA."
+load_launcher_env() {
+  [[ -f "$ROOT_DIR/.env" ]] || return 0
 
   while IFS='=' read -r env_key env_value; do
     case "$env_key" in
-      AURA_COMPETITOR_INTELLIGENCE|AURA_COMPETITOR_REQUIRED|AURA_COMPETITOR_DISCOVERY|AURA_COMPETITOR_REFRESH|CHANGEDETECTION_PORT|SEARXNG_PORT|RSSHUB_PORT)
+      API_HOST|API_PORT|WEB_PORT|AURA_COMPETITOR_INTELLIGENCE|AURA_COMPETITOR_REQUIRED|AURA_COMPETITOR_DISCOVERY|AURA_COMPETITOR_REFRESH|CHANGEDETECTION_PORT|SEARXNG_PORT|RSSHUB_PORT)
         env_value="${env_value%$'\r'}"
         env_value="${env_value#\"}"
         env_value="${env_value%\"}"
@@ -342,6 +342,12 @@ ensure_env() {
         ;;
     esac
   done < "$ROOT_DIR/.env"
+}
+
+ensure_env() {
+  [[ -f "$ROOT_DIR/.env" ]] || fail "Missing .env. Copy .env.example to .env and configure DB_ENGINE or the MySQL variables before starting AURA."
+
+  load_launcher_env
 
   COMPETITOR_ENABLED="${AURA_COMPETITOR_INTELLIGENCE:-$COMPETITOR_ENABLED}"
   COMPETITOR_REQUIRED="${AURA_COMPETITOR_REQUIRED:-$COMPETITOR_REQUIRED}"
@@ -553,6 +559,7 @@ interactive_menu() {
 }
 
 main() {
+  load_launcher_env
   local command="${1:-}"
   case "$command" in
     ""|menu)

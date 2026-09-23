@@ -361,6 +361,9 @@ function Assert-PortsFree {
 function Import-LauncherEnv {
     $envFile = Join-Path $RootDir ".env"
     $allowed = @(
+        "API_HOST",
+        "API_PORT",
+        "WEB_PORT",
         "AURA_COMPETITOR_INTELLIGENCE",
         "AURA_COMPETITOR_REQUIRED",
         "AURA_COMPETITOR_DISCOVERY",
@@ -379,6 +382,9 @@ function Import-LauncherEnv {
         if ($value) { Set-Item -Path "Env:$name" -Value $value }
     }
 
+    if ($env:API_HOST) { $script:ApiHost = $env:API_HOST }
+    if ($env:API_PORT) { $script:ApiPort = $env:API_PORT }
+    if ($env:WEB_PORT) { $script:WebPort = $env:WEB_PORT }
     if ($env:AURA_COMPETITOR_INTELLIGENCE) { $script:CompetitorEnabled = $env:AURA_COMPETITOR_INTELLIGENCE }
     if ($env:AURA_COMPETITOR_REQUIRED) { $script:CompetitorRequired = $env:AURA_COMPETITOR_REQUIRED }
     if ($env:AURA_COMPETITOR_DISCOVERY) { $script:CompetitorDiscovery = $env:AURA_COMPETITOR_DISCOVERY }
@@ -389,7 +395,7 @@ function Import-LauncherEnv {
 
 function Ensure-Env {
     if (-not (Test-Path (Join-Path $RootDir ".env"))) {
-        Fail "Missing .env. Copy .env.example to .env and set DATABASE_URL before starting AURA."
+        Fail "Missing .env. Copy .env.example to .env and configure DB_ENGINE or the MySQL variables before starting AURA."
     }
     Import-LauncherEnv
 
@@ -659,6 +665,10 @@ function Show-Menu {
         { $_ -in "q", "Q", "" } { Log "Nothing started" }
         default { Fail "Unknown option '$choice'. Choose 1, 2, 3, 4, or q." }
     }
+}
+
+if (Test-Path (Join-Path $RootDir ".env")) {
+    Import-LauncherEnv
 }
 
 switch ($Command) {
