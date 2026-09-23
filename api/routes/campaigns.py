@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 try:
     from ..db import get_db, reset_campaign_data, transaction
@@ -521,87 +524,6 @@ def generate_campaign_image(
     )
 
 
-@router.post("/{campaign_id}/generate-video", response_model=CampaignMediaItem)
-def generate_campaign_video(
-    campaign_id: str,
-    body: MediaGenerateRequest,
-    x_demo_mode: str | None = Header(None, alias="X-Demo-Mode"),
-) -> CampaignMediaItem:
-    """Generate original vertical 9:16 Reel video and save locally to storage/campaigns/{campaign_id}/video/{filename}."""
-    demo_mode = is_demo_mode(x_demo_mode)
-    chosen_model = body.model or os.environ.get("VIDEO_MODEL", "minimax/h3-max-turbo/text-to-video")
-    prompt = body.prompt
-
-    # 1. Load campaign and video prompt from MySQL
-    with get_db() as db:
-        detail = campaign_repo.get_campaign_detail(db, campaign_id)
-        if not detail:
-            raise HTTPException(status_code=404, detail="Campaign not found")
-
-        if not prompt:
-            for c in detail["contents"]:
-                if c.get("video_generation_prompt"):
-                    prompt = c["video_generation_prompt"]
-                    break
-        if not prompt:
-            prompt = f"Vertical 9:16 cinematic video for {detail['campaign']['brand_id']} on {detail['campaign']['thesis']}"
-
-    # 2. Record media generating in MySQL (original stage)
-    media_id = str(uuid4())
-    with transaction() as db:
-        media_repo.record_media_generating(
-            db=db,
-            campaign_id=campaign_id,
-            media_type="video",
-            prompt=prompt,
-            model=chosen_model,
-            provider="demo_local" if demo_mode else "fal",
-            media_id=media_id,
-            media_stage="original",
-        )
-
-    # 3. Generate video and save to local storage
-    try:
-        res = service_generate_video(
-            campaign_id=campaign_id,
-            prompt=prompt,
-            model=chosen_model,
-            demo_mode=demo_mode,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Video generation failed: {exc}")
-
-    # 4. Update media row with completed file info in MySQL
-    with transaction() as db:
-        updated_media = media_repo.update_media_completed(
-            db=db,
-            media_id=media_id,
-            campaign_id=campaign_id,
-            media_type="video",
-            local_path=res["local_path"],
-            filename=res["filename"],
-            mime_type=res["mime_type"],
-            file_size=res["file_size"],
-            duration_seconds=res.get("duration_seconds", 5.0),
-            media_stage="original",
-            watermarked=False,
-        )
-
-    media_url = f"/{res['local_path']}"
-    return CampaignMediaItem(
-        id=str(updated_media["id"]),
-        campaign_id=str(updated_media["campaign_id"]),
-        media_type="video",
-        prompt=updated_media["prompt"],
-        local_path=media_url,
-        provider=updated_media["provider"],
-        model=updated_media["model"],
-        status=updated_media["status"],
-        media_stage="original",
-        watermarked=False,
-    )
-
-
 @router.post("/{campaign_id}/apply-watermark", response_model=CampaignMediaItem)
 def apply_campaign_watermark(campaign_id: str, body: ApplyWatermarkRequest) -> CampaignMediaItem:
     """Apply brand logo and text overlay to create final watermarked asset."""
@@ -1067,12 +989,17 @@ def assistant_chat_route(campaign_id: str, body: AssistantChatRequest) -> Assist
     api_key = os.environ.get("GROQ_API_KEY")
     regenerated_payload = None
     reply_text = ""
+    groq_error_msg = None
 
     if api_key:
         try:
             from openai import OpenAI
             client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
             groq_model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+            candidate_models = [groq_model]
+            for fallback in ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]:
+                if fallback not in candidate_models:
+                    candidate_models.append(fallback)
 
             context_str = f"Campaign Title: {camp.get('title')}\nThesis: {camp.get('thesis')}\nBrand: {brand_id}\nObjective: {camp.get('objective')}\nTarget Audience: {camp.get('target_audience')}\n\nCurrent Contents:\n"
             for c in current_contents:
@@ -1105,29 +1032,50 @@ Respond with a strict JSON object with:
   "video_generation_prompt": "updated video prompt if applicable"
 }}"""
 
-            resp = client.chat.completions.create(
-                model=groq_model,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": f"Context:\n{context_str}\n\nInstruction: {body.message}"},
-                ],
-                temperature=0.7,
-                response_format={"type": "json_object"},
-            )
-            regenerated_payload = json.loads(resp.choices[0].message.content or "{}")
-            reply_text = regenerated_payload.get("reply", "Updated campaign content per your instructions.")
-        except Exception:
-            pass
+            last_exc = None
+            for model_name in candidate_models:
+                try:
+                    resp = client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": f"Context:\n{context_str}\n\nInstruction: {body.message}"},
+                        ],
+                        temperature=0.7,
+                        response_format={"type": "json_object"},
+                    )
+                    raw_content = resp.choices[0].message.content or "{}"
+                    parsed = json.loads(raw_content)
+                    if isinstance(parsed, dict) and parsed.get("platforms"):
+                        regenerated_payload = parsed
+                        reply_text = regenerated_payload.get("reply", f"Updated campaign content per your instructions using {model_name}.")
+                        break
+                    else:
+                        raise ValueError(f"Model {model_name} returned JSON missing 'platforms' dictionary")
+                except Exception as exc:
+                    last_exc = exc
+                    logger.warning("Groq model %s failed for assistant chat: %s", model_name, exc)
+                    continue
+
+            if not regenerated_payload and last_exc:
+                groq_error_msg = str(last_exc)
+
+        except Exception as exc:
+            logger.warning("Groq initialization or execution failed: %s", exc)
+            groq_error_msg = str(exc)
+            regenerated_payload = None
 
     if not regenerated_payload:
         reply_text = f"Updated campaign copy for {', '.join(platforms_to_update)} based on your request: \"{body.message}\"."
+        if groq_error_msg:
+            reply_text = f"[AI service note: {groq_error_msg}] " + reply_text
         regenerated_payload = {"platforms": {}}
         for p in platforms_to_update:
             existing_c = next((c for c in current_contents if c["platform"] == p), None)
             base_content = existing_c["content"] if existing_c else camp.get("thesis", "Marketing update")
             regenerated_payload["platforms"][p] = {
                 "title": (existing_c.get("title") or "Revised Campaign Update") if existing_c else "Revised Update",
-                "content": f"{base_content}\n\n[Revised: {body.message}]",
+                "content": f"[Assistant Revision: {body.message}]\n\n{base_content}",
                 "hashtags": existing_c.get("hashtags", ["#AURA", f"#{brand_id.title()}"]) if existing_c else ["#AURA"],
                 "generation_prompt": existing_c.get("image_generation_prompt") if existing_c else None,
             }
