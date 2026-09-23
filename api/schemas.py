@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 BrandId = Literal["jade", "doctorshield", "jaguar"]
 Platform = Literal["linkedin", "instagram", "x", "blog", "reel"]
@@ -193,18 +193,6 @@ class Lead(BaseModel):
     last_verified_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-
-
-class LeadSearchRequest(BaseModel):
-    brand_id: BrandId
-    category: str
-    location: str
-    keywords: str | None = None
-
-
-class LeadOutreachRequest(BaseModel):
-    brand_id: BrandId
-    lead_id: str
 
 
 class Metrics(BaseModel):
@@ -430,12 +418,43 @@ class VideoGenerationRecord(BaseModel):
 
 class WatermarkLogoItem(BaseModel):
     id: str | None = None
-    logo_path: str
+    logo_path: str = "/logo/ja.png"
+    name: str | None = None
+    file: str | None = None
+    filename: str | None = None
+    src: str | None = None
+    url: str | None = None
     anchor: str = "bottom-right"
     scale: float = 80.0
     opacity: float = 90.0
     x: float | None = None
     y: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_logo_path(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            path_val = (
+                data.get("logo_path")
+                or data.get("url")
+                or data.get("src")
+                or data.get("file")
+                or data.get("filename")
+            )
+            if not path_val and data.get("name"):
+                name_clean = str(data["name"]).lower().replace(" ", "").replace("-", "")
+                if "assure" in name_clean or name_clean == "ja":
+                    path_val = "/logo/ja.png"
+                elif "doctor" in name_clean:
+                    path_val = "/logo/doctorshield.png"
+                elif "jaguar" in name_clean:
+                    path_val = "/logo/jaguar.png"
+                elif "jade" in name_clean:
+                    path_val = "/logo/Jade.png"
+                else:
+                    path_val = f"/logo/{name_clean}.png"
+            data["logo_path"] = path_val or "/logo/ja.png"
+        return data
 
 
 class HistoryCampaignSummary(BaseModel):

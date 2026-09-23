@@ -2,9 +2,15 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(_ROOT_ENV)
+load_dotenv()
 
 BRAND_KNOWLEDGE = {
     "jade": {

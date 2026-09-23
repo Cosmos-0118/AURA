@@ -150,21 +150,55 @@ def create_demo_image(target_path: Path, prompt: str, rel_path: str) -> None:
 
 
 def find_logo_path(logo_filename: str) -> Path | None:
-    """Locate brand or group logo in web/public/logos, web/public/logo, public/logo, or storage/logo."""
+    """Locate brand or group logo in web/public/logo, web/public/logos, public/logo, or storage/logo."""
+    if not logo_filename:
+        return None
     project_root = Path(__file__).resolve().parent.parent.parent
-    variants = [logo_filename, logo_filename.lower(), logo_filename.capitalize()]
-    for fn in variants:
-        candidate_paths = [
-            project_root / "web" / "public" / "logos" / fn,
-            project_root / "web" / "public" / "logo" / fn,
-            project_root / "public" / "logos" / fn,
-            project_root / "public" / "logo" / fn,
-            project_root / "web" / "public" / fn,
-            project_root / "storage" / "logo" / fn,
+    clean_fn = str(logo_filename).replace("\\", "/").split("/")[-1].strip()
+
+    aliases = {
+        "ja assure": "ja.png",
+        "ja-assure": "ja.png",
+        "jaassure": "ja.png",
+        "ja": "ja.png",
+        "jade": "Jade.png",
+        "doctorshield": "doctorshield.png",
+        "doctor shield": "doctorshield.png",
+        "doctor-shield": "doctorshield.png",
+        "jaguar": "jaguar.png",
+        "jaguar transit": "jaguar.png",
+        "jaguar-transit": "jaguar.png",
+        "jaguartransit": "jaguar.png",
+    }
+
+    candidates_to_try = [clean_fn]
+    clean_stem = clean_fn.rsplit(".", 1)[0].lower() if "." in clean_fn else clean_fn.lower()
+    if clean_stem in aliases:
+        candidates_to_try.append(aliases[clean_stem])
+    if clean_fn.lower() in aliases:
+        candidates_to_try.append(aliases[clean_fn.lower()])
+
+    for target in candidates_to_try:
+        variants = [
+            target,
+            target.lower(),
+            target.capitalize(),
+            f"{target}.png",
+            f"{target.lower()}.png",
+            f"{target.capitalize()}.png",
         ]
-        for p in candidate_paths:
-            if p.exists() and p.is_file():
-                return p
+        for fn in variants:
+            candidate_paths = [
+                project_root / "web" / "public" / "logo" / fn,
+                project_root / "web" / "public" / "logos" / fn,
+                project_root / "public" / "logo" / fn,
+                project_root / "public" / "logos" / fn,
+                project_root / "web" / "public" / fn,
+                project_root / "storage" / "logo" / fn,
+            ]
+            for p in candidate_paths:
+                if p.exists() and p.is_file():
+                    return p
     return None
 
 
@@ -416,7 +450,16 @@ def apply_watermark_to_image(
                 padding = int(w * 0.04)
 
                 for item in logo_list:
-                    fname = item.get("file") or item.get("src") or item.get("name") or item.get("id") or "jade"
+                    fname = (
+                        item.get("logo_path")
+                        or item.get("url")
+                        or item.get("src")
+                        or item.get("file")
+                        or item.get("filename")
+                        or item.get("name")
+                        or item.get("id")
+                        or "jade"
+                    )
                     if str(fname).startswith("/logos/"):
                         fname = str(fname).replace("/logos/", "")
                     elif str(fname).startswith("/logo/"):

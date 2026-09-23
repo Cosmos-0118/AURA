@@ -159,6 +159,8 @@ export default function ReviewQueuePage() {
   // Platform Publishing Confirmation Modal
   const [platformToConfirm, setPlatformToConfirm] = useState<'linkedin' | 'instagram' | 'x' | null>(null);
   const [isPublishingPlatform, setIsPublishingPlatform] = useState<Record<string, boolean>>({});
+  const [publishError, setPublishError] = useState<{ platform: string; message: string } | null>(null);
+
 
   // Reset Data Modal
   const [showResetModal, setShowResetModal] = useState(false);
@@ -324,6 +326,7 @@ export default function ReviewQueuePage() {
   // Trigger Publish for a Platform (opens platform confirmation modal)
   const handlePublishPlatform = (platform: 'linkedin' | 'instagram' | 'x') => {
     if (!selectedCard) return;
+    setPublishError(null);
     setPlatformToConfirm(platform);
   };
 
@@ -332,6 +335,7 @@ export default function ReviewQueuePage() {
     if (!selectedCard || !platformToConfirm) return;
     const plat = platformToConfirm;
     setIsPublishingPlatform((prev) => ({ ...prev, [plat]: true }));
+    setPublishError(null);
     try {
       let res;
       if (plat === 'linkedin') {
@@ -343,6 +347,7 @@ export default function ReviewQueuePage() {
       }
       toast.success(res.message || `Successfully published to ${plat.toUpperCase()}!`);
       setPlatformToConfirm(null);
+      setPublishError(null);
 
       const [pubs, hist] = await Promise.all([
         getCampaignPublications(selectedCard.campaign_id).catch(() => []),
@@ -353,11 +358,13 @@ export default function ReviewQueuePage() {
       fetchQueue();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : `Failed to publish to ${plat}`;
+      setPublishError({ platform: plat, message: msg });
       toast.error(msg);
     } finally {
       setIsPublishingPlatform((prev) => ({ ...prev, [plat]: false }));
     }
   };
+
 
   // Reset All Test Data
   const handleResetData = async () => {
@@ -1561,6 +1568,29 @@ export default function ReviewQueuePage() {
               </div>
             </div>
 
+            {/* Actionable Error Display */}
+            {publishError && publishError.platform === platformToConfirm && (
+              <div className='p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-xs flex flex-col gap-2'>
+                <div className='flex items-center gap-1.5 font-bold text-destructive'>
+                  <Icons.alertCircle className='size-4 text-destructive shrink-0' />
+                  <span>Publishing failed</span>
+                </div>
+                <p className='leading-relaxed font-medium'>{publishError.message}</p>
+                {(publishError.message.includes('MEDIA_PUBLIC_BASE_URL') ||
+                  publishError.message.includes('media URL') ||
+                  publishError.message.includes('Buffer cannot access')) && (
+                  <div className='mt-1 pt-2 border-t border-destructive/20 text-[11px] text-foreground/80 space-y-1'>
+                    <span className='font-bold text-foreground'>Action Required:</span>
+                    <ul className='list-disc list-inside space-y-0.5 text-muted-foreground'>
+                      <li>Configure <code className='px-1 py-0.5 rounded bg-muted font-mono text-[10px]'>MEDIA_PUBLIC_BASE_URL</code> in backend <code className='px-1 py-0.5 rounded bg-muted font-mono text-[10px]'>.env</code></li>
+                      <li>Ensure your public tunnel (e.g. <code className='font-mono'>ngrok http 8000</code>) or domain is active</li>
+                      <li>Verify public HTTPS accessibility of the media URL</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             <DialogFooter className='border-t pt-3 flex items-center justify-end gap-2'>
               <Button
                 variant='ghost'
@@ -1586,6 +1616,11 @@ export default function ReviewQueuePage() {
                   <>
                     <Icons.spinner className='size-3.5 mr-1.5 animate-spin' />
                     Posting to {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}...
+                  </>
+                ) : publishError && publishError.platform === platformToConfirm ? (
+                  <>
+                    <Icons.refresh className='size-3.5 mr-1.5' />
+                    Retry {platformToConfirm === 'linkedin' ? 'LinkedIn' : platformToConfirm === 'instagram' ? 'Instagram' : 'X'}
                   </>
                 ) : (
                   <>

@@ -274,18 +274,6 @@ export type Lead = {
   updated_at?: string | null;
 };
 
-export type LeadSearchRequest = {
-  brand_id: BrandId;
-  category: string;
-  location: string;
-  keywords?: string | null;
-};
-
-export type LeadOutreachRequest = {
-  brand_id: BrandId;
-  lead_id: string;
-};
-
 export type LeadRefreshStatus = {
   refreshing: boolean;
   configured: boolean;
@@ -644,8 +632,11 @@ export type CampaignWorkspaceHistory = {
 };
 
 export type BrandLogoItem = {
+  id?: string;
   name: string;
   filename: string;
+  file?: string;
   url: string;
+  src?: string;
 };
 
