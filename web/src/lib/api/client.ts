@@ -443,8 +443,8 @@ export function listLeads(filters: LeadListFilters = {}, signal?: AbortSignal): 
   return request<LeadPage>(`/api/leads${query}`, { signal });
 }
 
-export async function getLead(leadId: string): Promise<Lead> {
-  return request<Lead>(`/api/leads/${encodeURIComponent(leadId)}`);
+export async function getLead(leadId: string, signal?: AbortSignal): Promise<Lead> {
+  return request<Lead>(`/api/leads/${encodeURIComponent(leadId)}`, { signal });
 }
 
 export async function reviewLead(leadId: string, body: LeadReviewRequest): Promise<Lead> {
@@ -464,10 +464,13 @@ export function getLeadEmailDraft(leadId: string): Promise<import('./types').Lea
   return request<import('./types').LeadEmailDraft>(`/api/leads/draft${query}`);
 }
 
-export function sendLeadEmail(leadId: string): Promise<import('./types').LeadEmailResult> {
+export function sendLeadEmail(
+  leadId: string,
+  content?: { subject: string; body: string }
+): Promise<import('./types').LeadEmailResult> {
   return request<import('./types').LeadEmailResult>(
     '/api/leads/send',
-    jsonBody({ lead_id: leadId })
+    jsonBody({ lead_id: leadId, ...content })
   );
 }
 

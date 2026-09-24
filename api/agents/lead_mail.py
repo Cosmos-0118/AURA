@@ -146,7 +146,11 @@ def _deliver(draft: dict[str, str | bool]) -> None:
         raise LeadMailError("Gmail did not accept this email.", 502) from exc
 
 
-def send_for(lead_id: str) -> dict[str, str | bool]:
+def send_for(
+    lead_id: str,
+    subject: str | None = None,
+    body: str | None = None,
+) -> dict[str, str | bool]:
     lead = _find_lead(lead_id)
     if lead.get("review_status") != "approved" or lead.get("outreach_status") != "approved":
         raise LeadMailError("A human reviewer must approve this lead for outreach before sending.", 409)
@@ -165,6 +169,16 @@ def send_for(lead_id: str) -> dict[str, str | bool]:
     draft = build_message(lead)
     if not draft["to_email"]:
         raise LeadMailError("This lead has no published email address.")
+    if subject is not None:
+        edited_subject = subject.strip()
+        if not edited_subject or "\r" in edited_subject or "\n" in edited_subject:
+            raise LeadMailError("Email subject must be non-empty and cannot contain line breaks.")
+        draft["subject"] = edited_subject
+    if body is not None:
+        edited_body = body.strip()
+        if not edited_body:
+            raise LeadMailError("Email message cannot be empty.")
+        draft["body"] = edited_body
     if not mail_configured():
         raise LeadMailError(
             "Gmail is not configured. Add GMAIL_APP_PASSWORD to .env. Gmail does not use an API key for sending.",

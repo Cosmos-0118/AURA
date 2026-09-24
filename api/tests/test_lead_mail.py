@@ -88,6 +88,38 @@ def test_send_uses_the_selected_lead_and_records_success(monkeypatch):
     assert result["ok"] is True
 
 
+def test_send_uses_edited_copy_but_keeps_published_recipient(monkeypatch):
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+    with (
+        patch("agents.lead_mail.lead_details", return_value=_approved_lead()),
+        patch("agents.lead_mail.get_connection", return_value=_NoSuppressionConnection()),
+        patch("agents.lead_mail.claim_outreach_send", return_value=True),
+        patch("agents.lead_mail._deliver") as deliver,
+        patch("agents.lead_mail.mark_outreach_sent"),
+    ):
+        result = send_for("lead-1", subject="A reviewed subject", body="Edited message copy.")
+
+    delivered = deliver.call_args.args[0]
+    assert delivered["subject"] == "A reviewed subject"
+    assert delivered["body"] == "Edited message copy."
+    assert delivered["to_email"] == "info@northwind.example"
+    assert result["subject"] == "A reviewed subject"
+
+
+def test_send_rejects_subject_header_line_breaks(monkeypatch):
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+    with (
+        patch("agents.lead_mail.lead_details", return_value=_approved_lead()),
+        patch("agents.lead_mail.get_connection", return_value=_NoSuppressionConnection()),
+        patch("agents.lead_mail.claim_outreach_send") as claim,
+        patch("agents.lead_mail._deliver") as deliver,
+    ):
+        with pytest.raises(LeadMailError, match="cannot contain line breaks"):
+            send_for("lead-1", subject="Subject\nBcc: attacker@example.com", body="Message")
+    claim.assert_not_called()
+    deliver.assert_not_called()
+
+
 def test_send_failure_keeps_delivery_locked_as_uncertain(monkeypatch):
     monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
     with (

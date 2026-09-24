@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import PageContainer from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
+  DialogTitle
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -21,8 +22,7 @@ import {
   getLeadRefreshStatus,
   listLeads,
   refreshLeads,
-  reviewLead,
-  sendLeadEmail,
+  sendLeadEmail
 } from '@/lib/api/client';
 import type { BrandId, Lead, LeadEmailDraft, LeadRefreshStatus } from '@/lib/api/types';
 
@@ -30,7 +30,7 @@ const BRANDS: { id: BrandId | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'jade', label: 'Jade' },
   { id: 'doctorshield', label: 'DoctorShield' },
-  { id: 'jaguar', label: 'Jaguar Transit' },
+  { id: 'jaguar', label: 'Jaguar Transit' }
 ];
 
 const DEFAULT_PAGE_SIZE = 40;
@@ -48,13 +48,13 @@ const panelClass =
 const BRAND_LABEL: Record<BrandId, string> = {
   jade: 'Jade',
   doctorshield: 'DoctorShield',
-  jaguar: 'Jaguar Transit',
+  jaguar: 'Jaguar Transit'
 };
 
 const BRAND_DOT: Record<BrandId, string> = {
   jade: 'bg-emerald-500',
   doctorshield: 'bg-blue-500',
-  jaguar: 'bg-amber-500',
+  jaguar: 'bg-amber-500'
 };
 
 type SortKey = 'fit' | 'name';
@@ -76,18 +76,40 @@ function fitTone(score: number): { label: string; badge: string } {
   if (score >= 85) {
     return {
       label: 'Prime fit',
-      badge: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+      badge: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
     };
   }
   if (score >= 70) {
     return {
       label: 'Strong fit',
-      badge: 'border-blue-500/35 bg-blue-500/10 text-blue-600 dark:text-blue-300',
+      badge: 'border-blue-500/35 bg-blue-500/10 text-blue-600 dark:text-blue-300'
     };
   }
   return {
     label: 'Review fit',
-    badge: 'border-amber-500/35 bg-amber-500/10 text-amber-600 dark:text-amber-300',
+    badge: 'border-amber-500/35 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+  };
+}
+
+function reviewTone(status: string | null | undefined) {
+  if (status === 'approved') {
+    return {
+      label: 'Approved',
+      dot: 'bg-emerald-500',
+      hover: 'hover:border-emerald-500/40 hover:bg-emerald-500/[0.035]'
+    };
+  }
+  if (status === 'rejected') {
+    return {
+      label: 'Rejected',
+      dot: 'bg-rose-500',
+      hover: 'hover:border-rose-500/40 hover:bg-rose-500/[0.035]'
+    };
+  }
+  return {
+    label: 'Pending',
+    dot: 'bg-amber-500',
+    hover: 'hover:border-amber-500/40 hover:bg-amber-500/[0.035]'
   };
 }
 
@@ -100,7 +122,10 @@ function formatWhen(value: string | null) {
 
 function hostOf(url: string | null): string {
   if (!url) return 'Not listed';
-  return url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('/')[0];
 }
 
 function LeadLoadingCard() {
@@ -149,10 +174,9 @@ export default function LeadIntelligence() {
   const [draftLead, setDraftLead] = useState<Lead | null>(null);
   const [detailLead, setDetailLead] = useState<Lead | null>(null);
   const [draft, setDraft] = useState<LeadEmailDraft | null>(null);
+  const [draftSubject, setDraftSubject] = useState('');
+  const [draftBody, setDraftBody] = useState('');
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [reviewer, setReviewer] = useState('local-user');
-  const [reviewNote, setReviewNote] = useState('');
-  const [reviewing, setReviewing] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const requestRef = useRef(0);
@@ -171,39 +195,45 @@ export default function LeadIntelligence() {
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  const loadPage = useCallback(async (cursor: string | null, targetPage: number) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const request = ++requestRef.current;
-    setLoadingPage(true);
-    setLoadError(null);
-    setLeads([]);
-    try {
-      const page = await listLeads({
-        brand_id: brand === 'all' ? undefined : brand,
-        search: debouncedQuery || undefined,
-        contact,
-        sort,
-        limit: pageSize,
-        cursor: cursor || undefined,
-      }, controller.signal);
-      if (request !== requestRef.current) return;
-      setLeads(page.items);
-      setNextCursor(page.next_cursor);
-      setHasMore(page.has_more);
-      setPageIndex(targetPage);
-      failedPageRef.current = null;
-    } catch (err) {
-      if (request !== requestRef.current) return;
-      if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        failedPageRef.current = { cursor, pageIndex: targetPage };
-        setLoadError(err instanceof Error ? err.message : 'Could not load lead records.');
+  const loadPage = useCallback(
+    async (cursor: string | null, targetPage: number) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const request = ++requestRef.current;
+      setLoadingPage(true);
+      setLoadError(null);
+      setLeads([]);
+      try {
+        const page = await listLeads(
+          {
+            brand_id: brand === 'all' ? undefined : brand,
+            search: debouncedQuery || undefined,
+            contact,
+            sort,
+            limit: pageSize,
+            cursor: cursor || undefined
+          },
+          controller.signal
+        );
+        if (request !== requestRef.current) return;
+        setLeads(page.items);
+        setNextCursor(page.next_cursor);
+        setHasMore(page.has_more);
+        setPageIndex(targetPage);
+        failedPageRef.current = null;
+      } catch (err) {
+        if (request !== requestRef.current) return;
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          failedPageRef.current = { cursor, pageIndex: targetPage };
+          setLoadError(err instanceof Error ? err.message : 'Could not load lead records.');
+        }
+      } finally {
+        if (request === requestRef.current) setLoadingPage(false);
       }
-    } finally {
-      if (request === requestRef.current) setLoadingPage(false);
-    }
-  }, [brand, contact, debouncedQuery, pageSize, sort]);
+    },
+    [brand, contact, debouncedQuery, pageSize, sort]
+  );
 
   useEffect(() => {
     setCursorTrail([null]);
@@ -229,17 +259,21 @@ export default function LeadIntelligence() {
       const next = await getLeadRefreshStatus();
       const previous = statusRef.current;
       const wasRefreshing = previous?.refreshing ?? false;
-      const jobsProgressed = previous !== null && previous !== undefined &&
+      const jobsProgressed =
+        previous !== null &&
+        previous !== undefined &&
         previous.jobs_progress_total !== next.jobs_progress_total;
-      const pendingChanged = previous !== null && previous !== undefined &&
-        previous.pending_jobs !== next.pending_jobs;
-      const leadsAdded = previous !== null && previous !== undefined &&
-        next.updated > previous.updated;
+      const pendingChanged =
+        previous !== null && previous !== undefined && previous.pending_jobs !== next.pending_jobs;
+      const leadsAdded =
+        previous !== null && previous !== undefined && next.updated > previous.updated;
       statusRef.current = next;
       setStatus(next);
       setStatusError(null);
-      const listMayHaveChanged = leadsAdded || (wasRefreshing && !next.refreshing) ||
-        ((!next.refreshing) && (jobsProgressed || pendingChanged));
+      const listMayHaveChanged =
+        leadsAdded ||
+        (wasRefreshing && !next.refreshing) ||
+        (!next.refreshing && (jobsProgressed || pendingChanged));
       if (listMayHaveChanged) {
         if (pageIndex === 0 && leads.length === 0) void loadPage(null, 0);
         else setResultsOutdated(true);
@@ -257,7 +291,8 @@ export default function LeadIntelligence() {
 
   const replaceLead = (updated: Lead, request: number) => {
     setLeads((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    if (request === dialogRequestRef.current && dialogLeadIdRef.current === updated.id) setDetailLead(updated);
+    if (request === dialogRequestRef.current && dialogLeadIdRef.current === updated.id)
+      setDetailLead(updated);
   };
 
   const openDraft = async (lead: Lead) => {
@@ -266,53 +301,32 @@ export default function LeadIntelligence() {
     setDraftLead(lead);
     setDetailLead(lead);
     setDraft(null);
+    setDraftSubject('');
+    setDraftBody('');
     setDraftError(null);
     setSent(false);
-    setReviewing(false);
     setSending(false);
     try {
       const detail = await getLead(lead.id);
       if (request !== dialogRequestRef.current) return;
       replaceLead(detail, request);
       setDetailLead(detail);
-      if (detail.review_status === 'approved' && detail.outreach_status === 'approved' && (detail.email || detail.public_email)) {
+      if (
+        detail.review_status === 'approved' &&
+        detail.outreach_status === 'approved' &&
+        (detail.email || detail.public_email)
+      ) {
         const emailDraft = await getLeadEmailDraft(lead.id);
-        if (request === dialogRequestRef.current) setDraft(emailDraft);
+        if (request === dialogRequestRef.current) {
+          setDraft(emailDraft);
+          setDraftSubject(emailDraft.subject);
+          setDraftBody(emailDraft.body);
+        }
       }
     } catch (err) {
       if (request === dialogRequestRef.current) {
         setDraftError(err instanceof Error ? err.message : 'Could not prepare this email.');
       }
-    }
-  };
-
-  const submitReview = async (decision: 'approved' | 'rejected') => {
-    if (!detailLead || reviewing || !reviewer.trim()) return;
-    const request = dialogRequestRef.current;
-    setReviewing(true);
-    setDraftError(null);
-    try {
-      const updated = await reviewLead(detailLead.id, {
-        decision,
-        reviewer: reviewer.trim(),
-        note: reviewNote.trim() || undefined,
-      });
-      if (request !== dialogRequestRef.current) return;
-      replaceLead(updated, request);
-      setDetailLead(updated);
-      if (decision === 'approved' && (updated.email || updated.public_email)) {
-        const emailDraft = await getLeadEmailDraft(updated.id);
-        if (request === dialogRequestRef.current) setDraft(emailDraft);
-      } else if (decision === 'approved') {
-        setDraftError('Lead approved for outreach, but no published email is available to draft yet.');
-      }
-      else setDraft(null);
-    } catch (err) {
-      if (request === dialogRequestRef.current) {
-        setDraftError(err instanceof Error ? err.message : 'Could not save the review.');
-      }
-    } finally {
-      if (request === dialogRequestRef.current) setReviewing(false);
     }
   };
 
@@ -322,11 +336,18 @@ export default function LeadIntelligence() {
     setSending(true);
     setDraftError(null);
     try {
-      if (!detailLead || detailLead.review_status !== 'approved' || detailLead.outreach_status !== 'approved') {
+      if (
+        !detailLead ||
+        detailLead.review_status !== 'approved' ||
+        detailLead.outreach_status !== 'approved'
+      ) {
         setDraftError('Approve this lead in the review step before sending.');
         return;
       }
-      await sendLeadEmail(draftLead.id);
+      await sendLeadEmail(draftLead.id, {
+        subject: draftSubject.trim(),
+        body: draftBody.trim()
+      });
       if (request === dialogRequestRef.current) setSent(true);
       try {
         const updated = await getLead(draftLead.id);
@@ -408,18 +429,28 @@ export default function LeadIntelligence() {
               Lead Intelligence
             </h1>
             <p className='mt-1 max-w-2xl text-[13px] text-[#737373] dark:text-[#a3a3a3]'>
-              Evidence-backed companies discovered from Overture Places, verified on public websites, and reviewed before outreach.
+              Evidence-backed companies discovered from Overture Places, verified on public
+              websites, and reviewed before outreach.
             </p>
           </div>
           <div className='flex flex-wrap items-center gap-2'>
             {(loadingPage || refreshing) && (
               <span className='inline-flex items-center gap-2 text-xs text-[#737373] dark:text-[#a3a3a3]'>
                 <Icons.spinner className='size-3.5 animate-spin' />
-                {refreshing ? (status?.phase || 'Refreshing source data…') : 'Loading page…'}
+                {refreshing ? status?.phase || 'Refreshing source data…' : 'Loading page…'}
               </span>
             )}
-            <button type='button' className={primaryButton} onClick={runRefresh} disabled={refreshing}>
-              {refreshing ? <Icons.spinner className='size-3.5 animate-spin' /> : <Icons.search className='size-3.5' />}
+            <button
+              type='button'
+              className={primaryButton}
+              onClick={runRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <Icons.spinner className='size-3.5 animate-spin' />
+              ) : (
+                <Icons.search className='size-3.5' />
+              )}
               {refreshing ? 'Refreshing…' : 'Refresh discovery'}
             </button>
           </div>
@@ -450,11 +481,20 @@ export default function LeadIntelligence() {
         )}
 
         {resultsOutdated && (
-          <div className={`${panelClass} flex flex-wrap items-center justify-between gap-3 border-amber-500/35 px-4 py-3`} role='status'>
+          <div
+            className={`${panelClass} flex flex-wrap items-center justify-between gap-3 border-amber-500/35 px-4 py-3`}
+            role='status'
+          >
             <p className='text-sm text-[#525252] dark:text-[#d4d4d4]'>
-              Lead scores or contacts changed while you were browsing. Refresh to rebuild the page order.
+              Lead scores or contacts changed while you were browsing. Refresh to rebuild the page
+              order.
             </p>
-            <button type='button' className={quietButton} onClick={refreshResults} disabled={loadingPage}>
+            <button
+              type='button'
+              className={quietButton}
+              onClick={refreshResults}
+              disabled={loadingPage}
+            >
               Refresh results
             </button>
           </div>
@@ -482,7 +522,8 @@ export default function LeadIntelligence() {
                 );
               })}
               <span className='ml-auto hidden text-[11px] text-[#737373] sm:block dark:text-[#a3a3a3]'>
-                {leads.length} records on this page · Updated {formatWhen(status?.last_scraped_at ?? null)}
+                {leads.length} records on this page · Updated{' '}
+                {formatWhen(status?.last_scraped_at ?? null)}
                 {status?.pending_jobs ? ` · ${status.pending_jobs} website checks queued` : ''}
               </span>
             </div>
@@ -526,7 +567,12 @@ export default function LeadIntelligence() {
                   <option value='reachable'>Contact: Email or phone</option>
                 </select>
               </label>
-              <button type='button' className={quietButton} onClick={resetFilters} disabled={!hasFilters}>
+              <button
+                type='button'
+                className={quietButton}
+                onClick={resetFilters}
+                disabled={!hasFilters}
+              >
                 Clear
               </button>
             </div>
@@ -545,7 +591,9 @@ export default function LeadIntelligence() {
                   onChange={(event) => setPageSize(Number(event.target.value))}
                 >
                   {[25, 40, 75, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -561,8 +609,8 @@ export default function LeadIntelligence() {
                 Discovery is not configured
               </CardTitle>
               <CardDescription>
-                Configure the Overture discovery pipeline, then refresh. Lead Intelligence does not use a preset
-                company list.
+                Configure the Overture discovery pipeline, then refresh. Lead Intelligence does not
+                use a preset company list.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -577,7 +625,7 @@ export default function LeadIntelligence() {
               </CardTitle>
               <CardDescription>{loadError}</CardDescription>
               <div className='pt-2'>
-              <button type='button' className={quietButton} onClick={retryPage}>
+                <button type='button' className={quietButton} onClick={retryPage}>
                   Retry
                 </button>
               </div>
@@ -585,64 +633,77 @@ export default function LeadIntelligence() {
           </Card>
         )}
 
-        {loadError ? null : leads.length === 0 && !loadingCompanies ? refreshing ? (
-          <div className={`${panelClass} border-dashed px-5 py-12 text-center`} role='status'>
-            <Icons.spinner className='mx-auto mb-3 size-5 animate-spin text-[#737373]' />
-            <p className='text-[15px] font-semibold text-[#09090b] dark:text-white'>
-              Overture discovery is still running
-            </p>
-            <p className='mx-auto mt-1 max-w-md text-[13px] text-[#737373] dark:text-[#a3a3a3]'>
-              {status?.phase || 'The first source scan can take several minutes. The page will show real records as soon as they are saved.'}
-            </p>
-            {typeof status?.pending_jobs === 'number' && status.pending_jobs > 0 && (
-              <p className='mt-2 text-xs text-[#737373] dark:text-[#a3a3a3]'>
-                {status.pending_jobs} websites queued for background verification.
+        {loadError ? null : leads.length === 0 && !loadingCompanies ? (
+          refreshing ? (
+            <div className={`${panelClass} border-dashed px-5 py-12 text-center`} role='status'>
+              <Icons.spinner className='mx-auto mb-3 size-5 animate-spin text-[#737373]' />
+              <p className='text-[15px] font-semibold text-[#09090b] dark:text-white'>
+                Overture discovery is still running
               </p>
-            )}
-          </div>
-        ) : (
-          <div className={`${panelClass} border-dashed px-5 py-12 text-center`}>
-            <span className='mx-auto mb-3 grid size-11 place-items-center rounded-full border border-[#e6e6e6] bg-[#f7f7f7] text-[#404040] dark:border-[#424242] dark:bg-[#242424] dark:text-[#d4d4d4]'>
-              <Icons.search className='size-4' />
-            </span>
-            <p className='text-[15px] font-semibold text-[#09090b] dark:text-white'>
-              {hasFilters ? 'No companies match these filters' : 'No companies yet'}
-            </p>
-            <p className='mx-auto mt-1 max-w-md text-[13px] text-[#737373] dark:text-[#a3a3a3]'>
-              {hasFilters
-                ? 'Try clearing the search or choosing a different brand or contact filter.'
-                : 'Refresh to query Overture Places and verify public business websites.'}
-            </p>
-            <div className='mt-4 flex justify-center gap-2'>
-              {!hasFilters ? (
-                <button type='button' className={primaryButton} onClick={runRefresh} disabled={refreshing}>
-                  {refreshing ? 'Refreshing…' : 'Refresh discovery'}
-                </button>
-              ) : (
-                <button type='button' className={quietButton} onClick={resetFilters}>
-                  Clear filters
-                </button>
+              <p className='mx-auto mt-1 max-w-md text-[13px] text-[#737373] dark:text-[#a3a3a3]'>
+                {status?.phase ||
+                  'The first source scan can take several minutes. The page will show real records as soon as they are saved.'}
+              </p>
+              {typeof status?.pending_jobs === 'number' && status.pending_jobs > 0 && (
+                <p className='mt-2 text-xs text-[#737373] dark:text-[#a3a3a3]'>
+                  {status.pending_jobs} websites queued for background verification.
+                </p>
               )}
             </div>
-          </div>
+          ) : (
+            <div className={`${panelClass} border-dashed px-5 py-12 text-center`}>
+              <span className='mx-auto mb-3 grid size-11 place-items-center rounded-full border border-[#e6e6e6] bg-[#f7f7f7] text-[#404040] dark:border-[#424242] dark:bg-[#242424] dark:text-[#d4d4d4]'>
+                <Icons.search className='size-4' />
+              </span>
+              <p className='text-[15px] font-semibold text-[#09090b] dark:text-white'>
+                {hasFilters ? 'No companies match these filters' : 'No companies yet'}
+              </p>
+              <p className='mx-auto mt-1 max-w-md text-[13px] text-[#737373] dark:text-[#a3a3a3]'>
+                {hasFilters
+                  ? 'Try clearing the search or choosing a different brand or contact filter.'
+                  : 'Refresh to query Overture Places and verify public business websites.'}
+              </p>
+              <div className='mt-4 flex justify-center gap-2'>
+                {!hasFilters ? (
+                  <button
+                    type='button'
+                    className={primaryButton}
+                    onClick={runRefresh}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? 'Refreshing…' : 'Refresh discovery'}
+                  </button>
+                ) : (
+                  <button type='button' className={quietButton} onClick={resetFilters}>
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+          )
         ) : (
           <div className='grid grid-cols-1 items-start gap-3 md:grid-cols-4 xl:grid-cols-6'>
             {leads.map((lead, index) => {
               const tone = fitTone(lead.fit_score);
+              const statusTone = reviewTone(lead.review_status);
               const trailingColumn = leads.length % 3;
               const isLast = index === leads.length - 1;
               const centerAtMedium = isLast && leads.length % 2 === 1 ? ' md:col-start-2' : '';
-              const centerAtWide = trailingColumn === 1 && isLast
-                ? ' xl:col-start-3'
-                : trailingColumn === 2 && index === leads.length - 2
-                  ? ' xl:col-start-2'
-                  : trailingColumn === 2 && isLast
-                    ? ' xl:col-start-4'
-                    : isLast && leads.length % 2 === 1
-                      ? ' xl:col-start-auto'
-                    : '';
+              const centerAtWide =
+                trailingColumn === 1 && isLast
+                  ? ' xl:col-start-3'
+                  : trailingColumn === 2 && index === leads.length - 2
+                    ? ' xl:col-start-2'
+                    : trailingColumn === 2 && isLast
+                      ? ' xl:col-start-4'
+                      : isLast && leads.length % 2 === 1
+                        ? ' xl:col-start-auto'
+                        : '';
               return (
-                <article key={lead.id} className={`${panelClass} p-5 md:col-span-2 xl:col-span-2${centerAtMedium}${centerAtWide}`}>
+                <article
+                  key={lead.id}
+                  className={`${panelClass} p-5 transition-colors ${statusTone.hover} md:col-span-2 xl:col-span-2${centerAtMedium}${centerAtWide}`}
+                >
                   <div className='flex items-start justify-between gap-3'>
                     <div className='flex min-w-0 items-center gap-3'>
                       <span className='grid size-10 flex-none place-items-center rounded-[10px] bg-[#09090b] text-xs font-bold text-white dark:bg-white dark:text-black'>
@@ -655,25 +716,39 @@ export default function LeadIntelligence() {
                         >
                           {lead.name}
                         </h2>
-                        <p className='mt-0.5 flex items-center gap-1.5 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
+                        <p className='mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
                           {lead.brand_id in BRAND_DOT && (
                             <span className={`size-1.5 rounded-full ${BRAND_DOT[lead.brand_id]}`} />
                           )}
-                          <span className='truncate'>
+                          <span className='min-w-0 truncate'>
                             {brandLabel(lead.brand_id)} · {lead.country || 'Market not found'}
+                          </span>
+                          <span className='text-[#b3b3b3] dark:text-[#737373]' aria-hidden='true'>
+                            ·
+                          </span>
+                          <span className='inline-flex flex-none items-center gap-1'>
+                            <span
+                              className={`size-1.5 rounded-full ${statusTone.dot}`}
+                              aria-hidden='true'
+                            />
+                            {statusTone.label}
                           </span>
                         </p>
                       </div>
                     </div>
-                    <span
-                      className={`inline-flex flex-none items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone.badge}`}
-                    >
-                      {lead.fit_score} · {tone.label.replace(' fit', '')}
-                    </span>
+                    <div className='flex flex-none items-start'>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone.badge}`}
+                      >
+                        {lead.fit_score} · {tone.label.replace(' fit', '')}
+                      </span>
+                    </div>
                   </div>
 
                   <p className='mt-3 line-clamp-2 min-h-[42px] text-[13px] leading-[1.6] text-[#404040] dark:text-[#d4d4d4]'>
-                    {lead.requirements || lead.why || 'Public page did not expose a clear requirement yet.'}
+                    {lead.requirements ||
+                      lead.why ||
+                      'Public page did not expose a clear requirement yet.'}
                   </p>
 
                   <div className='mt-3 divide-y divide-[#eeeeee] rounded-[10px] border border-[#eeeeee] text-[12px] dark:divide-[#2e2e2e] dark:border-[#2e2e2e]'>
@@ -696,7 +771,10 @@ export default function LeadIntelligence() {
                     <div className='flex items-center justify-between gap-3 px-3 py-2'>
                       <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Email</span>
                       {lead.email ? (
-                        <span className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]' title={lead.email}>
+                        <span
+                          className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]'
+                          title={lead.email}
+                        >
                           {lead.email}
                         </span>
                       ) : (
@@ -706,43 +784,48 @@ export default function LeadIntelligence() {
                     <div className='flex items-center justify-between gap-3 px-3 py-2'>
                       <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Phone</span>
                       {lead.phone ? (
-                        <span className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]'>{lead.phone}</span>
+                        <span className='min-w-0 truncate text-[#404040] dark:text-[#d4d4d4]'>
+                          {lead.phone}
+                        </span>
                       ) : (
                         <span className='text-[#a3a3a3]'>—</span>
                       )}
                     </div>
                     <div className='flex items-center justify-between gap-3 px-3 py-2'>
-                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Contact readiness</span>
+                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>
+                        Contact readiness
+                      </span>
                       <span className='font-medium capitalize text-[#404040] dark:text-[#d4d4d4]'>
                         {(lead.contact_status || 'unknown').replaceAll('_', ' ')}
                       </span>
                     </div>
                     <div className='flex items-center justify-between gap-3 px-3 py-2'>
-                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>Branches / evidence</span>
+                      <span className='flex-none text-[#737373] dark:text-[#a3a3a3]'>
+                        Branches / evidence
+                      </span>
                       <span className='font-medium text-[#404040] dark:text-[#d4d4d4]'>
-                        {lead.location_count || lead.locations?.length || 0} / {lead.evidence_count ?? lead.evidence?.length ?? 0}
+                        {lead.location_count || lead.locations?.length || 0} /{' '}
+                        {lead.evidence_count ?? lead.evidence?.length ?? 0}
                       </span>
                     </div>
                   </div>
 
-                  <div className='mt-3 flex flex-wrap items-center gap-2 text-[11px]'>
-                    <span className={`rounded-full border px-2 py-1 ${lead.review_status === 'approved'
-                      ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                      : lead.review_status === 'rejected'
-                        ? 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300'
-                        : 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
-                      Review: {lead.review_status || 'pending'}
-                    </span>
-                    {lead.score_version && <span className='text-[#737373] dark:text-[#a3a3a3]'>Score {lead.score_version}</span>}
-                  </div>
+                  {lead.score_version && (
+                    <div className='mt-3 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
+                      Score {lead.score_version}
+                    </div>
+                  )}
 
                   {lead.score_breakdown && Object.keys(lead.score_breakdown).length > 0 && (
                     <details className='mt-3 text-[11px] text-[#737373] dark:text-[#a3a3a3]'>
-                      <summary className='cursor-pointer font-semibold text-[#404040] dark:text-[#d4d4d4]'>Fit score breakdown</summary>
+                      <summary className='cursor-pointer font-semibold text-[#404040] dark:text-[#d4d4d4]'>
+                        Fit score breakdown
+                      </summary>
                       <div className='mt-2 grid grid-cols-2 gap-x-3 gap-y-1'>
                         {Object.entries(lead.score_breakdown).map(([key, value]) => (
                           <span key={key} className='truncate' title={String(value)}>
-                            {key.replaceAll('_', ' ')}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            {key.replaceAll('_', ' ')}:{' '}
+                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                           </span>
                         ))}
                       </div>
@@ -766,7 +849,12 @@ export default function LeadIntelligence() {
 
                   <div className='mt-3 flex gap-2 border-t border-[#eeeeee] pt-3 dark:border-[#2e2e2e]'>
                     {lead.url ? (
-                      <a className={`${quietButton} flex-1`} href={lead.url} target='_blank' rel='noreferrer'>
+                      <a
+                        className={`${quietButton} flex-1`}
+                        href={lead.url}
+                        target='_blank'
+                        rel='noreferrer'
+                      >
                         Open site
                         <Icons.externalLink className='size-3.5' />
                       </a>
@@ -775,17 +863,44 @@ export default function LeadIntelligence() {
                         No site
                       </button>
                     )}
-                    <button
-                      type='button'
-                      className={primaryButton}
-                      style={{ flex: 1 }}
-                      disabled={lead.outreach_status === 'sent' || lead.outreach_status === 'sending'}
-                      onClick={() => void openDraft(lead)}
-                      title={lead.email ? `Review evidence for ${lead.email}` : 'Inspect evidence and review this lead'}
-                    >
-                      {lead.review_status === 'approved' && lead.outreach_status === 'approved' ? <Icons.send className='size-3.5' /> : <Icons.check className='size-3.5' />}
-                      {lead.outreach_status === 'sent' ? 'Sent' : lead.outreach_status === 'sending' ? 'Sending…' : lead.outreach_status === 'delivery_uncertain' ? 'Check delivery' : lead.outreach_status === 'send_failed' ? 'Review again' : lead.review_status === 'approved' ? 'Send mail' : 'Review lead'}
-                    </button>
+                    {lead.outreach_status === 'sent' || lead.outreach_status === 'sending' ? (
+                      <button type='button' className={primaryButton} style={{ flex: 1 }} disabled>
+                        {lead.outreach_status === 'sending' ? (
+                          <Icons.spinner className='size-3.5 animate-spin' />
+                        ) : (
+                          <Icons.check className='size-3.5' />
+                        )}
+                        {lead.outreach_status === 'sending' ? 'Sending…' : 'Sent'}
+                      </button>
+                    ) : lead.outreach_status !== 'delivery_uncertain' &&
+                      !(
+                        lead.review_status === 'approved' && lead.outreach_status === 'approved'
+                      ) ? (
+                      <Link
+                        className={primaryButton}
+                        style={{ flex: 1 }}
+                        href={`/dashboard/leads/${encodeURIComponent(lead.id)}`}
+                        title='Open the lead evidence and review page'
+                      >
+                        <Icons.check className='size-3.5' />
+                        {lead.outreach_status === 'send_failed' ? 'Review again' : 'Review lead'}
+                      </Link>
+                    ) : (
+                      <button
+                        type='button'
+                        className={primaryButton}
+                        style={{ flex: 1 }}
+                        onClick={() => void openDraft(lead)}
+                        title={
+                          lead.email ? `Review email for ${lead.email}` : 'Review email delivery'
+                        }
+                      >
+                        <Icons.send className='size-3.5' />
+                        {lead.outreach_status === 'delivery_uncertain'
+                          ? 'Check delivery'
+                          : 'Send mail'}
+                      </button>
+                    )}
                   </div>
                 </article>
               );
@@ -796,16 +911,32 @@ export default function LeadIntelligence() {
         )}
 
         {leads.length > 0 && !loadError && (
-          <nav className={`${panelClass} flex flex-wrap items-center justify-between gap-3 px-4 py-3`} aria-label='Lead pages'>
+          <nav
+            className={`${panelClass} flex flex-wrap items-center justify-between gap-3 px-4 py-3`}
+            aria-label='Lead pages'
+          >
             <span className='text-xs text-[#737373] dark:text-[#a3a3a3]'>
-              Page {pageIndex + 1} · {leads.length} records · {hasMore ? 'more results available' : 'end of results'}
+              Page {pageIndex + 1} · {leads.length} records ·{' '}
+              {hasMore ? 'more results available' : 'end of results'}
             </span>
             <div className='flex items-center gap-2'>
-              <button type='button' className={quietButton} onClick={goToPreviousPage} disabled={pageIndex === 0 || loadingPage || resultsOutdated}>
+              <button
+                type='button'
+                className={quietButton}
+                onClick={goToPreviousPage}
+                disabled={pageIndex === 0 || loadingPage || resultsOutdated}
+              >
                 Previous
               </button>
-              <button type='button' className={primaryButton} onClick={goToNextPage} disabled={!hasMore || loadingPage || resultsOutdated}>
-                {loadingPage && pageIndex > 0 ? <Icons.spinner className='size-3.5 animate-spin' /> : null}
+              <button
+                type='button'
+                className={primaryButton}
+                onClick={goToNextPage}
+                disabled={!hasMore || loadingPage || resultsOutdated}
+              >
+                {loadingPage && pageIndex > 0 ? (
+                  <Icons.spinner className='size-3.5 animate-spin' />
+                ) : null}
                 Next page
               </button>
             </div>
@@ -822,21 +953,26 @@ export default function LeadIntelligence() {
             setDraftLead(null);
             setDetailLead(null);
             setDraft(null);
+            setDraftSubject('');
+            setDraftBody('');
             setDraftError(null);
             setSent(false);
-            setReviewNote('');
-            setReviewing(false);
             setSending(false);
           }
         }}
       >
-        <DialogContent className='sm:max-w-xl'>
+        <DialogContent className='max-h-[calc(100dvh-2rem)] w-[92vw] max-w-[min(92vw,920px)] overflow-y-auto sm:max-w-[min(92vw,920px)]'>
           <DialogHeader>
-            <DialogTitle>{detailLead?.review_status === 'approved' ? 'Review and send mail' : 'Review lead'}</DialogTitle>
+            <DialogTitle>
+              {detailLead?.outreach_status === 'delivery_uncertain'
+                ? 'Check email delivery'
+                : 'Review and send email'}
+            </DialogTitle>
             <DialogDescription>
               {draftLead ? (
                 <>
-                  {draftLead.name} · {draftLead.email || 'no published email'} · Fit {draftLead.fit_score}
+                  {draftLead.name} · {draftLead.email || 'no published email'} · Fit{' '}
+                  {draftLead.fit_score}
                 </>
               ) : (
                 'From your Gmail account to the address on this lead.'
@@ -845,54 +981,11 @@ export default function LeadIntelligence() {
           </DialogHeader>
           {detailLead?.outreach_status === 'delivery_uncertain' && (
             <p className='rounded-md border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200'>
-              Email delivery could not be confirmed. Check the sender&apos;s Sent folder before taking further action.
+              Email delivery could not be confirmed. Check the sender&apos;s Sent folder before
+              taking further action.
             </p>
           )}
-          {detailLead && (detailLead.review_status !== 'approved' || detailLead.outreach_status === 'send_failed') ? (
-            <div className='space-y-3'>
-              <div className={`${panelClass} space-y-2 p-3 text-sm`}>
-                <p className='font-semibold'>Human review required before outreach</p>
-                <p className='text-muted-foreground'>
-                  {detailLead.evidence?.length || 0} evidence items · {detailLead.location_count || detailLead.locations?.length || 0} branches · contact readiness: {detailLead.contact_status || 'unknown'}
-                </p>
-                {detailLead.evidence?.slice(0, 5).map((item) => (
-                  <p key={item.id} className='text-xs text-muted-foreground'>
-                    <span className='font-medium'>{item.evidence_type.replaceAll('_', ' ')}</span>: {item.value}
-                    {item.source_url && <> · <a className='underline' href={item.source_url} target='_blank' rel='noreferrer'>source</a></>}
-                  </p>
-                ))}
-                {detailLead.locations?.slice(0, 3).map((location) => (
-                  <p key={location.id} className='text-xs text-muted-foreground'>
-                    Branch: {location.name} · {[location.location, location.country].filter(Boolean).join(', ')}
-                  </p>
-                ))}
-              </div>
-              {(detailLead.status !== 'qualified' || detailLead.stage !== 'qualified') && (
-                <p className='text-xs text-muted-foreground'>Outreach approval is available after the lead reaches qualified status.</p>
-              )}
-              <Textarea
-                value={reviewNote}
-                onChange={(event) => setReviewNote(event.target.value)}
-                placeholder='Optional reviewer note'
-                className='min-h-20 text-xs'
-              />
-              <div className='flex gap-2'>
-                <Button type='button' variant='outline' disabled={reviewing} onClick={() => void submitReview('rejected')}>
-                  {reviewing ? 'Saving…' : 'Reject lead'}
-                </Button>
-                <Button type='button' disabled={reviewing || !reviewer.trim() || detailLead.status !== 'qualified' || detailLead.stage !== 'qualified'} onClick={() => void submitReview('approved')}>
-                  {reviewing ? 'Saving…' : 'Approve for outreach'}
-                </Button>
-              </div>
-              <input
-                className={inputClass}
-                aria-label='Reviewer name'
-                value={reviewer}
-                onChange={(event) => setReviewer(event.target.value)}
-                placeholder='Reviewer name'
-              />
-            </div>
-          ) : draft ? (
+          {draft ? (
             <div className='space-y-3'>
               <div className={`${panelClass} space-y-1.5 p-3 text-sm`}>
                 <p>
@@ -903,12 +996,35 @@ export default function LeadIntelligence() {
                   <span className='text-muted-foreground'>To </span>
                   {draft.to_email}
                 </p>
-                <p>
-                  <span className='text-muted-foreground'>Subject </span>
-                  {draft.subject}
-                </p>
               </div>
-              <Textarea readOnly value={draft.body} className='min-h-56 font-mono text-xs' />
+              <label
+                htmlFor='lead-email-subject-list'
+                className='block space-y-1.5 text-xs font-medium'
+              >
+                <span>Subject</span>
+                <input
+                  id='lead-email-subject-list'
+                  className={`${inputClass} text-sm`}
+                  aria-label='Email subject'
+                  value={draftSubject}
+                  onChange={(event) => setDraftSubject(event.target.value)}
+                  maxLength={998}
+                />
+              </label>
+              <label
+                htmlFor='lead-email-body-list'
+                className='block space-y-1.5 text-xs font-medium'
+              >
+                <span>Message</span>
+                <Textarea
+                  id='lead-email-body-list'
+                  aria-label='Email message'
+                  value={draftBody}
+                  onChange={(event) => setDraftBody(event.target.value)}
+                  maxLength={100000}
+                  className='h-[min(45dvh,32rem)] min-h-40 resize-y text-sm leading-6'
+                />
+              </label>
               {!draft.configured && (
                 <p className='text-sm text-destructive'>
                   Gmail does not use an API key. Add GMAIL_APP_PASSWORD to .env. Create it at
@@ -917,14 +1033,22 @@ export default function LeadIntelligence() {
               )}
             </div>
           ) : detailLead?.outreach_status === 'delivery_uncertain' ? (
-            <p className='text-sm text-muted-foreground'>A further send is locked until delivery is checked manually.</p>
+            <p className='text-sm text-muted-foreground'>
+              A further send is locked until delivery is checked manually.
+            </p>
           ) : detailLead?.review_status === 'approved' ? (
-            <p className='text-sm text-muted-foreground'>This lead is approved, but no published email is available yet.</p>
+            <p className='text-sm text-muted-foreground'>
+              This lead is approved, but no published email is available yet.
+            </p>
           ) : (
             <p className='text-sm text-muted-foreground'>Preparing the lead details…</p>
           )}
           {draftError && <p className='text-sm text-destructive'>{draftError}</p>}
-          {sent && <p className='text-sm'>Sent from {draft?.from_email} to {draft?.to_email}.</p>}
+          {sent && (
+            <p className='text-sm'>
+              Sent from {draft?.from_email} to {draft?.to_email}.
+            </p>
+          )}
           <DialogFooter>
             <Button
               type='button'
@@ -933,14 +1057,27 @@ export default function LeadIntelligence() {
                 setDraftLead(null);
                 setDetailLead(null);
                 setDraft(null);
+                setDraftSubject('');
+                setDraftBody('');
                 setDraftError(null);
                 setSent(false);
-                setReviewNote('');
               }}
             >
               Cancel
             </Button>
-            <Button type='button' onClick={() => void sendDraft()} disabled={!draft?.configured || sending || sent || detailLead?.outreach_status !== 'approved'}>
+            <Button
+              type='button'
+              onClick={() => void sendDraft()}
+              disabled={
+                !draft?.configured ||
+                sending ||
+                sent ||
+                detailLead?.outreach_status !== 'approved' ||
+                !draftSubject.trim() ||
+                /[\r\n]/.test(draftSubject) ||
+                !draftBody.trim()
+              }
+            >
               {sending ? 'Sending…' : sent ? 'Sent' : 'Send email'}
             </Button>
           </DialogFooter>

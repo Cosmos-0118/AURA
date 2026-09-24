@@ -75,6 +75,8 @@ def lead_refresh() -> dict:
 
 class SendLeadEmail(BaseModel):
     lead_id: str = Field(min_length=1)
+    subject: str | None = Field(default=None, max_length=998)
+    body: str | None = Field(default=None, max_length=100000)
 
 
 def _mail_error(exc: LeadMailError) -> HTTPException:
@@ -92,7 +94,7 @@ def lead_email_draft(lead_id: str) -> dict:
 @router.post("/send")
 def lead_email_send(body: SendLeadEmail) -> dict:
     try:
-        return send_for(body.lead_id)
+        return send_for(body.lead_id, subject=body.subject, body=body.body)
     except LeadMailError as exc:
         raise _mail_error(exc) from exc
 
