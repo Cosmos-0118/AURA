@@ -203,6 +203,30 @@ stop_stack() {
   stop_competitor_support || true
 }
 
+DOCKER_DIAGNOSTIC=""
+
+docker_compose_ready() {
+  local context
+  local endpoint
+
+  DOCKER_DIAGNOSTIC=""
+  if ! command -v docker >/dev/null 2>&1; then
+    DOCKER_DIAGNOSTIC="Docker CLI was not found on PATH. Install Docker Desktop, then retry."
+    return 1
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    DOCKER_DIAGNOSTIC="Docker Compose is unavailable. Enable or install the Docker Compose v2 plugin, then retry."
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    context="$(docker context show 2>/dev/null || printf 'unknown')"
+    endpoint="${DOCKER_HOST:-the active Docker context}"
+    DOCKER_DIAGNOSTIC="Docker is installed, but its daemon is not reachable (context: $context; endpoint: $endpoint). Start Docker Desktop or switch to a running Docker context, then retry."
+    return 1
+  fi
+  return 0
+}
+
 competitor_compose() {
   local -a compose_args=(
     --env-file "$ROOT_DIR/.env"
@@ -212,6 +236,24 @@ competitor_compose() {
     --profile social
   )
   docker compose "${compose_args[@]}" "$@"
+}
+
+run_competitor_compose() {
+  local output
+  local status
+
+  if output="$(competitor_compose "$@" 2>&1)"; then
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+    return 0
+  fi
+  status=$?
+
+  if ! docker_compose_ready; then
+    log "$DOCKER_DIAGNOSTIC"
+  else
+    log "Docker Compose could not complete the collector operation (exit code $status). Check $COMPETITOR_COMPOSE_FILE and Docker Compose configuration, then retry."
+  fi
+  return "$status"
 }
 
 load_competitor_api_key() {
@@ -232,11 +274,11 @@ start_competitor_support() {
     return 0
   }
 
-  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+  if ! docker_compose_ready; then
     if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
-      fail "Competitor intelligence requires Docker Compose. Set AURA_COMPETITOR_INTELLIGENCE=false to run AURA without collectors."
+      fail "$DOCKER_DIAGNOSTIC Set AURA_COMPETITOR_INTELLIGENCE=false to run AURA without collectors."
     fi
-    log "Docker Compose is unavailable; starting AURA without competitor collectors."
+    log "$DOCKER_DIAGNOSTIC Starting AURA without competitor collectors."
     return 0
   fi
 
@@ -245,7 +287,7 @@ start_competitor_support() {
   if [[ "$COMPETITOR_DISCOVERY" == "true" ]]; then
     support_services+=(searxng rsshub-redis rsshub)
   fi
-  if ! competitor_compose up -d "${support_services[@]}"; then
+  if ! run_competitor_compose up -d "${support_services[@]}"; then
     if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
       fail "Competitor collector services failed to start."
     fi
@@ -255,7 +297,7 @@ start_competitor_support() {
 
   if ! wait_for_http "changedetection" "http://127.0.0.1:${CHANGEDETECTION_PORT}/" 90; then
     if [[ "$COMPETITOR_REQUIRED" == "true" ]]; then
-      competitor_compose logs --tail=40 changedetection || true
+      run_competitor_compose logs --tail=40 changedetection || true
       fail "Changedetection did not become ready."
     fi
     log "Changedetection is not ready; direct website scans remain available."
@@ -275,11 +317,13 @@ start_competitor_support() {
 
 stop_competitor_support() {
   [[ "$COMPETITOR_ENABLED" == "true" ]] || return 0
-  command -v docker >/dev/null 2>&1 || return 0
-  docker compose version >/dev/null 2>&1 || return 0
   [[ -f "$COMPETITOR_COMPOSE_FILE" ]] || return 0
+  if ! docker_compose_ready; then
+    log "Skipping competitor collector shutdown: $DOCKER_DIAGNOSTIC"
+    return 0
+  fi
   log "Stopping competitor collector services (data volumes are preserved)."
-  competitor_compose down --remove-orphans || true
+  run_competitor_compose down --remove-orphans || true
 }
 
 provision_competitor_watches() {
