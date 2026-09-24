@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import {
@@ -124,6 +124,8 @@ const REASON_OPTIONS: { tag: ReasonTag; label: string; desc: string }[] = [
 export default function ReviewQueuePage() {
   const [cards, setCards] = useState<CampaignReviewCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const queueRequestRef = useRef<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [brandFilter, setBrandFilter] = useState<BrandId | 'all'>('all');
 
@@ -168,21 +170,38 @@ export default function ReviewQueuePage() {
 
   // Load Review Queue from backend
   const fetchQueue = useCallback(async () => {
+    queueRequestRef.current?.abort();
+    const controller = new AbortController();
+    queueRequestRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 12_000);
     setIsLoading(true);
+    setQueueError(null);
     try {
-      const data = await getCampaignReviewQueue(activeTab !== 'all' ? activeTab : undefined);
+      const data = await getCampaignReviewQueue(activeTab !== 'all' ? activeTab : undefined, controller.signal);
+      if (queueRequestRef.current !== controller) return;
       setCards(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch review queue';
-      toast.error(msg);
+      if (queueRequestRef.current !== controller) return;
+      if (timedOut) {
+        setQueueError('The Review Queue API did not respond within 12 seconds. Check that the API server is available, then retry.');
+      } else if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        setQueueError(err instanceof Error ? err.message : 'Failed to fetch review queue.');
+      }
     } finally {
-      setIsLoading(false);
+      window.clearTimeout(timeout);
+      if (queueRequestRef.current === controller) setIsLoading(false);
     }
   }, [activeTab]);
 
   useEffect(() => {
     fetchQueue();
   }, [fetchQueue]);
+
+  useEffect(() => () => queueRequestRef.current?.abort(), []);
 
   // Filter cards by brand
   const filteredCards = cards.filter((card) => {
@@ -488,6 +507,11 @@ export default function ReviewQueuePage() {
       </div>
 
       {/* Campaign Cards List (ONE CARD PER CAMPAIGN) */}
+      {queueError && cards.length > 0 && (
+        <Card className='border-amber-500/35 p-4' role='status'>
+          <p className='text-sm text-muted-foreground'>Review Queue could not refresh: {queueError}</p>
+        </Card>
+      )}
       {isLoading ? (
         <div className='grid grid-cols-1 md:grid-cols-2 gap-5'>
           {[1, 2].map((i) => (
@@ -499,6 +523,15 @@ export default function ReviewQueuePage() {
             </Card>
           ))}
         </div>
+      ) : queueError && cards.length === 0 ? (
+        <Card className='border-dashed p-12 text-center' role='alert'>
+          <div className='mx-auto mb-3 grid size-12 place-items-center rounded-full bg-muted text-muted-foreground'>
+            <Icons.warning className='size-6 text-amber-600' />
+          </div>
+          <h3 className='text-base font-bold text-foreground'>Couldn’t load Review Queue</h3>
+          <p className='mx-auto mt-1 max-w-md text-xs text-muted-foreground'>{queueError}</p>
+          <Button size='sm' className='mt-4' onClick={fetchQueue}>Try again</Button>
+        </Card>
       ) : filteredCards.length === 0 ? (
         <Card className='border-dashed p-12 text-center'>
           <div className='h-12 w-12 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground mb-3'>

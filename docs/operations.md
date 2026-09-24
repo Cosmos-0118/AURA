@@ -109,9 +109,13 @@ operator-visible owner of the publishing dependency.
 
 ### Lead refresh or email fails
 
-Check TinyFish_API_KEY/TINYFISH_API_KEY, LEAD_FROM_EMAIL, and
-GMAIL_APP_PASSWORD. Disable the startup worker with AURA_LEAD_REFRESH=false
-when external lead discovery is not wanted.
+Check `/api/leads/status` for the current Overture release and last error.
+The core source needs no API key; Hunter is optional and uses `HUNTER_API_KEY`.
+Website failures are recorded on `lead_jobs` and retry only when classified as
+temporary. Gmail sending needs `LEAD_FROM_EMAIL` and `GMAIL_APP_PASSWORD`;
+approval must be made in Lead Intelligence before a draft or send is available.
+Disable the startup worker with `AURA_LEAD_REFRESH=false` when discovery is not
+wanted. See [Lead Intelligence](lead-intelligence.md) for the pipeline details.
 
 ## Backup and recovery
 

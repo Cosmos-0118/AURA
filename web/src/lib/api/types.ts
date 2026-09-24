@@ -272,15 +272,112 @@ export type Lead = {
   last_verified_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  domain?: string | null;
+  operating_status?: string | null;
+  overture_confidence?: number | null;
+  source_release?: string | null;
+  stage?: string;
+  score_version?: string | null;
+  score_breakdown?: Record<string, unknown>;
+  review_status?: 'pending' | 'approved' | 'rejected' | string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+  outreach_status?: string;
+  outreach_approved_by?: string | null;
+  outreach_approved_at?: string | null;
+  outreach_sent_at?: string | null;
+  contact_status?: string;
+  location_count?: number;
+  evidence_count?: number;
+  locations?: LeadLocation[];
+  contacts?: LeadContact[];
+  evidence?: LeadEvidence[];
+  score_history?: LeadScoreHistory[];
+};
+
+export type LeadPage = {
+  items: Lead[];
+  next_cursor: string | null;
+  has_more: boolean;
+  limit: number;
+};
+
+export type LeadListFilters = {
+  brand_id?: BrandId;
+  search?: string;
+  contact?: 'all' | 'email' | 'phone' | 'reachable';
+  sort?: 'fit' | 'name';
+  limit?: number;
+  cursor?: string;
+};
+
+export type LeadLocation = {
+  id: string;
+  lead_id: string;
+  external_place_id?: string | null;
+  name: string;
+  category?: string | null;
+  location?: string | null;
+  country?: string | null;
+  url?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  operating_status?: string | null;
+  confidence?: number | null;
+  source_release?: string | null;
+  status?: string;
+  last_verified_at?: string | null;
+};
+
+export type LeadContact = {
+  id: string;
+  lead_id: string;
+  location_id?: string | null;
+  contact_type: string;
+  value: string;
+  source: string;
+  source_url?: string | null;
+  confidence?: number | null;
+  verification_status?: string;
+  observed_at?: string | null;
+};
+
+export type LeadEvidence = {
+  id: string;
+  lead_id: string;
+  location_id?: string | null;
+  evidence_type: string;
+  value: string;
+  source: string;
+  source_url?: string | null;
+  confidence?: number | null;
+  observed_at?: string | null;
+};
+
+export type LeadScoreHistory = {
+  id?: string;
+  score?: number;
+  score_version?: string | null;
+  breakdown?: Record<string, unknown>;
+  reason?: string | null;
+  created_at?: string | null;
 };
 
 export type LeadRefreshStatus = {
   refreshing: boolean;
   configured: boolean;
+  source?: string;
+  phase?: string | null;
+  refresh_started_at?: string | null;
+  jobs_progress_total?: number;
+  jobs_last_progress_at?: string | null;
+  release?: string | null;
   last_scraped_at: string | null;
   last_error: string | null;
   updated: number;
   watched: number;
+  pending_jobs?: number;
 };
 
 export type LeadEmailDraft = {
@@ -296,6 +393,12 @@ export type LeadEmailResult = {
   from_email: string;
   to_email: string;
   subject: string;
+};
+
+export type LeadReviewRequest = {
+  decision: 'approved' | 'rejected';
+  reviewer: string;
+  note?: string;
 };
 
 export type Metrics = {
@@ -639,4 +742,3 @@ export type BrandLogoItem = {
   url: string;
   src?: string;
 };
-

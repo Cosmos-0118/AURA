@@ -20,6 +20,7 @@ current source tree, launcher scripts, manifests, database code, and tests.
 - [Competitor intelligence: how it works](../competitor-intelligence/docs/01-HOW-IT-WORKS.md)
 - [Competitor intelligence: how it runs](../competitor-intelligence/docs/02-HOW-IT-RUNS.md)
 - [Buffer publishing and public media](buffer-publishing.md)
+- [Lead Intelligence](lead-intelligence.md)
 - [Database folder notes](../db/README.md)
 
 The root README is the short entry point. API behavior is ultimately defined by

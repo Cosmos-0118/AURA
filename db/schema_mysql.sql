@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS leads (
   fit_score INT NOT NULL DEFAULT 0,
   why TEXT,
   external_place_id VARCHAR(255),
+  email VARCHAR(255),
+  requirements TEXT,
+  source_title TEXT,
+  domain VARCHAR(255),
+  operating_status VARCHAR(64),
+  overture_confidence DOUBLE,
+  source_release VARCHAR(32),
+  stage VARCHAR(32) NOT NULL DEFAULT 'discovered',
+  score_version VARCHAR(64),
+  score_breakdown LONGTEXT,
+  review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  reviewed_by VARCHAR(255),
+  reviewed_at DATETIME NULL,
+  review_note TEXT,
+  outreach_status VARCHAR(32) NOT NULL DEFAULT 'not_approved',
+  outreach_approved_by VARCHAR(255),
+  outreach_approved_at DATETIME NULL,
+  outreach_sent_at DATETIME NULL,
+  contact_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
   products JSON,
   specialties JSON,
   fit_reasons JSON,
@@ -219,7 +238,147 @@ CREATE TABLE IF NOT EXISTS leads (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_leads_brand (brand_id),
-  INDEX idx_leads_external_place (external_place_id)
+  INDEX idx_leads_external_place (external_place_id),
+  INDEX idx_leads_brand_domain (brand_id, domain),
+  INDEX idx_leads_page_fit (fit_score DESC, name ASC, id ASC),
+  INDEX idx_leads_page_brand_fit (brand_id, fit_score DESC, name ASC, id ASC),
+  INDEX idx_leads_page_name (name ASC, id ASC),
+  INDEX idx_leads_page_brand_name (brand_id, name ASC, id ASC),
+  INDEX idx_leads_domain_search (domain)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_locations (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64) NOT NULL,
+  external_place_id VARCHAR(255),
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(255),
+  location TEXT,
+  country VARCHAR(100),
+  url TEXT,
+  phone VARCHAR(64),
+  email VARCHAR(255),
+  operating_status VARCHAR(64),
+  confidence DOUBLE,
+  source_release VARCHAR(32),
+  source_provider VARCHAR(100),
+  raw_record LONGTEXT,
+  status VARCHAR(64) NOT NULL DEFAULT 'active',
+  first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_verified_at DATETIME NULL,
+  INDEX idx_lead_locations_account (lead_id),
+  INDEX idx_lead_locations_external (external_place_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_accounts (
+  id VARCHAR(64) PRIMARY KEY,
+  brand_id VARCHAR(64) NOT NULL,
+  company_name VARCHAR(255) NOT NULL,
+  domain VARCHAR(255),
+  website TEXT,
+  country VARCHAR(100),
+  category VARCHAR(255),
+  stage VARCHAR(32) NOT NULL DEFAULT 'discovered',
+  fit_score INT NOT NULL DEFAULT 0,
+  score_version VARCHAR(64),
+  review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  reviewed_by VARCHAR(255),
+  reviewed_at DATETIME NULL,
+  review_note TEXT,
+  outreach_status VARCHAR(32) NOT NULL DEFAULT 'not_approved',
+  outreach_approved_by VARCHAR(255),
+  outreach_approved_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_lead_accounts_domain (brand_id, domain)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_contacts (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64) NOT NULL,
+  location_id VARCHAR(64),
+  contact_type VARCHAR(32) NOT NULL,
+  value VARCHAR(512) NOT NULL,
+  source VARCHAR(100) NOT NULL,
+  source_url TEXT,
+  confidence DOUBLE,
+  verification_status VARCHAR(32) NOT NULL DEFAULT 'unverified',
+  observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_contacts_account (lead_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_source_records (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64) NOT NULL,
+  location_id VARCHAR(64),
+  source VARCHAR(100) NOT NULL,
+  source_record_id VARCHAR(255) NOT NULL,
+  release VARCHAR(32),
+  source_url TEXT,
+  raw_data LONGTEXT NOT NULL,
+  observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_source_records_account (lead_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_evidence (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64) NOT NULL,
+  location_id VARCHAR(64),
+  evidence_type VARCHAR(64) NOT NULL,
+  value LONGTEXT NOT NULL,
+  source VARCHAR(100) NOT NULL,
+  source_url TEXT,
+  confidence DOUBLE,
+  observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_evidence_account (lead_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_scores (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64) NOT NULL,
+  score INT NOT NULL,
+  score_version VARCHAR(64) NOT NULL,
+  breakdown LONGTEXT NOT NULL,
+  qualification VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_scores_account (lead_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_jobs (
+  id VARCHAR(64) PRIMARY KEY,
+  lead_id VARCHAR(64),
+  stage VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  attempts INT NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME NULL,
+  locked_at DATETIME NULL,
+  last_error TEXT,
+  payload LONGTEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_lead_jobs_queue (status, next_attempt_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_suppressions (
+  id VARCHAR(64) PRIMARY KEY,
+  brand_id VARCHAR(64) NOT NULL,
+  domain VARCHAR(255),
+  email VARCHAR(255),
+  reason TEXT,
+  created_by VARCHAR(255),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_suppressions_brand (brand_id),
+  INDEX idx_lead_suppressions_domain (brand_id, domain),
+  INDEX idx_lead_suppressions_email (brand_id, email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lead_provider_usage (
+  provider VARCHAR(64) NOT NULL,
+  period VARCHAR(16) NOT NULL,
+  used INT NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (provider, period)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS video_generations (

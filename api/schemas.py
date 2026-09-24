@@ -187,12 +187,87 @@ class Lead(BaseModel):
     fit_score: int = 0
     why: str | None = None
     external_place_id: str | None = None
+    domain: str | None = None
+    operating_status: str | None = None
+    overture_confidence: float | None = None
+    source_release: str | None = None
+    stage: str = "discovered"
+    score_version: str | None = None
+    score_breakdown: dict = Field(default_factory=dict)
+    review_status: str = "pending"
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+    outreach_status: str = "not_approved"
+    outreach_approved_by: str | None = None
+    outreach_approved_at: datetime | None = None
+    outreach_sent_at: datetime | None = None
+    contact_status: str = "unknown"
+    location_count: int = 0
+    evidence_count: int = 0
     products: list[str] = Field(default_factory=list)
     specialties: list[str] = Field(default_factory=list)
     fit_reasons: list[str] = Field(default_factory=list)
     last_verified_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class LeadLocation(BaseModel):
+    id: str
+    lead_id: str
+    external_place_id: str | None = None
+    name: str
+    category: str | None = None
+    location: str | None = None
+    country: str | None = None
+    url: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    operating_status: str | None = None
+    confidence: float | None = None
+    source_release: str | None = None
+    status: str = "active"
+    last_verified_at: datetime | None = None
+
+
+class LeadEvidence(BaseModel):
+    id: str
+    lead_id: str
+    location_id: str | None = None
+    evidence_type: str
+    value: str
+    source: str
+    source_url: str | None = None
+    confidence: float | None = None
+    observed_at: datetime | None = None
+
+
+class LeadContact(BaseModel):
+    id: str
+    lead_id: str
+    location_id: str | None = None
+    contact_type: str
+    value: str
+    source: str
+    source_url: str | None = None
+    confidence: float | None = None
+    verification_status: str = "unverified"
+    observed_at: datetime | None = None
+
+
+class LeadReviewRequest(BaseModel):
+    decision: str = Field(pattern="^(approved|rejected)$")
+    reviewer: str = Field(min_length=1, max_length=255)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class LeadSuppressionRequest(BaseModel):
+    brand_id: BrandId
+    domain: str | None = None
+    email: str | None = None
+    reason: str | None = Field(default=None, max_length=2000)
+    actor: str = Field(default="local-user", min_length=1, max_length=255)
 
 
 class Metrics(BaseModel):

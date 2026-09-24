@@ -69,13 +69,20 @@ videos.
 | lessons / lessons_learned | Reviewer corrections fed into future generation |
 | campaign_events | Audit trail for generation, review, and publication |
 | campaign_publications | Buffer publication attempts and external IDs |
-| leads | Discovered organizations and contact/enrichment fields |
+| leads | Account-facing lead state, review, score, and outreach fields |
+| lead_accounts / lead_locations | Company-to-branch model, resolved by website domain, then public phone or normalized name and country |
+| lead_contacts / lead_evidence / lead_source_records | Contact points and source-backed observations |
+| lead_scores / lead_jobs / lead_suppressions / lead_provider_usage | Score history, restart-safe enrichment, suppression, and optional Hunter quota state |
 | video_generations | Video provider/output history |
 | competitors, snapshots, events | Competitor intelligence registry and evidence |
 
 The SQL schema and the SQLite/MySQL initialization code have evolved together.
 When adding a field, update both database paths and the relevant repository
 mapping; do not assume a MySQL-only migration is sufficient.
+
+Lead Intelligence records are persisted in the selected application database.
+The crawler job queue and Hunter credit reservations share that database; no
+Redis, broker, vector database, or separate lead service is required.
 
 ## Reset and seed behavior
 

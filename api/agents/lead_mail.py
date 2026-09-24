@@ -14,9 +14,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 try:
-    from .lead_intel import load_scraped_leads
+    from .lead_pipeline import claim_outreach_send, lead_details, mark_outreach_sent, mark_outreach_uncertain
 except ImportError:
-    from lead_intel import load_scraped_leads
+    from agents.lead_pipeline import claim_outreach_send, lead_details, mark_outreach_sent, mark_outreach_uncertain
+
+try:
+    from ..db import get_connection
+except ImportError:
+    from db import get_connection
 
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(_ROOT_ENV)
@@ -66,9 +71,10 @@ def mail_configured() -> bool:
 
 
 def _find_lead(lead_id: str) -> dict:
-    for row in load_scraped_leads():
-        if str(row.get("id")) == lead_id:
-            return row
+    row = lead_details(lead_id)
+    if row:
+        row["email"] = row.get("email") or row.get("public_email")
+        return row
     raise LeadMailError("That lead is no longer in the current list.", 404)
 
 
@@ -106,7 +112,10 @@ def build_message(lead: dict) -> dict[str, str | bool]:
 
 
 def draft_for(lead_id: str) -> dict[str, str | bool]:
-    draft = build_message(_find_lead(lead_id))
+    lead = _find_lead(lead_id)
+    if lead.get("review_status") != "approved" or lead.get("outreach_status") != "approved":
+        raise LeadMailError("A human reviewer must approve this lead before drafting outreach.", 409)
+    draft = build_message(lead)
     if not draft["to_email"]:
         raise LeadMailError("This lead has no published email address.")
     return draft
@@ -137,14 +146,73 @@ def _deliver(draft: dict[str, str | bool]) -> None:
         raise LeadMailError("Gmail did not accept this email.", 502) from exc
 
 
-def send_for(lead_id: str) -> dict[str, str | bool]:
-    draft = draft_for(lead_id)
+def send_for(
+    lead_id: str,
+    subject: str | None = None,
+    body: str | None = None,
+) -> dict[str, str | bool]:
+    lead = _find_lead(lead_id)
+    if lead.get("review_status") != "approved" or lead.get("outreach_status") != "approved":
+        raise LeadMailError("A human reviewer must approve this lead for outreach before sending.", 409)
+    email = str(lead.get("email") or lead.get("public_email") or "").strip().lower()
+    domain = str(lead.get("domain") or "").strip().lower()
+    try:
+        with get_connection() as connection:
+            suppressed = connection.execute(
+                "SELECT id FROM lead_suppressions WHERE brand_id=%s AND ((domain=%s AND domain IS NOT NULL) OR (email=%s AND email IS NOT NULL)) LIMIT 1",
+                (lead.get("brand_id"), domain or None, email or None),
+            ).fetchone()
+    except Exception as exc:
+        raise LeadMailError("Could not verify the outreach suppression list.", 503) from exc
+    if suppressed:
+        raise LeadMailError("This business is on the outreach suppression list.", 409)
+    draft = build_message(lead)
+    if not draft["to_email"]:
+        raise LeadMailError("This lead has no published email address.")
+    if subject is not None:
+        edited_subject = subject.strip()
+        if not edited_subject or "\r" in edited_subject or "\n" in edited_subject:
+            raise LeadMailError("Email subject must be non-empty and cannot contain line breaks.")
+        draft["subject"] = edited_subject
+    if body is not None:
+        edited_body = body.strip()
+        if not edited_body:
+            raise LeadMailError("Email message cannot be empty.")
+        draft["body"] = edited_body
     if not mail_configured():
         raise LeadMailError(
             "Gmail is not configured. Add GMAIL_APP_PASSWORD to .env. Gmail does not use an API key for sending.",
             503,
         )
-    _deliver(draft)
+    if not claim_outreach_send(lead_id, email, domain):
+        raise LeadMailError("Lead approval or contact details changed. Review the lead before sending.", 409)
+    try:
+        _deliver(draft)
+    except Exception as exc:
+        # SMTP may fail after accepting DATA, so retrying automatically can duplicate mail.
+        try:
+            mark_outreach_uncertain(lead_id)
+        except Exception:
+            pass
+        if isinstance(exc, LeadMailError):
+            raise LeadMailError(
+                "SMTP did not complete cleanly. Check the sender's Sent folder before retrying.", 502,
+            ) from exc
+        raise LeadMailError(
+            "SMTP delivery is uncertain. Check the sender's Sent folder before retrying.", 502,
+        ) from exc
+    try:
+        mark_outreach_sent(lead_id)
+    except Exception as exc:
+        # The message was accepted by SMTP, but persistent state failed. Freeze the
+        # send claim so another approval cannot submit the same message again.
+        try:
+            mark_outreach_uncertain(lead_id)
+        except Exception:
+            pass
+        raise LeadMailError(
+            "Gmail accepted the email, but AURA could not confirm its saved status. Check the sender's Sent folder before retrying.", 503,
+        ) from exc
     return {
         "ok": True,
         "from_email": draft["from_email"],

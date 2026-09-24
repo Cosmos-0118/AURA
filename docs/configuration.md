@@ -95,10 +95,26 @@ bound to localhost unless it is protected by an access-controlled proxy.
 | BUFFER_PUBLISH_MODE | Buffer | Defaults to addToQueue |
 | MEDIA_PUBLIC_BASE_URL | Buffer media | Public HTTP(S) origin for /media; localhost is rejected by the backend validator. The documented local Buffer workflow uses the reserved HTTPS ngrok origin |
 | SKIP_MEDIA_URL_REACHABILITY_CHECK | Buffer media | Only use for controlled tests |
-| TinyFish_API_KEY or TINYFISH_API_KEY | Lead discovery | External search/enrichment provider |
-| AURA_LEAD_REFRESH | Lead worker | Set false to disable the startup refresh worker |
+| AURA_LEAD_REFRESH | Lead worker | Defaults to true; set false to disable the startup worker |
+| LEAD_REFRESH_HOURS | Lead worker | Minimum age before checking for a newer Overture release; defaults to 720 hours |
+| LEAD_REFRESH_POLL_SECONDS | Lead worker | Retry/release-check poll interval; defaults to 300 seconds and has a 60-second minimum |
+| LEAD_JOB_POLL_SECONDS | Lead worker | Website enrichment queue poll interval; defaults to 30 seconds and has a 5-second minimum |
+| LEAD_MAX_JOBS_PER_RUN | Lead worker | Website jobs to process in one run; defaults to 300 |
+| LEAD_CRAWL_DELAY_SECONDS | Lead worker | Pause between company websites; defaults to 0.35 seconds |
+| LEAD_HUNTER_RETRY_HOURS | Lead worker | Delay before retrying failed monthly Hunter discovery; defaults to 6 hours |
+| DUCKDB_EXTENSION_DIRECTORY | Overture query | Writable DuckDB extension cache; defaults to `.aura/duckdb_extensions` under the application root |
+| HUNTER_API_KEY | Optional lead discovery and email enrichment | Hunter Discover adds a secondary source; Domain Search is used only for qualified leads that lack a public email |
+| LEAD_HUNTER_DISCOVER_ENABLED | Hunter Discover | Defaults to true when a Hunter key is configured; set false to disable secondary discovery |
+| LEAD_HUNTER_MONTHLY_CREDIT_LIMIT | Hunter Domain Search | Local monthly cap, defaults to 45 to leave quota headroom |
+| LEAD_PLAYWRIGHT_ENABLED | Optional JS website fallback | Defaults to false; requires installing the `lead-browser` extra and Chromium |
+| LEAD_GEMINI_ENABLED / LEAD_GEMINI_MODEL | Optional ambiguous-fit classification | Defaults to disabled; uses `GEMINI_API_KEY` only when enabled and configured |
 | LEAD_FROM_EMAIL | Lead email | Sender mailbox |
 | GMAIL_APP_PASSWORD | Lead email | Gmail app password, never a normal account password |
+
+The Lead Intelligence core does not require Hunter, Gemini, or a paid search
+provider. Overture Places is queried from its public GeoParquet release and
+websites are fetched directly. See [Lead Intelligence](lead-intelligence.md)
+for the source, scoring, refresh, and review workflow.
 
 Buffer publication is an external side effect. Configure and test
 MEDIA_PUBLIC_BASE_URL and /api/media/config before enabling it. See
