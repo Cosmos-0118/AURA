@@ -12,6 +12,8 @@ AURA is an internal MVP, not a production multi-tenant service:
 - Provider credentials are backend environment variables, but publishing and
   email are real external side effects when configured.
 - Lead records may contain public contact information and email workflow data.
+- Lead review routes record a reviewer name but do not authenticate that
+  identity. Approval is a local workflow guard, not role-based access control.
 
 Do not expose the default API, changedetection UI, or static media routes to
 the public internet without adding an access-control and deployment layer.
@@ -37,9 +39,11 @@ Treat these as approval-gated operations:
 
 - Buffer can queue/publish to LinkedIn, Instagram, or X.
 - Gmail configuration can send messages to lead addresses.
-- FAL/Groq/Gemini/TinyFish calls can incur provider cost and transmit prompt or
+- FAL/Groq/Gemini/Hunter calls can incur provider cost and transmit prompt or
   public-source data.
 - Competitor collectors make repeated requests to third-party sites.
+- Lead discovery can query Overture and, when configured, Hunter; website
+  verification requests only public HTTP(S) pages and honors robots.txt.
 
 The app validates final watermarked media and public reachability before Buffer
 publication, but that is not a replacement for provider-side permissions,

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import threading
 from typing import Any, Generator
 
 from dotenv import load_dotenv
@@ -16,6 +17,8 @@ load_dotenv()
 STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 SQLITE_DB_PATH = STORAGE_DIR / "aura.db"
+_SQLITE_SCHEMA_LOCK = threading.Lock()
+_SQLITE_INITIALIZED_PATHS: set[str] = set()
 
 
 def get_db_mode() -> str:
@@ -429,6 +432,8 @@ def init_sqlite_db(conn: sqlite3.Connection):
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_lead_suppressions_brand ON lead_suppressions(brand_id);
+        CREATE INDEX IF NOT EXISTS idx_lead_suppressions_domain ON lead_suppressions(brand_id, domain);
+        CREATE INDEX IF NOT EXISTS idx_lead_suppressions_email ON lead_suppressions(brand_id, email);
 
         CREATE TABLE IF NOT EXISTS lead_provider_usage (
           provider TEXT NOT NULL,
@@ -558,8 +563,17 @@ def init_sqlite_db(conn: sqlite3.Connection):
         except Exception as exc:
             raise RuntimeError(f"Could not migrate SQLite table {table}.{column_name}") from exc
 
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_brand_domain ON leads(brand_id, domain)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_page_fit ON leads(fit_score DESC, name ASC, id ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_page_brand_fit ON leads(brand_id, fit_score DESC, name ASC, id ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_page_name ON leads(name ASC, id ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_page_brand_name ON leads(brand_id, name ASC, id ASC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_name_search ON leads(name COLLATE NOCASE)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_brand_name_search ON leads(brand_id, name COLLATE NOCASE)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_domain_search ON leads(domain)")
     cursor.execute(
-        "UPDATE leads SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)"
+        "UPDATE leads SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) "
+        "WHERE updated_at IS NULL"
     )
     conn.commit()
 
@@ -1059,7 +1073,8 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_leads_brand (brand_id),
-          INDEX idx_leads_external_place (external_place_id)
+          INDEX idx_leads_external_place (external_place_id),
+          INDEX idx_leads_brand_domain (brand_id, domain)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
         """
@@ -1191,7 +1206,9 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
           reason TEXT,
           created_by VARCHAR(255),
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          INDEX idx_lead_suppressions_brand (brand_id)
+          INDEX idx_lead_suppressions_brand (brand_id),
+          INDEX idx_lead_suppressions_domain (brand_id, domain),
+          INDEX idx_lead_suppressions_email (brand_id, email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
         """
@@ -1305,6 +1322,14 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
         "ALTER TABLE leads ADD COLUMN outreach_approved_at DATETIME NULL",
         "ALTER TABLE leads ADD COLUMN outreach_sent_at DATETIME NULL",
         "ALTER TABLE leads ADD COLUMN contact_status VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "ALTER TABLE leads ADD INDEX idx_leads_brand_domain (brand_id, domain)",
+        "ALTER TABLE leads ADD INDEX idx_leads_page_fit (fit_score DESC, name ASC, id ASC)",
+        "ALTER TABLE leads ADD INDEX idx_leads_page_brand_fit (brand_id, fit_score DESC, name ASC, id ASC)",
+        "ALTER TABLE leads ADD INDEX idx_leads_page_name (name ASC, id ASC)",
+        "ALTER TABLE leads ADD INDEX idx_leads_page_brand_name (brand_id, name ASC, id ASC)",
+        "ALTER TABLE leads ADD INDEX idx_leads_domain_search (domain)",
+        "ALTER TABLE lead_suppressions ADD INDEX idx_lead_suppressions_domain (brand_id, domain)",
+        "ALTER TABLE lead_suppressions ADD INDEX idx_lead_suppressions_email (brand_id, email)",
     ]
 
     try:
@@ -1430,8 +1455,12 @@ def get_db() -> Generator[Any, None, None]:
             return
 
     # SQLite fallback
-    conn = sqlite3.connect(str(SQLITE_DB_PATH))
-    init_sqlite_db(conn)
+    conn = sqlite3.connect(str(SQLITE_DB_PATH), timeout=15)
+    schema_key = str(SQLITE_DB_PATH.resolve())
+    with _SQLITE_SCHEMA_LOCK:
+        if schema_key not in _SQLITE_INITIALIZED_PATHS:
+            init_sqlite_db(conn)
+            _SQLITE_INITIALIZED_PATHS.add(schema_key)
     wrapper = SQLiteConnectionWrapper(conn)
     try:
         yield wrapper

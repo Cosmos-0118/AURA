@@ -311,7 +311,13 @@ CREATE TABLE IF NOT EXISTS leads (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
     INDEX idx_leads_brand (brand_id),
-    INDEX idx_leads_external_place (external_place_id)
+    INDEX idx_leads_external_place (external_place_id),
+    INDEX idx_leads_brand_domain (brand_id, domain),
+    INDEX idx_leads_page_fit (fit_score DESC, name ASC, id ASC),
+    INDEX idx_leads_page_brand_fit (brand_id, fit_score DESC, name ASC, id ASC),
+    INDEX idx_leads_page_name (name ASC, id ASC),
+    INDEX idx_leads_page_brand_name (brand_id, name ASC, id ASC),
+    INDEX idx_leads_domain_search (domain)
 );
 
 CREATE TABLE IF NOT EXISTS lead_locations (
@@ -435,7 +441,9 @@ CREATE TABLE IF NOT EXISTS lead_suppressions (
     reason TEXT,
     created_by VARCHAR(255),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_lead_suppressions_brand (brand_id)
+    INDEX idx_lead_suppressions_brand (brand_id),
+    INDEX idx_lead_suppressions_domain (brand_id, domain),
+    INDEX idx_lead_suppressions_email (brand_id, email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS lead_provider_usage (

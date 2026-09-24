@@ -1,15 +1,17 @@
-from fastapi import APIRouter, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 try:
     from ..agents.lead_pipeline import add_suppression, lead_details, review_lead
-    from ..agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
+    from ..agents.lead_intel import key_configured, load_lead_page, refresh_status, start_refresh_in_background
     from ..agents.lead_mail import LeadMailError, draft_for, send_for
     from ..db import get_connection
     from ..schemas import BrandId, Lead, LeadContact, LeadEvidence, LeadLocation, LeadReviewRequest, LeadSuppressionRequest
 except ImportError:
     from agents.lead_pipeline import add_suppression, lead_details, review_lead
-    from agents.lead_intel import key_configured, load_scraped_leads, refresh_status, start_refresh_in_background
+    from agents.lead_intel import key_configured, load_lead_page, refresh_status, start_refresh_in_background
     from agents.lead_mail import LeadMailError, draft_for, send_for
     from db import get_connection
     from schemas import BrandId, Lead, LeadContact, LeadEvidence, LeadLocation, LeadReviewRequest, LeadSuppressionRequest
@@ -26,6 +28,13 @@ class LeadInsight(Lead):
     contacts: list[LeadContact] = Field(default_factory=list)
     evidence: list[LeadEvidence] = Field(default_factory=list)
     score_history: list[dict] = Field(default_factory=list)
+
+
+class LeadPage(BaseModel):
+    items: list[LeadInsight]
+    next_cursor: str | None = None
+    has_more: bool
+    limit: int
 
 
 def _insight(row: dict) -> LeadInsight:
@@ -49,6 +58,7 @@ def _insight(row: dict) -> LeadInsight:
         location_count=int(row.get("location_count") or len(row.get("locations") or [])),
         locations=row.get("locations") or [], contacts=row.get("contacts") or [], evidence=row.get("evidence") or [],
         score_history=row.get("score_history") or [],
+        evidence_count=int(row.get("evidence_count") or len(row.get("evidence") or [])),
         last_verified_at=row.get("last_verified_at"), created_at=row.get("created_at"), updated_at=row.get("updated_at"),
     )
 
@@ -87,14 +97,34 @@ def lead_email_send(body: SendLeadEmail) -> dict:
         raise _mail_error(exc) from exc
 
 
-@router.get("", response_model=list[LeadInsight])
-def list_leads(brand_id: BrandId | None = None, review_status: str | None = None) -> list[LeadInsight]:
+@router.get("", response_model=LeadPage)
+def list_leads(
+    brand_id: BrandId | None = None,
+    search: str | None = Query(default=None, min_length=2, max_length=100),
+    contact: Literal["all", "email", "phone", "reachable"] = "all",
+    sort: Literal["fit", "name"] = "fit",
+    limit: int = Query(default=40, ge=1, le=100),
+    cursor: str | None = Query(default=None, max_length=4096),
+) -> LeadPage:
     if not key_configured():
-        return []
-    rows = load_scraped_leads(brand_id)
-    if review_status:
-        rows = [row for row in rows if row.get("review_status") == review_status]
-    return [_insight(row) for row in rows]
+        return LeadPage(items=[], next_cursor=None, has_more=False, limit=limit)
+    try:
+        page = load_lead_page(
+            brand_id=brand_id,
+            search=search,
+            contact=contact,
+            sort=sort,
+            limit=limit,
+            cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return LeadPage(
+        items=[_insight(row) for row in page["items"]],
+        next_cursor=page["next_cursor"],
+        has_more=page["has_more"],
+        limit=page["limit"],
+    )
 
 
 @router.get("/{lead_id}", response_model=LeadInsight)

@@ -4,19 +4,16 @@ import { useSyncExternalStore } from 'react';
 import type { BrandId, Platform, Language, ReasonTag } from '../api/types';
 import { INITIAL_ASSETS, type ExtendedAsset } from './assets';
 import { INITIAL_LESSONS, type ExtendedLesson, REASON_TAG_LABELS } from './lessons';
-import { INITIAL_LEADS, type ExtendedLead } from './leads';
 import { INITIAL_AGENT_ACTIVITY, type AgentActivityItem } from './metrics';
 
 export interface AuraStoreState {
   assets: ExtendedAsset[];
   lessons: ExtendedLesson[];
-  leads: ExtendedLead[];
   activity: AgentActivityItem[];
   metrics: {
     contentGenerated: number;
     awaitingReview: number;
     approved: number;
-    qualifiedLeads: number;
     compliancePassRate: number;
     humanEditRate: number;
     rejectionRate: number;
@@ -28,13 +25,12 @@ export interface AuraStoreState {
 
 const STORAGE_KEY = 'aura_marketing_desk_v1';
 
-function computeMetrics(assets: ExtendedAsset[], leads: ExtendedLead[], _lessons: ExtendedLesson[]) {
+function computeMetrics(assets: ExtendedAsset[], _lessons: ExtendedLesson[]) {
   const awaitingReview = assets.filter(
     (a) => a.status === 'pending_review' || a.status === 'compliance_failed'
   ).length;
   const approved = assets.filter((a) => a.status === 'approved' || a.status === 'scheduled').length;
   const publishedAssets = assets.filter((a) => a.status === 'published').length;
-  const qualifiedLeads = leads.filter((l) => l.status === 'qualified').length;
   const rejected = assets.filter((a) => a.status === 'rejected').length;
 
   const totalClosed = approved + publishedAssets + rejected;
@@ -44,7 +40,6 @@ function computeMetrics(assets: ExtendedAsset[], leads: ExtendedLead[], _lessons
     contentGenerated: 120 + assets.length,
     awaitingReview,
     approved,
-    qualifiedLeads,
     compliancePassRate: 91.4,
     humanEditRate: 18.7,
     rejectionRate,
@@ -57,10 +52,29 @@ function getInitialState(): AuraStoreState {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(saved) as Partial<AuraStoreState> & { leads?: unknown };
+        const {
+          assets = INITIAL_ASSETS,
+          lessons = INITIAL_LESSONS,
+          activity = INITIAL_AGENT_ACTIVITY,
+          demoMode = true,
+          selectedBrandFilter = 'all'
+        } = parsed;
+        const migrated = {
+          assets: Array.isArray(assets) ? assets : INITIAL_ASSETS,
+          lessons: Array.isArray(lessons) ? lessons : INITIAL_LESSONS,
+          activity: Array.isArray(activity) ? activity : INITIAL_AGENT_ACTIVITY,
+          demoMode,
+          selectedBrandFilter
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+        } catch {
+          // Keep readable state for this session if storage is full or unavailable.
+        }
         return {
-          ...parsed,
-          metrics: computeMetrics(parsed.assets, parsed.leads, parsed.lessons)
+          ...migrated,
+          metrics: computeMetrics(migrated.assets, migrated.lessons)
         };
       }
     } catch {
@@ -71,9 +85,8 @@ function getInitialState(): AuraStoreState {
   return {
     assets: INITIAL_ASSETS,
     lessons: INITIAL_LESSONS,
-    leads: INITIAL_LEADS,
     activity: INITIAL_AGENT_ACTIVITY,
-    metrics: computeMetrics(INITIAL_ASSETS, INITIAL_LEADS, INITIAL_LESSONS),
+    metrics: computeMetrics(INITIAL_ASSETS, INITIAL_LESSONS),
     demoMode: true,
     selectedBrandFilter: 'all'
   };
@@ -85,7 +98,11 @@ const listeners = new Set<() => void>();
 function notify() {
   if (typeof window !== 'undefined') {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState));
+      const { assets, lessons, activity, demoMode, selectedBrandFilter } = currentState;
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ assets, lessons, activity, demoMode, selectedBrandFilter })
+      );
     } catch {
       // storage error ignored
     }
@@ -143,7 +160,7 @@ export const auraStore = {
       ...currentState,
       assets,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+      metrics: computeMetrics(assets, currentState.lessons)
     };
     notify();
   },
@@ -204,7 +221,7 @@ export const auraStore = {
       assets,
       lessons,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, lessons)
+      metrics: computeMetrics(assets, lessons)
     };
     notify();
   },
@@ -278,7 +295,7 @@ export const auraStore = {
       assets,
       lessons,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, lessons)
+      metrics: computeMetrics(assets, lessons)
     };
     notify();
   },
@@ -350,7 +367,7 @@ export const auraStore = {
       ...currentState,
       assets,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+      metrics: computeMetrics(assets, currentState.lessons)
     };
     notify();
   },
@@ -395,7 +412,7 @@ export const auraStore = {
       ...currentState,
       assets,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+      metrics: computeMetrics(assets, currentState.lessons)
     };
     notify();
   },
@@ -429,7 +446,7 @@ export const auraStore = {
       ...currentState,
       assets,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+      metrics: computeMetrics(assets, currentState.lessons)
     };
     notify();
   },
@@ -492,53 +509,16 @@ export const auraStore = {
       ...currentState,
       assets,
       activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(assets, currentState.leads, currentState.lessons)
+      metrics: computeMetrics(assets, currentState.lessons)
     };
     notify();
   },
-
-
-  approveLeadOutreach(leadId: string, updatedBody?: string) {
-    const leads = currentState.leads.map((lead) => {
-      if (lead.id === leadId) {
-        return {
-          ...lead,
-          status: 'qualified' as const,
-          suggested_outreach: {
-            ...lead.suggested_outreach,
-            body: updatedBody || lead.suggested_outreach.body,
-            approved: true
-          }
-        };
-      }
-      return lead;
-    });
-
-    const newActivity: AgentActivityItem = {
-      id: `act_${Date.now()}`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      agent: 'Lead Agent',
-      agentType: 'lead',
-      description: `Approved custom B2B outreach draft for ${leadId}`,
-      status: 'completed'
-    };
-
-    currentState = {
-      ...currentState,
-      leads,
-      activity: [newActivity, ...currentState.activity].slice(0, 15),
-      metrics: computeMetrics(currentState.assets, leads, currentState.lessons)
-    };
-    notify();
-  },
-
   resetDefaults() {
     currentState = {
       assets: INITIAL_ASSETS,
       lessons: INITIAL_LESSONS,
-      leads: INITIAL_LEADS,
       activity: INITIAL_AGENT_ACTIVITY,
-      metrics: computeMetrics(INITIAL_ASSETS, INITIAL_LEADS, INITIAL_LESSONS),
+      metrics: computeMetrics(INITIAL_ASSETS, INITIAL_LESSONS),
       demoMode: true,
       selectedBrandFilter: 'all'
     };

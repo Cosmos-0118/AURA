@@ -8,6 +8,8 @@ import type {
   Competitor,
   Language,
   Lead,
+  LeadListFilters,
+  LeadPage,
   LeadReviewRequest,
   Lesson,
   Metrics,
@@ -432,21 +434,13 @@ export async function listLessons(brandId?: string): Promise<Lesson[]> {
   }
 }
 
-export async function listLeads(brandId?: string, reviewStatus?: string): Promise<Lead[]> {
-  try {
-    const params = new URLSearchParams();
-    if (brandId) params.set('brand_id', brandId);
-    if (reviewStatus) params.set('review_status', reviewStatus);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return await request<Lead[]>(`/api/leads${query}`);
-  } catch {
-    const leads = auraStore.getSnapshot().leads;
-    return leads.filter((lead) => {
-      if (brandId && lead.brand_id !== brandId) return false;
-      if (reviewStatus && lead.review_status !== reviewStatus) return false;
-      return true;
-    });
+export function listLeads(filters: LeadListFilters = {}, signal?: AbortSignal): Promise<LeadPage> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
   }
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request<LeadPage>(`/api/leads${query}`, { signal });
 }
 
 export async function getLead(leadId: string): Promise<Lead> {
@@ -700,9 +694,9 @@ export async function getBrandLogos(): Promise<BrandLogoItem[]> {
   ];
 }
 
-export async function getCampaignReviewQueue(status?: string): Promise<CampaignReviewCard[]> {
+export async function getCampaignReviewQueue(status?: string, signal?: AbortSignal): Promise<CampaignReviewCard[]> {
   const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
-  return await request<CampaignReviewCard[]>(`/api/campaigns/review-queue${query}`);
+  return await request<CampaignReviewCard[]>(`/api/campaigns/review-queue${query}`, { signal });
 }
 
 export async function approveCampaignReview(

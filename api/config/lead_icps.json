@@ -1,7 +1,14 @@
 {
   "version": "2026-09-23",
   "countries": ["SG", "MY", "HK", "ID", "TH"],
-  "minimum_overture_confidence": 0.65,
+  "country_bounds": {
+    "SG": [103.5, 1.1, 104.1, 1.5],
+    "MY": [99.0, 0.5, 120.0, 7.8],
+    "HK": [113.7, 22.1, 114.6, 22.6],
+    "ID": [94.5, -11.2, 141.2, 6.3],
+    "TH": [97.3, 5.5, 105.7, 20.6]
+  },
+  "minimum_overture_confidence": 0.80,
   "max_candidates_per_brand_run": 300,
   "qualification_score": 75,
   "brands": {

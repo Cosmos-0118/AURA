@@ -204,6 +204,7 @@ class Lead(BaseModel):
     outreach_sent_at: datetime | None = None
     contact_status: str = "unknown"
     location_count: int = 0
+    evidence_count: int = 0
     products: list[str] = Field(default_factory=list)
     specialties: list[str] = Field(default_factory=list)
     fit_reasons: list[str] = Field(default_factory=list)

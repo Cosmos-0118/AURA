@@ -68,6 +68,15 @@ The two paths share database tables and review/publishing concepts but are not
 the same implementation. Do not describe AURA as a LangGraph workflow: the
 current pipeline is intentionally small and does not import LangGraph.
 
+## Lead Intelligence
+
+Lead discovery queries Overture Places with DuckDB, resolves place records to
+company accounts and locations, and persists resumable website-verification
+jobs. Evidence and score history are stored alongside the lead record. Hunter
+and Gemini are optional integrations; neither is required for the free-first
+pipeline. A lead must qualify and receive human approval before an outreach
+draft or send is available. See [Lead Intelligence](lead-intelligence.md).
+
 ## Review and learning loop
 
 Review decisions are stored in review_queue, reviews, campaign_events, and
@@ -129,7 +138,7 @@ Provider integrations are deliberately kept behind small adapters:
 - Groq: text generation in api/services/content_generator.py.
 - FAL: image/video generation when real generation is enabled.
 - Gemini: optional competitor-event analysis and legacy test helpers.
-- TinyFish: lead discovery.
+- Overture Maps: primary public Places discovery; Hunter is optional.
 - Gmail SMTP/app password: lead email sending.
 - Buffer: queued social publication.
 

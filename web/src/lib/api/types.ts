@@ -289,10 +289,27 @@ export type Lead = {
   outreach_sent_at?: string | null;
   contact_status?: string;
   location_count?: number;
+  evidence_count?: number;
   locations?: LeadLocation[];
   contacts?: LeadContact[];
   evidence?: LeadEvidence[];
   score_history?: LeadScoreHistory[];
+};
+
+export type LeadPage = {
+  items: Lead[];
+  next_cursor: string | null;
+  has_more: boolean;
+  limit: number;
+};
+
+export type LeadListFilters = {
+  brand_id?: BrandId;
+  search?: string;
+  contact?: 'all' | 'email' | 'phone' | 'reachable';
+  sort?: 'fit' | 'name';
+  limit?: number;
+  cursor?: string;
 };
 
 export type LeadLocation = {
@@ -350,10 +367,17 @@ export type LeadScoreHistory = {
 export type LeadRefreshStatus = {
   refreshing: boolean;
   configured: boolean;
+  source?: string;
+  phase?: string | null;
+  refresh_started_at?: string | null;
+  jobs_progress_total?: number;
+  jobs_last_progress_at?: string | null;
+  release?: string | null;
   last_scraped_at: string | null;
   last_error: string | null;
   updated: number;
   watched: number;
+  pending_jobs?: number;
 };
 
 export type LeadEmailDraft = {
