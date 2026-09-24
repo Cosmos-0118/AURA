@@ -8,6 +8,7 @@ import type {
   Competitor,
   Language,
   Lead,
+  LeadReviewRequest,
   Lesson,
   Metrics,
   OperationalModeInfo,
@@ -431,14 +432,29 @@ export async function listLessons(brandId?: string): Promise<Lesson[]> {
   }
 }
 
-export async function listLeads(brandId?: string): Promise<Lead[]> {
+export async function listLeads(brandId?: string, reviewStatus?: string): Promise<Lead[]> {
   try {
-    const query = brandId ? `?brand_id=${encodeURIComponent(brandId)}` : '';
+    const params = new URLSearchParams();
+    if (brandId) params.set('brand_id', brandId);
+    if (reviewStatus) params.set('review_status', reviewStatus);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return await request<Lead[]>(`/api/leads${query}`);
   } catch {
     const leads = auraStore.getSnapshot().leads;
-    return brandId ? leads.filter((l) => l.brand_id === brandId) : leads;
+    return leads.filter((lead) => {
+      if (brandId && lead.brand_id !== brandId) return false;
+      if (reviewStatus && lead.review_status !== reviewStatus) return false;
+      return true;
+    });
   }
+}
+
+export async function getLead(leadId: string): Promise<Lead> {
+  return request<Lead>(`/api/leads/${encodeURIComponent(leadId)}`);
+}
+
+export async function reviewLead(leadId: string, body: LeadReviewRequest): Promise<Lead> {
+  return request<Lead>(`/api/leads/${encodeURIComponent(leadId)}/review`, jsonBody(body));
 }
 
 export function getLeadRefreshStatus(): Promise<import('./types').LeadRefreshStatus> {

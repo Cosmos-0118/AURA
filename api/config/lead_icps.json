@@ -1,0 +1,54 @@
+{
+  "version": "2026-09-23",
+  "countries": ["SG", "MY", "HK", "ID", "TH"],
+  "minimum_overture_confidence": 0.65,
+  "max_candidates_per_brand_run": 300,
+  "qualification_score": 75,
+  "brands": {
+    "jade": {
+      "name": "Jade",
+      "exact_categories": [
+        "jewelry_store",
+        "watch_store",
+        "jewelry_and_watches_manufacturer",
+        "jewelry_manufacturer",
+        "jewelry_repair_service",
+        "watch_repair_service"
+      ],
+      "hierarchy_categories": [],
+      "keywords": [
+        "jewellery", "jewelry", "jeweller", "jeweler", "diamond", "gold",
+        "gemstone", "precious metal", "luxury watch", "fine watch"
+      ]
+    },
+    "doctorshield": {
+      "name": "DoctorShield",
+      "exact_categories": [
+        "hospital", "general_hospital", "specialty_hospital", "doctors_office",
+        "primary_care_or_general_clinic", "urgent_care_clinic", "walk_in_clinic",
+        "dental_clinic", "pediatric_clinic", "vision_or_eye_care_clinic",
+        "fertility_clinic", "dialysis_clinic", "medical_skin_care",
+        "medical_spa", "behavioral_or_mental_health_clinic"
+      ],
+      "hierarchy_categories": ["outpatient_care_facility"],
+      "keywords": [
+        "medical", "clinic", "doctor", "physician", "hospital", "specialist",
+        "healthcare", "health care", "surgery", "medical practice", "patient"
+      ]
+    },
+    "jaguar": {
+      "name": "Jaguar Transit",
+      "exact_categories": [
+        "courier_and_delivery_service", "freight_and_cargo_service",
+        "freight_forwarding_agency", "motor_freight_trucking", "warehouse",
+        "security_service"
+      ],
+      "hierarchy_categories": ["b2b_transportation_and_storage_service", "shipping_or_delivery_service"],
+      "keywords": [
+        "courier", "freight", "logistics", "valuables", "cash in transit",
+        "armored", "armoured", "secure transport", "high value goods",
+        "cargo", "vault", "last mile delivery"
+      ]
+    }
+  }
+}

@@ -11,12 +11,18 @@ dependencies = [
   "psycopg[binary]",
   "pymysql",
   "httpx",
+  "duckdb>=1.4.0",
+  "beautifulsoup4>=4.12",
+  "dnspython>=2.7",
   "python-dotenv",
   "python-multipart",
   "openai",
   "google-genai>=2.24.0",
   "fal-client>=1.0.3",
 ]
+
+[project.optional-dependencies]
+lead-browser = ["crawl4ai"]
 
 [build-system]
 requires = ["hatchling"]

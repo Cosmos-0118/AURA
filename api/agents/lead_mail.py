@@ -15,8 +15,12 @@ from dotenv import load_dotenv
 
 try:
     from .lead_intel import load_scraped_leads
+    from .lead_pipeline import claim_outreach_send, lead_details, mark_outreach_failed, mark_outreach_sent
+    from ..db import get_connection
 except ImportError:
     from lead_intel import load_scraped_leads
+    from lead_pipeline import claim_outreach_send, lead_details, mark_outreach_failed, mark_outreach_sent
+    from db import get_connection
 
 _ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(_ROOT_ENV)
@@ -66,6 +70,10 @@ def mail_configured() -> bool:
 
 
 def _find_lead(lead_id: str) -> dict:
+    row = lead_details(lead_id)
+    if row:
+        row["email"] = row.get("email") or row.get("public_email")
+        return row
     for row in load_scraped_leads():
         if str(row.get("id")) == lead_id:
             return row
@@ -138,13 +146,39 @@ def _deliver(draft: dict[str, str | bool]) -> None:
 
 
 def send_for(lead_id: str) -> dict[str, str | bool]:
-    draft = draft_for(lead_id)
+    lead = _find_lead(lead_id)
+    if lead.get("review_status") != "approved" or lead.get("outreach_status") != "approved":
+        raise LeadMailError("A human reviewer must approve this lead for outreach before sending.", 409)
+    email = str(lead.get("email") or lead.get("public_email") or "").strip().lower()
+    domain = str(lead.get("domain") or "").strip().lower()
+    try:
+        with get_connection() as connection:
+            suppressed = connection.execute(
+                "SELECT id FROM lead_suppressions WHERE brand_id=%s AND ((domain=%s AND domain IS NOT NULL) OR (email=%s AND email IS NOT NULL)) LIMIT 1",
+                (lead.get("brand_id"), domain or None, email or None),
+            ).fetchone()
+    except Exception as exc:
+        raise LeadMailError("Could not verify the outreach suppression list.", 503) from exc
+    if suppressed:
+        raise LeadMailError("This business is on the outreach suppression list.", 409)
+    draft = build_message(lead)
+    if not draft["to_email"]:
+        raise LeadMailError("This lead has no published email address.")
     if not mail_configured():
         raise LeadMailError(
             "Gmail is not configured. Add GMAIL_APP_PASSWORD to .env. Gmail does not use an API key for sending.",
             503,
         )
-    _deliver(draft)
+    if not claim_outreach_send(lead_id):
+        raise LeadMailError("This outreach was already sent or another send is in progress.", 409)
+    try:
+        _deliver(draft)
+    except Exception as exc:
+        mark_outreach_failed(lead_id)
+        if isinstance(exc, LeadMailError):
+            raise
+        raise LeadMailError("The email could not be sent. Review the lead before trying again.", 502) from exc
+    mark_outreach_sent(lead_id)
     return {
         "ok": True,
         "from_email": draft["from_email"],

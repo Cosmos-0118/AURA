@@ -27,6 +27,10 @@ class SQLiteDictCursor:
     def __init__(self, cursor: sqlite3.Cursor):
         self.cursor = cursor
 
+    @property
+    def rowcount(self) -> int:
+        return self.cursor.rowcount
+
     def execute(self, query: str, params: Any = None):
         # Convert %s placeholder to ? for sqlite
         sqlite_query = query.replace("%s", "?")
@@ -278,12 +282,160 @@ def init_sqlite_db(conn: sqlite3.Connection):
           requirements TEXT,
           source_title TEXT,
           external_place_id TEXT,
+          domain TEXT,
+          operating_status TEXT,
+          overture_confidence REAL,
+          source_release TEXT,
+          stage TEXT NOT NULL DEFAULT 'discovered',
+          score_version TEXT,
+          score_breakdown TEXT,
+          review_status TEXT NOT NULL DEFAULT 'pending',
+          reviewed_by TEXT,
+          reviewed_at DATETIME,
+          review_note TEXT,
+          outreach_status TEXT NOT NULL DEFAULT 'not_approved',
+          outreach_approved_by TEXT,
+          outreach_approved_at DATETIME,
+          outreach_sent_at DATETIME,
+          contact_status TEXT NOT NULL DEFAULT 'unknown',
           products TEXT,
           specialties TEXT,
           fit_reasons TEXT,
           last_verified_at DATETIME,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           ,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS lead_locations (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          external_place_id TEXT,
+          name TEXT NOT NULL,
+          category TEXT,
+          location TEXT,
+          country TEXT,
+          url TEXT,
+          phone TEXT,
+          email TEXT,
+          operating_status TEXT,
+          confidence REAL,
+          source_release TEXT,
+          source_provider TEXT,
+          raw_record TEXT,
+          status TEXT NOT NULL DEFAULT 'active',
+          first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_verified_at DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_locations_account ON lead_locations(lead_id);
+        CREATE INDEX IF NOT EXISTS idx_lead_locations_external ON lead_locations(external_place_id);
+
+        CREATE TABLE IF NOT EXISTS lead_accounts (
+          id TEXT PRIMARY KEY,
+          brand_id TEXT NOT NULL,
+          company_name TEXT NOT NULL,
+          domain TEXT,
+          website TEXT,
+          country TEXT,
+          category TEXT,
+          stage TEXT NOT NULL DEFAULT 'discovered',
+          fit_score INTEGER NOT NULL DEFAULT 0,
+          score_version TEXT,
+          review_status TEXT NOT NULL DEFAULT 'pending',
+          reviewed_by TEXT,
+          reviewed_at DATETIME,
+          review_note TEXT,
+          outreach_status TEXT NOT NULL DEFAULT 'not_approved',
+          outreach_approved_by TEXT,
+          outreach_approved_at DATETIME,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_accounts_domain ON lead_accounts(brand_id, domain);
+
+        CREATE TABLE IF NOT EXISTS lead_contacts (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          location_id TEXT,
+          contact_type TEXT NOT NULL,
+          value TEXT NOT NULL,
+          source TEXT NOT NULL,
+          source_url TEXT,
+          confidence REAL,
+          verification_status TEXT NOT NULL DEFAULT 'unverified',
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_contacts_account ON lead_contacts(lead_id);
+
+        CREATE TABLE IF NOT EXISTS lead_source_records (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          location_id TEXT,
+          source TEXT NOT NULL,
+          source_record_id TEXT NOT NULL,
+          release TEXT,
+          source_url TEXT,
+          raw_data TEXT NOT NULL,
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_source_records_account ON lead_source_records(lead_id);
+
+        CREATE TABLE IF NOT EXISTS lead_evidence (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          location_id TEXT,
+          evidence_type TEXT NOT NULL,
+          value TEXT NOT NULL,
+          source TEXT NOT NULL,
+          source_url TEXT,
+          confidence REAL,
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_evidence_account ON lead_evidence(lead_id);
+
+        CREATE TABLE IF NOT EXISTS lead_scores (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          score INTEGER NOT NULL,
+          score_version TEXT NOT NULL,
+          breakdown TEXT NOT NULL,
+          qualification TEXT NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_scores_account ON lead_scores(lead_id);
+
+        CREATE TABLE IF NOT EXISTS lead_jobs (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT,
+          stage TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          next_attempt_at DATETIME,
+          locked_at DATETIME,
+          last_error TEXT,
+          payload TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_jobs_queue ON lead_jobs(status, next_attempt_at);
+
+        CREATE TABLE IF NOT EXISTS lead_suppressions (
+          id TEXT PRIMARY KEY,
+          brand_id TEXT NOT NULL,
+          domain TEXT,
+          email TEXT,
+          reason TEXT,
+          created_by TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_lead_suppressions_brand ON lead_suppressions(brand_id);
+
+        CREATE TABLE IF NOT EXISTS lead_provider_usage (
+          provider TEXT NOT NULL,
+          period TEXT NOT NULL,
+          used INTEGER NOT NULL DEFAULT 0,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (provider, period)
         );
 
         CREATE TABLE IF NOT EXISTS video_generations (
@@ -369,6 +521,22 @@ def init_sqlite_db(conn: sqlite3.Connection):
         ("leads", "source_url TEXT"),
         ("leads", "status TEXT NOT NULL DEFAULT 'new'"),
         ("leads", "external_place_id TEXT"),
+        ("leads", "domain TEXT"),
+        ("leads", "operating_status TEXT"),
+        ("leads", "overture_confidence REAL"),
+        ("leads", "source_release TEXT"),
+        ("leads", "stage TEXT NOT NULL DEFAULT 'discovered'"),
+        ("leads", "score_version TEXT"),
+        ("leads", "score_breakdown TEXT"),
+        ("leads", "review_status TEXT NOT NULL DEFAULT 'pending'"),
+        ("leads", "reviewed_by TEXT"),
+        ("leads", "reviewed_at DATETIME"),
+        ("leads", "review_note TEXT"),
+        ("leads", "outreach_status TEXT NOT NULL DEFAULT 'not_approved'"),
+        ("leads", "outreach_approved_by TEXT"),
+        ("leads", "outreach_approved_at DATETIME"),
+        ("leads", "outreach_sent_at DATETIME"),
+        ("leads", "contact_status TEXT NOT NULL DEFAULT 'unknown'"),
         ("leads", "email TEXT"),
         ("leads", "requirements TEXT"),
         ("leads", "source_title TEXT"),
@@ -865,6 +1033,25 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
           fit_score INT NOT NULL DEFAULT 0,
           why TEXT,
           external_place_id VARCHAR(255),
+          email VARCHAR(255),
+          requirements TEXT,
+          source_title TEXT,
+          domain VARCHAR(255),
+          operating_status VARCHAR(64),
+          overture_confidence DOUBLE,
+          source_release VARCHAR(32),
+          stage VARCHAR(32) NOT NULL DEFAULT 'discovered',
+          score_version VARCHAR(64),
+          score_breakdown LONGTEXT,
+          review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+          reviewed_by VARCHAR(255),
+          reviewed_at DATETIME NULL,
+          review_note TEXT,
+          outreach_status VARCHAR(32) NOT NULL DEFAULT 'not_approved',
+          outreach_approved_by VARCHAR(255),
+          outreach_approved_at DATETIME NULL,
+          outreach_sent_at DATETIME NULL,
+          contact_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
           products JSON,
           specialties JSON,
           fit_reasons JSON,
@@ -873,6 +1060,147 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
           updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_leads_brand (brand_id),
           INDEX idx_leads_external_place (external_place_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_locations (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64) NOT NULL,
+          external_place_id VARCHAR(255),
+          name VARCHAR(255) NOT NULL,
+          category VARCHAR(255),
+          location TEXT,
+          country VARCHAR(100),
+          url TEXT,
+          phone VARCHAR(64),
+          email VARCHAR(255),
+          operating_status VARCHAR(64),
+          confidence DOUBLE,
+          source_release VARCHAR(32),
+          source_provider VARCHAR(100),
+          raw_record LONGTEXT,
+          status VARCHAR(64) NOT NULL DEFAULT 'active',
+          first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_verified_at DATETIME NULL,
+          INDEX idx_lead_locations_account (lead_id),
+          INDEX idx_lead_locations_external (external_place_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_accounts (
+          id VARCHAR(64) PRIMARY KEY,
+          brand_id VARCHAR(64) NOT NULL,
+          company_name VARCHAR(255) NOT NULL,
+          domain VARCHAR(255),
+          website TEXT,
+          country VARCHAR(100),
+          category VARCHAR(255),
+          stage VARCHAR(32) NOT NULL DEFAULT 'discovered',
+          fit_score INT NOT NULL DEFAULT 0,
+          score_version VARCHAR(64),
+          review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+          reviewed_by VARCHAR(255),
+          reviewed_at DATETIME NULL,
+          review_note TEXT,
+          outreach_status VARCHAR(32) NOT NULL DEFAULT 'not_approved',
+          outreach_approved_by VARCHAR(255),
+          outreach_approved_at DATETIME NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_lead_accounts_domain (brand_id, domain)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_contacts (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64) NOT NULL,
+          location_id VARCHAR(64),
+          contact_type VARCHAR(32) NOT NULL,
+          value VARCHAR(512) NOT NULL,
+          source VARCHAR(100) NOT NULL,
+          source_url TEXT,
+          confidence DOUBLE,
+          verification_status VARCHAR(32) NOT NULL DEFAULT 'unverified',
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_lead_contacts_account (lead_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_source_records (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64) NOT NULL,
+          location_id VARCHAR(64),
+          source VARCHAR(100) NOT NULL,
+          source_record_id VARCHAR(255) NOT NULL,
+          release VARCHAR(32),
+          source_url TEXT,
+          raw_data LONGTEXT NOT NULL,
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_lead_source_records_account (lead_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_evidence (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64) NOT NULL,
+          location_id VARCHAR(64),
+          evidence_type VARCHAR(64) NOT NULL,
+          value LONGTEXT NOT NULL,
+          source VARCHAR(100) NOT NULL,
+          source_url TEXT,
+          confidence DOUBLE,
+          observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_lead_evidence_account (lead_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_scores (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64) NOT NULL,
+          score INT NOT NULL,
+          score_version VARCHAR(64) NOT NULL,
+          breakdown LONGTEXT NOT NULL,
+          qualification VARCHAR(32) NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_lead_scores_account (lead_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_jobs (
+          id VARCHAR(64) PRIMARY KEY,
+          lead_id VARCHAR(64),
+          stage VARCHAR(32) NOT NULL,
+          status VARCHAR(32) NOT NULL DEFAULT 'pending',
+          attempts INT NOT NULL DEFAULT 0,
+          next_attempt_at DATETIME NULL,
+          locked_at DATETIME NULL,
+          last_error TEXT,
+          payload LONGTEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_lead_jobs_queue (status, next_attempt_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_suppressions (
+          id VARCHAR(64) PRIMARY KEY,
+          brand_id VARCHAR(64) NOT NULL,
+          domain VARCHAR(255),
+          email VARCHAR(255),
+          reason TEXT,
+          created_by VARCHAR(255),
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_lead_suppressions_brand (brand_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lead_provider_usage (
+          provider VARCHAR(64) NOT NULL,
+          period VARCHAR(16) NOT NULL,
+          used INT NOT NULL DEFAULT 0,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (provider, period)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
         """
@@ -958,6 +1286,25 @@ def init_mysql_db(raw_conn: Any, force: bool = False):
         "ALTER TABLE campaign_publications ADD COLUMN buffer_post_id VARCHAR(255)",
         "ALTER TABLE competitors ADD COLUMN website TEXT",
         "ALTER TABLE competitors ADD COLUMN country VARCHAR(100)",
+        "ALTER TABLE leads ADD COLUMN email VARCHAR(255)",
+        "ALTER TABLE leads ADD COLUMN requirements TEXT",
+        "ALTER TABLE leads ADD COLUMN source_title TEXT",
+        "ALTER TABLE leads ADD COLUMN domain VARCHAR(255)",
+        "ALTER TABLE leads ADD COLUMN operating_status VARCHAR(64)",
+        "ALTER TABLE leads ADD COLUMN overture_confidence DOUBLE",
+        "ALTER TABLE leads ADD COLUMN source_release VARCHAR(32)",
+        "ALTER TABLE leads ADD COLUMN stage VARCHAR(32) NOT NULL DEFAULT 'discovered'",
+        "ALTER TABLE leads ADD COLUMN score_version VARCHAR(64)",
+        "ALTER TABLE leads ADD COLUMN score_breakdown LONGTEXT",
+        "ALTER TABLE leads ADD COLUMN review_status VARCHAR(32) NOT NULL DEFAULT 'pending'",
+        "ALTER TABLE leads ADD COLUMN reviewed_by VARCHAR(255)",
+        "ALTER TABLE leads ADD COLUMN reviewed_at DATETIME NULL",
+        "ALTER TABLE leads ADD COLUMN review_note TEXT",
+        "ALTER TABLE leads ADD COLUMN outreach_status VARCHAR(32) NOT NULL DEFAULT 'not_approved'",
+        "ALTER TABLE leads ADD COLUMN outreach_approved_by VARCHAR(255)",
+        "ALTER TABLE leads ADD COLUMN outreach_approved_at DATETIME NULL",
+        "ALTER TABLE leads ADD COLUMN outreach_sent_at DATETIME NULL",
+        "ALTER TABLE leads ADD COLUMN contact_status VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     ]
 
     try:
@@ -1136,4 +1483,3 @@ if __name__ == "__main__":
             for t in sorted(table_list):
                 print(f"  - {t}")
     print("Database verification complete.")
-
